@@ -1,26 +1,18 @@
-@tool
 class_name GameButton
 extends Button
 
 const OUTLINE_COLOR := Color("2e1b2f")
 
-@export var base_color := Color("ffc93c"):
-	set(value):
-		base_color = value
-		_apply_style()
-@export var label_color := Color("ff8a1a"):
-	set(value):
-		label_color = value
-		_apply_style()
+@export var base_color := Color("ffc93c")
+@export var label_color := Color("ff8a1a")
 
 
+#Styles are applied at runtime so they are not saved into the scenes
 func _ready() -> void:
 	_apply_style()
 
 
 func _apply_style() -> void:
-	if not is_node_ready():
-		return
 	add_theme_stylebox_override("normal", _make_style(base_color, 8))
 	add_theme_stylebox_override("hover", _make_style(base_color.lightened(0.15), 8))
 	add_theme_stylebox_override("pressed", _make_style(base_color.darkened(0.1), 3))
