@@ -1,0 +1,20 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/characters/character_model.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://assets/characters/fire/fire.glb" id="2_model"]
+[ext_resource type="AnimationLibrary" path="res://assets/characters/fire/fire_idle.glb" id="3_idle"]
+[ext_resource type="AnimationLibrary" path="res://assets/characters/fire/fire_walk.glb" id="4_walk"]
+
+[node name="Fire" type="Node3D"]
+script = ExtResource("1_script")
+idle_animation = &"idle/Armature|Idle|baselayer"
+walk_animation = &"walk/Armature|walking_man|baselayer"
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("../Model")
+libraries = {
+&"idle": ExtResource("3_idle"),
+&"walk": ExtResource("4_walk")
+}

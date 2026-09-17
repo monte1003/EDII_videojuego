@@ -1,7 +1,7 @@
 class_name AVLTree
 extends Node
 
-#Nodo lógico del árbol
+#Logical tree node
 class AVLNode:
 	var value: int
 	var height: int
@@ -16,28 +16,28 @@ class AVLNode:
 
 var root: AVLNode = null
 
-#Obtener la altura de un nodo
+#Get the height of a node
 func get_height(node: AVLNode) -> int:
 	if node == null:
 		return 0
 	return node.height
 
-#Obtener el factor de balance de un nodo
+#Get the balance factor of a node
 func get_balance(node: AVLNode) -> int:
 	if node == null:
 		return 0
 	return get_height(node.left) - get_height(node.right)
 
-#Rotaciones AVL para mantener el árbol balanceado
+#AVL rotations to keep the tree balanced
 func right_rotate(y: AVLNode) -> AVLNode:
 	var x = y.left
 	var T2 = x.right
 
-	#Realizar rotación
+	#Perform rotation
 	x.right = y
 	y.left = T2
 
-	#Actualizar alturas
+	#Update heights
 	y.height = max(get_height(y.left), get_height(y.right)) + 1
 	x.height = max(get_height(x.left), get_height(x.right)) + 1
 
@@ -47,23 +47,23 @@ func left_rotate(x: AVLNode) -> AVLNode:
 	var y = x.right
 	var T2 = y.left
 
-	#Realizar rotación
+	#Perform rotation
 	y.left = x
 	x.right = T2
 
-	#Actualizar alturas
+	#Update heights
 	x.height = max(get_height(x.left), get_height(x.right)) + 1
 	y.height = max(get_height(y.left), get_height(y.right)) + 1
 
 	return y
 
-#Función pública que llamaremos desde afuera
+#Public function called from outside
 func insert(val: int):
 	root = _insert_node(root, val)
 
-#Función recursiva interna
+#Internal recursive function
 func _insert_node(node: AVLNode, val: int) -> AVLNode:
-	#1. Inserción normal de un Árbol Binario de Búsqueda
+	#1. Regular Binary Search Tree insertion
 	if node == null:
 		return AVLNode.new(val)
 
@@ -72,33 +72,33 @@ func _insert_node(node: AVLNode, val: int) -> AVLNode:
 	elif val > node.value:
 		node.right = _insert_node(node.right, val)
 	else:
-		return node #No permitimos valores duplicados por ahora
+		return node #Duplicate values are not allowed for now
 
-	#2. Actualizar la altura del nodo ancestro
+	#2. Update the height of the ancestor node
 	node.height = 1 + max(get_height(node.left), get_height(node.right))
 
-	#3. Obtener el factor de balance para verificar si se desbalanceó
+	#3. Get the balance factor to check if it became unbalanced
 	var balance = get_balance(node)
 
-	#4. Si el nodo se desbalancea, probamos los 4 casos de rotación:
+	#4. If the node is unbalanced, try the 4 rotation cases:
 
-	#Caso Izquierda-Izquierda (LL)
+	#Left-Left case (LL)
 	if balance > 1 and val < node.left.value:
 		print(">> Árbol Inestable: Ejecutando Rotación Simple Derecha en el nodo ", node.value)
 		return right_rotate(node)
 
-	#Caso Derecha-Derecha (RR)
+	#Right-Right case (RR)
 	if balance < -1 and val > node.right.value:
 		print(">> Árbol Inestable: Ejecutando Rotación Simple Izquierda en el nodo ", node.value)
 		return left_rotate(node)
 
-	#Caso Izquierda-Derecha (LR)
+	#Left-Right case (LR)
 	if balance > 1 and val > node.left.value:
 		print(">> Árbol Inestable: Ejecutando Rotación Doble Izquierda-Derecha en el nodo ", node.value)
 		node.left = left_rotate(node.left)
 		return right_rotate(node)
 
-	#Caso Derecha-Izquierda (RL)
+	#Right-Left case (RL)
 	if balance < -1 and val < node.right.value:
 		print(">> Árbol Inestable: Ejecutando Rotación Doble Derecha-Izquierda en el nodo ", node.value)
 		node.right = right_rotate(node.right)
@@ -106,7 +106,7 @@ func _insert_node(node: AVLNode, val: int) -> AVLNode:
 
 	return node
 
-#Recorrido inorden (izquierda, raíz, derecha), útil para el podio
+#In-order traversal (left, root, right), useful for the podium
 func get_inorder_array() -> Array:
 	var result = []
 	_inorder_traverse(root, result)

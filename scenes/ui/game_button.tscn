@@ -1,0 +1,30 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/game_button.gd" id="1_script"]
+[ext_resource type="FontFile" path="res://assets/ui/fonts/LilitaOne-Regular.ttf" id="2_font"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gloss"]
+bg_color = Color(1, 1, 1, 0.55)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="GameButton" type="Button"]
+custom_minimum_size = Vector2(360, 100)
+focus_mode = 0
+theme_override_constants/outline_size = 12
+theme_override_constants/h_separation = 14
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 48
+text = "BOTÓN"
+script = ExtResource("1_script")
+
+[node name="Gloss" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 11.0
+offset_right = 72.0
+offset_bottom = 22.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_gloss")

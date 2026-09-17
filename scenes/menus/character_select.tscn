@@ -1,0 +1,212 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/menus/character_select.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/characters/character_data.gd" id="2_data"]
+[ext_resource type="Resource" path="res://resources/characters/fire.tres" id="3_fire"]
+[ext_resource type="Resource" path="res://resources/characters/water.tres" id="4_water"]
+[ext_resource type="Resource" path="res://resources/characters/plant.tres" id="5_plant"]
+[ext_resource type="Resource" path="res://resources/characters/lightning.tres" id="6_lightning"]
+[ext_resource type="Shader" path="res://assets/ui/shaders/sky_hills.gdshader" id="7_shader"]
+[ext_resource type="FontFile" path="res://assets/ui/fonts/LilitaOne-Regular.ttf" id="8_font"]
+[ext_resource type="PackedScene" path="res://scenes/ui/game_button.tscn" id="9_button"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/button_x.svg" id="10_x"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/button_o.svg" id="11_o"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
+shader = ExtResource("7_shader")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_frame"]
+content_margin_left = 22.0
+content_margin_top = 22.0
+content_margin_right = 22.0
+content_margin_bottom = 22.0
+bg_color = Color(0.3, 0.33, 0.41, 1)
+border_width_left = 8
+border_width_top = 8
+border_width_right = 8
+border_width_bottom = 8
+border_color = Color(0.17, 0.18, 0.24, 1)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+shadow_color = Color(0, 0, 0, 0.3)
+shadow_size = 12
+shadow_offset = Vector2(0, 6)
+
+[sub_resource type="Environment" id="Environment_preview"]
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.6
+
+[node name="CharacterSelect" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+characters = Array[ExtResource("2_data")]([ExtResource("3_fire"), ExtResource("4_water"), ExtResource("5_plant"), ExtResource("6_lightning")])
+
+[node name="Background" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_sky")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_left = 48.0
+offset_top = 18.0
+offset_right = 640.0
+offset_bottom = 100.0
+theme_override_colors/font_color = Color(1, 0.79, 0.24, 1)
+theme_override_colors/font_outline_color = Color(0.29, 0.14, 0.07, 1)
+theme_override_colors/font_shadow_color = Color(0.29, 0.14, 0.07, 0.45)
+theme_override_constants/outline_size = 18
+theme_override_constants/shadow_offset_x = 0
+theme_override_constants/shadow_offset_y = 5
+theme_override_constants/shadow_outline_size = 18
+theme_override_fonts/font = ExtResource("8_font")
+theme_override_font_sizes/font_size = 54
+text = "SELECCIONA TU GUERRERO"
+vertical_alignment = 1
+
+[node name="GridFrame" type="PanelContainer" parent="."]
+layout_mode = 0
+offset_left = 60.0
+offset_top = 112.0
+offset_right = 556.0
+offset_bottom = 608.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_frame")
+
+[node name="Grid" type="GridContainer" parent="GridFrame"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 16
+columns = 2
+
+[node name="PreviewArea" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -540.0
+offset_right = -40.0
+grow_horizontal = 0
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="PlayerTag" type="Label" parent="PreviewArea"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 4.0
+offset_bottom = 52.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 0.86, 0.3, 1)
+theme_override_colors/font_outline_color = Color(0.29, 0.14, 0.07, 1)
+theme_override_constants/outline_size = 12
+theme_override_fonts/font = ExtResource("8_font")
+theme_override_font_sizes/font_size = 40
+text = "P1"
+horizontal_alignment = 1
+
+[node name="NameLabel" type="Label" parent="PreviewArea"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 40.0
+offset_bottom = 130.0
+grow_horizontal = 2
+theme_override_colors/font_outline_color = Color(0.29, 0.14, 0.07, 1)
+theme_override_colors/font_shadow_color = Color(0.29, 0.14, 0.07, 0.45)
+theme_override_constants/outline_size = 24
+theme_override_constants/shadow_offset_x = 0
+theme_override_constants/shadow_offset_y = 6
+theme_override_constants/shadow_outline_size = 24
+theme_override_fonts/font = ExtResource("8_font")
+theme_override_font_sizes/font_size = 80
+text = "FUEGO"
+horizontal_alignment = 1
+
+[node name="Preview" type="SubViewportContainer" parent="PreviewArea"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 130.0
+offset_bottom = -96.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="PreviewArea/Preview"]
+own_world_3d = true
+transparent_bg = true
+handle_input_locally = false
+msaa_3d = 2
+size = Vector2i(500, 422)
+render_target_update_mode = 4
+
+[node name="Camera3D" type="Camera3D" parent="PreviewArea/Preview/SubViewport"]
+transform = Transform3D(1, 0, 0, 0, 0.996, 0.087, 0, -0.087, 0.996, 0, 0.75, 3.2)
+fov = 32.0
+
+[node name="Sun" type="DirectionalLight3D" parent="PreviewArea/Preview/SubViewport"]
+transform = Transform3D(0.866, -0.321, 0.383, 0, 0.766, 0.643, -0.5, -0.557, 0.663, 0, 3, 0)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="PreviewArea/Preview/SubViewport"]
+environment = SubResource("Environment_preview")
+
+[node name="ModelPivot" type="Node3D" parent="PreviewArea/Preview/SubViewport"]
+unique_name_in_owner = true
+
+[node name="Buttons" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -560.0
+offset_top = -90.0
+offset_right = -40.0
+offset_bottom = -16.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_constants/separation = 18
+alignment = 2
+
+[node name="PlayButton" parent="Buttons" instance=ExtResource("9_button")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 72)
+layout_mode = 2
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 34
+text = "JUGAR"
+icon = ExtResource("10_x")
+base_color = Color(0.23, 0.26, 0.34, 1)
+label_color = Color(1, 1, 1, 1)
+
+[node name="BackButton" parent="Buttons" instance=ExtResource("9_button")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 72)
+layout_mode = 2
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 34
+text = "ATRÁS"
+icon = ExtResource("11_o")
+base_color = Color(0.23, 0.26, 0.34, 1)
+label_color = Color(1, 1, 1, 1)

@@ -1,0 +1,35 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/menus/pause_menu.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/ui/game_button.tscn" id="2_button"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/door.svg" id="3_door"]
+
+[node name="PauseMenu" type="CanvasLayer"]
+layer = 10
+script = ExtResource("1_script")
+
+[node name="Overlay" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.06, 0.05, 0.14, 0.55)
+
+[node name="Center" type="CenterContainer" parent="Overlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ExitButton" parent="Overlay/Center" instance=ExtResource("2_button")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 100)
+layout_mode = 2
+text = "SALIR"
+icon = ExtResource("3_door")
+base_color = Color(0.95, 0.36, 0.71, 1)
+label_color = Color(1, 0.75, 0.9, 1)
