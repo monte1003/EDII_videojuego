@@ -1,33 +1,55 @@
+class_name Player
 extends CharacterBody3D
 
-const SPEED = 5.0
-const JUMP_VELOCITY = 4.5
+@export var move_speed := 5.0
+@export var jump_velocity := 4.5
+@export var turn_speed := 12.0
 
-# Obtener la gravedad de la configuración del proyecto
-var gravity = ProjectSettings.get_setting("physics/3d/default_gravity")
+var player_id := 0
+var move_input := Vector2.ZERO
+var jump_requested := false
 
-func _physics_process(delta):
-	# Aplicar gravedad
+var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+var _model: CharacterModel
+
+@onready var _model_pivot: Node3D = $ModelPivot
+@onready var _camera_rig: PlayerCamera = $CameraRig
+@onready var _input: PlayerInput = $PlayerInput
+
+
+func _ready() -> void:
+	#Models face +Z, so turn them to look where the camera looks
+	_model_pivot.rotation.y = _camera_rig.global_rotation.y + PI
+
+
+func set_character(character: CharacterData) -> void:
+	if _model:
+		_model.queue_free()
+	_model = character.model_scene.instantiate() as CharacterModel
+	_model_pivot.add_child(_model)
+
+
+func set_input_enabled(enabled: bool) -> void:
+	_input.enabled = enabled
+
+
+func _physics_process(delta: float) -> void:
 	if not is_on_floor():
-		velocity.y -= gravity * delta
+		velocity.y -= _gravity * delta
 
-	# Saltar con la barra espaciadora ("ui_accept" por defecto)
-	if Input.is_action_just_pressed("ui_accept") and is_on_floor():
-		velocity.y = JUMP_VELOCITY
+	if jump_requested and is_on_floor():
+		velocity.y = jump_velocity
+	jump_requested = false
 
-	# Obtener la dirección en la que el jugador presiona (WASD o Flechas)
-	var input_dir = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-	
-	# Calcular la dirección en 3D
-	var direction = (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
-	
-	# Mover al personaje
-	if direction:
-		velocity.x = direction.x * SPEED
-		velocity.z = direction.z * SPEED
-	else:
-		velocity.x = move_toward(velocity.x, 0, SPEED)
-		velocity.z = move_toward(velocity.z, 0, SPEED)
-
-	# Función interna de Godot que aplica la velocidad y maneja las colisiones
+	#Movement follows the camera direction
+	var direction := _camera_rig.get_yaw_basis() * Vector3(move_input.x, 0.0, move_input.y)
+	velocity.x = direction.x * move_speed
+	velocity.z = direction.z * move_speed
 	move_and_slide()
+
+	var moving := direction.length() > 0.1
+	if moving:
+		var target_yaw := atan2(direction.x, direction.z)
+		_model_pivot.rotation.y = lerp_angle(_model_pivot.rotation.y, target_yaw, turn_speed * delta)
+	if _model:
+		_model.set_moving(moving)
