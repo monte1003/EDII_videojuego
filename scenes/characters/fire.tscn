@@ -8,7 +8,7 @@
 [node name="Fire" type="Node3D"]
 script = ExtResource("1_script")
 idle_animation = &"idle/Armature|Idle|baselayer"
-walk_animation = &"walk/Armature|walking_man|baselayer"
+walk_animation = &"walk/Armature|walking_2_inplace|baselayer"
 
 [node name="Model" parent="." instance=ExtResource("2_model")]
 
