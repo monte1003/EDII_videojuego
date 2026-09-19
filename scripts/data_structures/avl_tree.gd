@@ -1,119 +1,91 @@
 class_name AVLTree
 extends Node
 
-#Logical tree node
+# Señales para comunicarnos con el mundo 3D (test_world.gd)
+signal alarm_triggered(node_id: int, direction: int) # direction: -1 (izq), 1 (der)
+signal critical_rotation(node_id: int, direction: int)
+signal balance_restored(node_id: int)
+
+# Nodo lógico (Matemático)
 class AVLNode:
-	var value: int
-	var height: int
-	var left: AVLNode
-	var right: AVLNode
+	var id: int
+	var weight: int = 0
+	var left: AVLNode = null
+	var right: AVLNode = null
+	
+	func _init(node_id: int):
+		id = node_id
 
-	func _init(val: int):
-		value = val
-		height = 1
-		left = null
-		right = null
+var root: AVLNode
+var nodes: Dictionary = {} # Para acceso rápido O(1) a cualquier nodo matemático
 
-var root: AVLNode = null
+# Construye el árbol fijo de 7 nodos exacto como dice el PDF
+func build_fixed_tree():
+	# 1. Crear los 7 nodos
+	for i in range(1, 8):
+		nodes[i] = AVLNode.new(i)
+	
+	# 2. Conectar jerarquía (Nivel 1 -> Nivel 2 -> Nivel 3)
+	root = nodes[1]
+	
+	root.left = nodes[2]
+	root.right = nodes[3]
+	
+	nodes[2].left = nodes[4]
+	nodes[2].right = nodes[5]
+	
+	nodes[3].left = nodes[6]
+	nodes[3].right = nodes[7]
 
-#Get the height of a node
-func get_height(node: AVLNode) -> int:
+# Calcula recursivamente la suma de los pesos de todas las cajas en un subárbol
+func get_subtree_weight(node: AVLNode) -> int:
 	if node == null:
 		return 0
-	return node.height
+	return node.weight + get_subtree_weight(node.left) + get_subtree_weight(node.right)
 
-#Get the balance factor of a node
+# Calcula el FE (Factor de Desequilibrio) = Peso Derecho - Peso Izquierdo
 func get_balance(node: AVLNode) -> int:
 	if node == null:
 		return 0
-	return get_height(node.left) - get_height(node.right)
+	var right_weight = get_subtree_weight(node.right)
+	var left_weight = get_subtree_weight(node.left)
+	return right_weight - left_weight
 
-#AVL rotations to keep the tree balanced
-func right_rotate(y: AVLNode) -> AVLNode:
-	var x = y.left
-	var T2 = x.right
+# Se llama cuando una caja cae o el jugador la pone en una plataforma
+func add_weight(node_id: int, amount: int = 1):
+	if nodes.has(node_id):
+		nodes[node_id].weight += amount
+		_check_balance(root)
 
-	#Perform rotation
-	x.right = y
-	y.left = T2
+# Se llama cuando el jugador arroja la caja al ducto
+func remove_weight(node_id: int, amount: int = 1):
+	if nodes.has(node_id):
+		nodes[node_id].weight = max(0, nodes[node_id].weight - amount)
+		_check_balance(root)
 
-	#Update heights
-	y.height = max(get_height(y.left), get_height(y.right)) + 1
-	x.height = max(get_height(x.left), get_height(x.right)) + 1
+# Evalúa el estado del árbol y lanza los eventos al nivel 3D
+func _check_balance(node: AVLNode):
+	if node == null: return
+	
+	var fe = get_balance(node)
+	
+	# Estados según el documento de diseño (PDF):
+	if abs(fe) <= 1:
+		balance_restored.emit(node.id)
+	elif abs(fe) == 2:
+		alarm_triggered.emit(node.id, sign(fe))
+	elif abs(fe) >= 3:
+		critical_rotation.emit(node.id, sign(fe))
 
-	return x
+# Función para limpiar el peso de un subárbol (ej. después de que una rotación tira todo)
+func reset_weights_in_subtree(node_id: int):
+	if nodes.has(node_id):
+		_reset_weights_recursive(nodes[node_id])
+		_check_balance(root)
 
-func left_rotate(x: AVLNode) -> AVLNode:
-	var y = x.right
-	var T2 = y.left
-
-	#Perform rotation
-	y.left = x
-	x.right = T2
-
-	#Update heights
-	x.height = max(get_height(x.left), get_height(x.right)) + 1
-	y.height = max(get_height(y.left), get_height(y.right)) + 1
-
-	return y
-
-#Public function called from outside
-func insert(val: int):
-	root = _insert_node(root, val)
-
-#Internal recursive function
-func _insert_node(node: AVLNode, val: int) -> AVLNode:
-	#1. Regular Binary Search Tree insertion
+func _reset_weights_recursive(node: AVLNode):
 	if node == null:
-		return AVLNode.new(val)
-
-	if val < node.value:
-		node.left = _insert_node(node.left, val)
-	elif val > node.value:
-		node.right = _insert_node(node.right, val)
-	else:
-		return node #Duplicate values are not allowed for now
-
-	#2. Update the height of the ancestor node
-	node.height = 1 + max(get_height(node.left), get_height(node.right))
-
-	#3. Get the balance factor to check if it became unbalanced
-	var balance = get_balance(node)
-
-	#4. If the node is unbalanced, try the 4 rotation cases:
-
-	#Left-Left case (LL)
-	if balance > 1 and val < node.left.value:
-		print(">> Árbol Inestable: Ejecutando Rotación Simple Derecha en el nodo ", node.value)
-		return right_rotate(node)
-
-	#Right-Right case (RR)
-	if balance < -1 and val > node.right.value:
-		print(">> Árbol Inestable: Ejecutando Rotación Simple Izquierda en el nodo ", node.value)
-		return left_rotate(node)
-
-	#Left-Right case (LR)
-	if balance > 1 and val > node.left.value:
-		print(">> Árbol Inestable: Ejecutando Rotación Doble Izquierda-Derecha en el nodo ", node.value)
-		node.left = left_rotate(node.left)
-		return right_rotate(node)
-
-	#Right-Left case (RL)
-	if balance < -1 and val < node.right.value:
-		print(">> Árbol Inestable: Ejecutando Rotación Doble Derecha-Izquierda en el nodo ", node.value)
-		node.right = right_rotate(node.right)
-		return left_rotate(node)
-
-	return node
-
-#In-order traversal (left, root, right), useful for the podium
-func get_inorder_array() -> Array:
-	var result = []
-	_inorder_traverse(root, result)
-	return result
-
-func _inorder_traverse(node: AVLNode, result: Array):
-	if node != null:
-		_inorder_traverse(node.left, result)
-		result.append(node.value)
-		_inorder_traverse(node.right, result)
+		return
+	node.weight = 0
+	_reset_weights_recursive(node.left)
+	_reset_weights_recursive(node.right)

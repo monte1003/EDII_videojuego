@@ -1,15 +1,15 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://0jhtkgoyp3f7"]
 
-[ext_resource type="Script" path="res://scripts/menus/main_menu.gd" id="1_script"]
-[ext_resource type="FontFile" path="res://assets/ui/fonts/LilitaOne-Regular.ttf" id="2_font"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/star.svg" id="3_star"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/sparkle.svg" id="4_sparkle"]
+[ext_resource type="Script" uid="uid://dhjfbvrs4s7r4" path="res://scripts/menus/main_menu.gd" id="1_script"]
+[ext_resource type="FontFile" uid="uid://c7tg7cpjwyitq" path="res://assets/ui/fonts/LilitaOne-Regular.ttf" id="2_font"]
+[ext_resource type="Texture2D" uid="uid://dpp8uiyf4s1na" path="res://assets/ui/icons/star.svg" id="3_star"]
+[ext_resource type="Texture2D" uid="uid://5tbmo1j8d8tj" path="res://assets/ui/icons/sparkle.svg" id="4_sparkle"]
 [ext_resource type="PackedScene" path="res://scenes/ui/game_button.tscn" id="5_button"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/play.svg" id="6_play"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/gear.svg" id="7_gear"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/door.svg" id="8_door"]
+[ext_resource type="Texture2D" uid="uid://bjn325cdfir3f" path="res://assets/ui/icons/play.svg" id="6_play"]
+[ext_resource type="Texture2D" uid="uid://3mxm0wp0yskr" path="res://assets/ui/icons/gear.svg" id="7_gear"]
+[ext_resource type="Texture2D" uid="uid://c16qjsu81g8sc" path="res://assets/ui/icons/door.svg" id="8_door"]
 
-[node name="MainMenu" type="Control"]
+[node name="MainMenu" type="Control" unique_id=24864159]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -18,7 +18,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=727191237]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -28,7 +28,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.85, 0.86, 0.88, 1)
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="Center" type="CenterContainer" parent="." unique_id=1371290769]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -37,17 +37,17 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Layout" type="VBoxContainer" parent="Center"]
+[node name="Layout" type="VBoxContainer" parent="Center" unique_id=583016071]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 24
 
-[node name="Title" type="Control" parent="Center/Layout"]
+[node name="Title" type="Control" parent="Center/Layout" unique_id=1078938961]
 custom_minimum_size = Vector2(760, 210)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="TitleLabel" type="Label" parent="Center/Layout/Title"]
+[node name="TitleLabel" type="Label" parent="Center/Layout/Title" unique_id=194442891]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -55,11 +55,11 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_colors/font_color = Color(1, 0.71, 0.18, 1)
-theme_override_colors/font_outline_color = Color(0.29, 0.14, 0.07, 1)
 theme_override_colors/font_shadow_color = Color(0.29, 0.14, 0.07, 0.45)
-theme_override_constants/outline_size = 30
+theme_override_colors/font_outline_color = Color(0.29, 0.14, 0.07, 1)
 theme_override_constants/shadow_offset_x = 0
 theme_override_constants/shadow_offset_y = 8
+theme_override_constants/outline_size = 30
 theme_override_constants/shadow_outline_size = 30
 theme_override_fonts/font = ExtResource("2_font")
 theme_override_font_sizes/font_size = 128
@@ -67,7 +67,7 @@ text = "RumbleNet"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="StarLeft" type="TextureRect" parent="Center/Layout/Title"]
+[node name="StarLeft" type="TextureRect" parent="Center/Layout/Title" unique_id=376282774]
 layout_mode = 0
 offset_left = 30.0
 offset_top = 40.0
@@ -78,7 +78,7 @@ texture = ExtResource("3_star")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="SparkleTopLeft" type="TextureRect" parent="Center/Layout/Title"]
+[node name="SparkleTopLeft" type="TextureRect" parent="Center/Layout/Title" unique_id=2093340762]
 layout_mode = 0
 offset_left = 110.0
 offset_right = 140.0
@@ -88,7 +88,7 @@ texture = ExtResource("4_sparkle")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="SparkleLeft" type="TextureRect" parent="Center/Layout/Title"]
+[node name="SparkleLeft" type="TextureRect" parent="Center/Layout/Title" unique_id=548236595]
 layout_mode = 0
 offset_top = 130.0
 offset_right = 36.0
@@ -98,7 +98,7 @@ texture = ExtResource("4_sparkle")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="StarBottomLeft" type="TextureRect" parent="Center/Layout/Title"]
+[node name="StarBottomLeft" type="TextureRect" parent="Center/Layout/Title" unique_id=1301572469]
 layout_mode = 0
 offset_left = 190.0
 offset_top = 172.0
@@ -109,7 +109,7 @@ texture = ExtResource("3_star")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="SparkleTopRight" type="TextureRect" parent="Center/Layout/Title"]
+[node name="SparkleTopRight" type="TextureRect" parent="Center/Layout/Title" unique_id=1867333743]
 layout_mode = 0
 offset_left = 600.0
 offset_top = 4.0
@@ -120,7 +120,7 @@ texture = ExtResource("4_sparkle")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="StarRight" type="TextureRect" parent="Center/Layout/Title"]
+[node name="StarRight" type="TextureRect" parent="Center/Layout/Title" unique_id=1564151896]
 layout_mode = 0
 offset_left = 690.0
 offset_top = 110.0
@@ -131,7 +131,7 @@ texture = ExtResource("3_star")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="SparkleBottomRight" type="TextureRect" parent="Center/Layout/Title"]
+[node name="SparkleBottomRight" type="TextureRect" parent="Center/Layout/Title" unique_id=874604902]
 layout_mode = 0
 offset_left = 560.0
 offset_top = 174.0
@@ -142,7 +142,7 @@ texture = ExtResource("4_sparkle")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="PlayButton" parent="Center/Layout" instance=ExtResource("5_button")]
+[node name="PlayButton" parent="Center/Layout" unique_id=1272185989 instance=ExtResource("5_button")]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(440, 112)
 layout_mode = 2
@@ -154,7 +154,8 @@ icon_alignment = 2
 base_color = Color(1, 0.79, 0.24, 1)
 label_color = Color(1, 0.48, 0.1, 1)
 
-[node name="OptionsButton" parent="Center/Layout" instance=ExtResource("5_button")]
+[node name="OptionsButton" parent="Center/Layout" unique_id=1992912473 instance=ExtResource("5_button")]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(380, 100)
 layout_mode = 2
 size_flags_horizontal = 4
@@ -163,7 +164,7 @@ icon = ExtResource("7_gear")
 base_color = Color(0.24, 0.72, 0.96, 1)
 label_color = Color(0.66, 0.89, 1, 1)
 
-[node name="ExitButton" parent="Center/Layout" instance=ExtResource("5_button")]
+[node name="ExitButton" parent="Center/Layout" unique_id=44846942 instance=ExtResource("5_button")]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(340, 100)
 layout_mode = 2

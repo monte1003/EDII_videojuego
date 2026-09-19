@@ -1,6 +1,6 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://2yx6bhb1whex"]
 
-[ext_resource type="Script" path="res://scripts/levels/test_world.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://dv38ky373nqpw" path="res://scripts/levels/test_world.gd" id="1_script"]
 [ext_resource type="Resource" path="res://resources/characters/fire.tres" id="2_fire"]
 [ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="3_pause"]
 
@@ -25,29 +25,34 @@ albedo_color = Color(0.72, 0.77, 0.84, 1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_floor"]
 material = SubResource("StandardMaterial3D_floor")
-size = Vector3(30, 1, 30)
+size = Vector3(31.290527, 1, 18.342285)
 
-[node name="TestWorld" type="Node3D"]
+[node name="TestWorld" type="Node3D" unique_id=2076685089]
 script = ExtResource("1_script")
 default_character = ExtResource("2_fire")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=722220368]
 environment = SubResource("Environment_world")
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1082622958]
 transform = Transform3D(0.825, -0.462, 0.326, 0, 0.577, 0.817, -0.565, -0.675, 0.476, 0, 10, 0)
 shadow_enabled = true
 
-[node name="Floor" type="StaticBody3D" parent="."]
+[node name="Floor" type="StaticBody3D" parent="." unique_id=889925446]
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor" unique_id=101418910]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 shape = SubResource("BoxShape3D_floor")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor" unique_id=898466308]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+visible = false
 mesh = SubResource("BoxMesh_floor")
 
-[node name="SpawnPoint" type="Marker3D" parent="."]
+[node name="MeshInstance3D2" type="MeshInstance3D" parent="Floor" unique_id=1963433102]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6452637, -0.5, -5.8288574)
+mesh = SubResource("BoxMesh_floor")
 
-[node name="PauseMenu" parent="." instance=ExtResource("3_pause")]
+[node name="SpawnPoint" type="Marker3D" parent="." unique_id=1140037702]
+
+[node name="PauseMenu" parent="." unique_id=746452466 instance=ExtResource("3_pause")]

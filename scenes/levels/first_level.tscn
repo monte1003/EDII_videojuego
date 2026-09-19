@@ -1,0 +1,62 @@
+[gd_scene format=3 uid="uid://dk1ccxqe7k7pd"]
+
+[ext_resource type="Script" uid="uid://dv38ky373nqpw" path="res://scripts/levels/test_world.gd" id="1_r7qys"]
+[ext_resource type="Resource" path="res://resources/characters/fire.tres" id="2_hkalp"]
+[ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="3_xbibw"]
+[ext_resource type="PackedScene" uid="uid://bppxsbi03y0ve" path="res://assets/models/platform.tscn" id="4_hkalp"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+ground_bottom_color = Color(0.65, 0.67, 0.7, 1)
+ground_horizon_color = Color(0.65, 0.67, 0.7, 1)
+
+[sub_resource type="Sky" id="Sky_world"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 2
+sky = SubResource("Sky_world")
+ambient_light_source = 3
+tonemap_mode = 2
+
+[node name="TestWorld" type="Node3D" unique_id=2076685089]
+script = ExtResource("1_r7qys")
+default_character = ExtResource("2_hkalp")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=722220368]
+environment = SubResource("Environment_world")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1082622958]
+transform = Transform3D(0.825, -0.462, 0.326, 0, 0.577, 0.817, -0.565, -0.675, 0.476, 0, 10, 0)
+shadow_enabled = true
+
+[node name="SpawnPoint" type="Marker3D" parent="." unique_id=1140037702]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 11.120299, -9.118135)
+
+[node name="PauseMenu" parent="." unique_id=746452466 instance=ExtResource("3_xbibw")]
+
+[node name="Node1_Root" parent="." unique_id=902351030 instance=ExtResource("4_hkalp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 11.49214, -7.459482)
+node_id = 1
+
+[node name="Node2" parent="." unique_id=788968620 instance=ExtResource("4_hkalp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16.27666, 9.5236225, -8.290678)
+node_id = 2
+
+[node name="Node3" parent="." unique_id=1522546184 instance=ExtResource("4_hkalp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15.394506, 9.414791, -8.290678)
+node_id = 3
+
+[node name="Node4" parent="." unique_id=363925304 instance=ExtResource("4_hkalp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -29.563295, 6.745329, -8.290678)
+node_id = 4
+
+[node name="Node5" parent="." unique_id=494700644 instance=ExtResource("4_hkalp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.3137035, 7.94802, -8.290678)
+node_id = 5
+
+[node name="Node6" parent="." unique_id=602588236 instance=ExtResource("4_hkalp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1627502, 7.728669, -8.290678)
+node_id = 6
+
+[node name="Node7" parent="." unique_id=918102623 instance=ExtResource("4_hkalp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 29.27215, 7.688178, -9.555164)
