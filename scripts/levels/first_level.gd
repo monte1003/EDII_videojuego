@@ -16,8 +16,27 @@ var platforms: Dictionary = {}
 # El Árbol Lógico
 var avl_tree: AVLTree
 var spawner: BoxSpawner
+@onready var camera: Camera3D = $Camera3D
+@onready var spawn_point: Marker3D = $SpawnPoint
 
 func _ready() -> void:
+	# Configurar Cinemática de Inicio (Zoom Out)
+	if camera and spawn_point:
+		var final_pos = camera.global_position
+		var final_rot = camera.rotation
+		
+		# Ponemos la cámara muy cerca del SpawnPoint para el plano cerrado
+		camera.global_position = spawn_point.global_position + Vector3(0, 2, 4)
+		camera.rotation = Vector3(deg_to_rad(-10), 0, 0) # Mirando un poco hacia abajo
+		
+		var tween = create_tween()
+		tween.set_trans(Tween.TRANS_CUBIC)
+		tween.set_ease(Tween.EASE_IN_OUT)
+		
+		# Volar lentamente hasta la panorámica en 3.5 segundos
+		tween.tween_property(camera, "global_position", final_pos, 3.5)
+		tween.parallel().tween_property(camera, "rotation", final_rot, 3.5)
+
 	# 1. Encontrar las plataformas que pusiste a mano en el editor
 	_find_manual_platforms()
 	
