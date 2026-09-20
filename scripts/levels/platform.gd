@@ -18,6 +18,11 @@ func _ready():
 	base_position = global_position
 
 func _process(delta):
+	# Si el mundo está girando, todos somos invulnerables a los cruces en el aire
+	var level = get_parent()
+	if level and "is_rotating_tree" in level and level.is_rotating_tree:
+		return
+		
 	var detector = get_node_or_null("WeightDetector")
 	if not detector: return
 	
