@@ -55,33 +55,36 @@ func get_balance(node: AVLNode) -> int:
 func add_weight(node_id: int, amount: int = 1):
 	if nodes.has(node_id):
 		nodes[node_id].weight += amount
-		_check_balance(root)
+		_check_balance_all()
 
 # Se llama cuando el jugador arroja la caja al ducto
 func remove_weight(node_id: int, amount: int = 1):
 	if nodes.has(node_id):
 		nodes[node_id].weight = max(0, nodes[node_id].weight - amount)
-		_check_balance(root)
+		_check_balance_all()
 
-# Evalúa el estado del árbol y lanza los eventos al nivel 3D
-func _check_balance(node: AVLNode):
-	if node == null: return
+# Evalúa el estado del árbol de abajo hacia arriba (Bottom-Up)
+func _check_balance_all():
+	# Revisamos primero los niveles inferiores (2 y 3) antes que la raíz (1)
+	# Las hojas (4,5,6,7) no pueden rotar porque no tienen hijos.
+	var check_order = [2, 3, 1] 
 	
-	var fe = get_balance(node)
-	
-	# Estados según el documento de diseño (PDF):
-	if abs(fe) <= 1:
-		balance_restored.emit(node.id)
-	elif abs(fe) == 2:
-		alarm_triggered.emit(node.id, sign(fe))
-	elif abs(fe) >= 3:
-		critical_rotation.emit(node.id, sign(fe))
+	for i in check_order:
+		var node = nodes[i]
+		var fe = get_balance(node)
+		
+		# Cambiamos el umbral a 2 para promover muchísimas rotaciones constantes
+		if abs(fe) >= 2:
+			critical_rotation.emit(node.id, sign(fe))
+			return # Rompemos para que solo rote el subárbol más profundo afectado
+		elif abs(fe) <= 1:
+			balance_restored.emit(node.id)
 
 # Función para limpiar el peso de un subárbol (ej. después de que una rotación tira todo)
 func reset_weights_in_subtree(node_id: int):
 	if nodes.has(node_id):
 		_reset_weights_recursive(nodes[node_id])
-		_check_balance(root)
+		_check_balance_all()
 
 func _reset_weights_recursive(node: AVLNode):
 	if node == null:

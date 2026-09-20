@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://b6eaao2mwrnys"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xek6e"]
+albedo_color = Color(1, 0, 0, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_7ksya"]
+size = Vector3(1.1553955, 1.0120239, 1.2260742)
+
+[node name="HateBox" type="Node3D" unique_id=1179303075]
+
+[node name="RigidBody3D" type="RigidBody3D" parent="." unique_id=425556150]
+
+[node name="CSGBox3D" type="CSGBox3D" parent="RigidBody3D" unique_id=275902826]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.07232666, -0.0031738281, -0.17138672)
+size = Vector3(1.1446533, 1.0063477, 1.3427734)
+material = SubResource("StandardMaterial3D_xek6e")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RigidBody3D" unique_id=241267698]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.077697754, 0.008453369, -0.11303711)
+shape = SubResource("BoxShape3D_7ksya")
