@@ -17,6 +17,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
+screen_id = &"main_menu"
 
 [node name="Background" type="ColorRect" parent="."]
 layout_mode = 1
@@ -155,6 +156,7 @@ base_color = Color(1, 0.79, 0.24, 1)
 label_color = Color(1, 0.48, 0.1, 1)
 
 [node name="OptionsButton" parent="Center/Layout" instance=ExtResource("5_button")]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(380, 100)
 layout_mode = 2
 size_flags_horizontal = 4

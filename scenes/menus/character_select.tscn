@@ -9,8 +9,8 @@
 [ext_resource type="Shader" uid="uid://b0gklo0hdl6yu" path="res://assets/ui/shaders/sky_hills.gdshader" id="7_shader"]
 [ext_resource type="FontFile" uid="uid://c7tg7cpjwyitq" path="res://assets/ui/fonts/LilitaOne-Regular.ttf" id="8_font"]
 [ext_resource type="PackedScene" path="res://scenes/ui/game_button.tscn" id="9_button"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/key_enter.svg" id="10_enter"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/key_e.svg" id="11_e"]
+[ext_resource type="Texture2D" uid="uid://bm5pmspxrq6se" path="res://assets/ui/icons/key_enter.svg" id="10_enter"]
+[ext_resource type="Texture2D" uid="uid://jt6s816el2iu" path="res://assets/ui/icons/key_e.svg" id="11_e"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("7_shader")
@@ -52,6 +52,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
+screen_id = &"character_select"
 characters = Array[ExtResource("2_data")]([ExtResource("3_fire"), ExtResource("4_water"), ExtResource("5_plant"), ExtResource("6_lightning")])
 
 [node name="Background" type="ColorRect" parent="." unique_id=1622096757]

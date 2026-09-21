@@ -3,24 +3,24 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://fhv2fqij7nih"
-path.s3tc="res://.godot/imported/fire_texture_0.png-9b97b53d8bf02aa6c7d2c3d9b97b2209.s3tc.ctex"
+path.bptc="res://.godot/imported/fire_texture_0.png-9b97b53d8bf02aa6c7d2c3d9b97b2209.bptc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "1a4c68079f502c29a19406270181ef5d"
+"md5": "894004269772c247ec5bd5c03922f704"
 }
 
 [deps]
 
 source_file="res://assets/characters/fire/fire_texture_0.png"
-dest_files=["res://.godot/imported/fire_texture_0.png-9b97b53d8bf02aa6c7d2c3d9b97b2209.s3tc.ctex"]
+dest_files=["res://.godot/imported/fire_texture_0.png-9b97b53d8bf02aa6c7d2c3d9b97b2209.bptc.ctex"]
 
 [params]
 
 compress/mode=2
-compress/high_quality=false
+compress/high_quality=true
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
