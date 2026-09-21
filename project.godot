@@ -19,9 +19,12 @@ config/icon="res://icon.svg"
 
 GameState="*res://scripts/autoload/game_state.gd"
 CustomCursor="*res://scripts/autoload/custom_cursor.gd"
+ScreenFlow="*res://scripts/autoload/screen_flow.gd"
+ColorFilter="*res://scripts/autoload/color_filter.gd"
 
 [display]
 
+window/size/mode=2
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 

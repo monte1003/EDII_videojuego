@@ -1,7 +1,5 @@
-extends Control
+extends Screen
 
-const MAIN_MENU_SCENE := "res://scenes/menus/main_menu.tscn"
-const TEST_WORLD_SCENE := "res://scenes/levels/test_world.tscn"
 const TILE_SCENE := preload("res://scenes/menus/character_tile.tscn")
 const COLUMNS := 2
 
@@ -21,7 +19,7 @@ var _preview_model: Node3D
 
 
 func _ready() -> void:
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	super()
 	_grid.columns = COLUMNS
 	for index in characters.size():
 		var tile := TILE_SCENE.instantiate() as CharacterTile
@@ -32,7 +30,7 @@ func _ready() -> void:
 
 	_preview.gui_input.connect(_on_preview_gui_input)
 	_play_button.pressed.connect(_play)
-	_back_button.pressed.connect(_go_back)
+	_back_button.pressed.connect(ScreenFlow.back)
 	_select(0)
 
 
@@ -45,9 +43,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("menu_confirm"):
 		get_viewport().set_input_as_handled()
 		_play()
-	elif event.is_action_pressed("menu_back"):
-		get_viewport().set_input_as_handled()
-		_go_back()
+	else:
+		super(event)
 
 
 #Skips locked characters in the pressed direction
@@ -90,8 +87,4 @@ func _on_preview_gui_input(event: InputEvent) -> void:
 
 func _play() -> void:
 	GameState.select_character(GameState.PLAYER_ONE, characters[_selected_index])
-	get_tree().change_scene_to_file(TEST_WORLD_SCENE)
-
-
-func _go_back() -> void:
-	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+	ScreenFlow.open(&"test_world")
