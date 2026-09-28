@@ -57,7 +57,7 @@ func trail(id: StringName) -> String:
 	var names := PackedStringArray()
 	for node in tree.path_to(id):
 		names.append(node.title)
-	return " > ".join(names)
+	return "  ›  ".join(names)
 
 
 func title_of(id: StringName) -> String:

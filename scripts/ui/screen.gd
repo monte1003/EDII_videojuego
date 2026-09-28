@@ -11,5 +11,6 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("menu_back"):
-		ScreenFlow.back()
+		#Marcar antes de cambiar de pantalla: despues este nodo ya no tiene viewport
 		get_viewport().set_input_as_handled()
+		ScreenFlow.back()

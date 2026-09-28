@@ -4,7 +4,7 @@ extends Resource
 @export var id: StringName
 @export var display_name: String
 @export var accent_color := Color.WHITE
-@export var portrait: Texture2D
+@export var icon: Texture2D
 @export var model_scene: PackedScene
 
 

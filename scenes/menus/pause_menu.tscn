@@ -27,9 +27,9 @@ mouse_filter = 2
 
 [node name="ExitButton" parent="Overlay/Center" instance=ExtResource("2_button")]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(340, 100)
+custom_minimum_size = Vector2(260, 66)
 layout_mode = 2
 text = "SALIR"
 icon = ExtResource("3_door")
-base_color = Color(0.95, 0.36, 0.71, 1)
-label_color = Color(1, 0.75, 0.9, 1)
+base_color = Color(0.992, 0.984, 1, 1)
+label_color = Color(0.216, 0.173, 0.345, 1)

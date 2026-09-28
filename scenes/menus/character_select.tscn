@@ -6,36 +6,28 @@
 [ext_resource type="Resource" path="res://resources/characters/water.tres" id="4_water"]
 [ext_resource type="Resource" path="res://resources/characters/plant.tres" id="5_plant"]
 [ext_resource type="Resource" path="res://resources/characters/lightning.tres" id="6_lightning"]
-[ext_resource type="Shader" uid="uid://b0gklo0hdl6yu" path="res://assets/ui/shaders/sky_hills.gdshader" id="7_shader"]
-[ext_resource type="FontFile" uid="uid://c7tg7cpjwyitq" path="res://assets/ui/fonts/LilitaOne-Regular.ttf" id="8_font"]
+[ext_resource type="Script" path="res://scripts/ui/social_background.gd" id="7_background"]
+[ext_resource type="FontVariation" path="res://assets/ui/fonts/heading_font.tres" id="8_font"]
 [ext_resource type="PackedScene" path="res://scenes/ui/game_button.tscn" id="9_button"]
 [ext_resource type="Texture2D" uid="uid://bm5pmspxrq6se" path="res://assets/ui/icons/key_enter.svg" id="10_enter"]
 [ext_resource type="Texture2D" uid="uid://jt6s816el2iu" path="res://assets/ui/icons/key_e.svg" id="11_e"]
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
-shader = ExtResource("7_shader")
-shader_parameter/sky_top = Color(0.33, 0.76, 0.96, 1)
-shader_parameter/sky_bottom = Color(0.78, 0.95, 1, 1)
-shader_parameter/far_hills = Color(0.93, 0.55, 0.85, 1)
-shader_parameter/near_hills = Color(0.49, 0.85, 0.36, 1)
-shader_parameter/ground = Color(0.36, 0.74, 0.27, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_frame"]
 content_margin_left = 22.0
 content_margin_top = 22.0
 content_margin_right = 22.0
 content_margin_bottom = 22.0
-bg_color = Color(0.3, 0.33, 0.41, 1)
-border_width_left = 8
-border_width_top = 8
-border_width_right = 8
-border_width_bottom = 8
-border_color = Color(0.17, 0.18, 0.24, 1)
-corner_radius_top_left = 18
-corner_radius_top_right = 18
-corner_radius_bottom_right = 18
-corner_radius_bottom_left = 18
-shadow_color = Color(0, 0, 0, 0.3)
+bg_color = Color(0.992, 0.984, 1, 0.45)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.992, 0.984, 1, 0.95)
+corner_radius_top_left = 28
+corner_radius_top_right = 28
+corner_radius_bottom_right = 28
+corner_radius_bottom_left = 28
+shadow_color = Color(0.165, 0.129, 0.271, 0.12)
 shadow_size = 12
 shadow_offset = Vector2(0, 6)
 
@@ -55,8 +47,7 @@ script = ExtResource("1_script")
 screen_id = &"character_select"
 characters = Array[ExtResource("2_data")]([ExtResource("3_fire"), ExtResource("4_water"), ExtResource("5_plant"), ExtResource("6_lightning")])
 
-[node name="Background" type="ColorRect" parent="." unique_id=1622096757]
-material = SubResource("ShaderMaterial_sky")
+[node name="Background" type="Control" parent="." unique_id=1622096757]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -64,6 +55,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+script = ExtResource("7_background")
 
 [node name="Title" type="Label" parent="." unique_id=1196958866]
 layout_mode = 0
@@ -71,15 +63,9 @@ offset_left = 48.0
 offset_top = 18.0
 offset_right = 640.0
 offset_bottom = 100.0
-theme_override_colors/font_color = Color(1, 0.79, 0.24, 1)
-theme_override_colors/font_shadow_color = Color(0.29, 0.14, 0.07, 0.45)
-theme_override_colors/font_outline_color = Color(0.29, 0.14, 0.07, 1)
-theme_override_constants/shadow_offset_x = 0
-theme_override_constants/shadow_offset_y = 5
-theme_override_constants/outline_size = 18
-theme_override_constants/shadow_outline_size = 18
+theme_override_colors/font_color = Color(0.882, 0.294, 0.416, 1)
 theme_override_fonts/font = ExtResource("8_font")
-theme_override_font_sizes/font_size = 54
+theme_override_font_sizes/font_size = 46
 text = "SELECCIONA TU PERSONAJE"
 vertical_alignment = 1
 
@@ -119,11 +105,9 @@ anchor_right = 1.0
 offset_top = 4.0
 offset_bottom = 52.0
 grow_horizontal = 2
-theme_override_colors/font_color = Color(1, 0.86, 0.3, 1)
-theme_override_colors/font_outline_color = Color(0.29, 0.14, 0.07, 1)
-theme_override_constants/outline_size = 12
+theme_override_colors/font_color = Color(0.216, 0.173, 0.345, 1)
 theme_override_fonts/font = ExtResource("8_font")
-theme_override_font_sizes/font_size = 40
+theme_override_font_sizes/font_size = 30
 text = "P1"
 horizontal_alignment = 1
 
@@ -135,14 +119,8 @@ anchor_right = 1.0
 offset_top = 40.0
 offset_bottom = 130.0
 grow_horizontal = 2
-theme_override_colors/font_shadow_color = Color(0.29, 0.14, 0.07, 0.45)
-theme_override_colors/font_outline_color = Color(0.29, 0.14, 0.07, 1)
-theme_override_constants/shadow_offset_x = 0
-theme_override_constants/shadow_offset_y = 6
-theme_override_constants/outline_size = 24
-theme_override_constants/shadow_outline_size = 24
 theme_override_fonts/font = ExtResource("8_font")
-theme_override_font_sizes/font_size = 80
+theme_override_font_sizes/font_size = 74
 text = "FUEGO"
 horizontal_alignment = 1
 
@@ -197,22 +175,19 @@ alignment = 2
 
 [node name="PlayButton" parent="Buttons" unique_id=122546529 instance=ExtResource("9_button")]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(240, 72)
+custom_minimum_size = Vector2(232, 64)
 layout_mode = 2
-theme_override_constants/outline_size = 8
-theme_override_font_sizes/font_size = 34
+theme_override_font_sizes/font_size = 22
 text = "JUGAR"
 icon = ExtResource("10_enter")
-base_color = Color(0.23, 0.26, 0.34, 1)
-label_color = Color(1, 1, 1, 1)
+pulse = true
 
 [node name="BackButton" parent="Buttons" unique_id=450308021 instance=ExtResource("9_button")]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(240, 72)
+custom_minimum_size = Vector2(232, 64)
 layout_mode = 2
-theme_override_constants/outline_size = 8
-theme_override_font_sizes/font_size = 34
+theme_override_font_sizes/font_size = 22
 text = "ATRÁS"
 icon = ExtResource("11_e")
-base_color = Color(0.23, 0.26, 0.34, 1)
-label_color = Color(1, 1, 1, 1)
+base_color = Color(0.992, 0.984, 1, 1)
+label_color = Color(0.216, 0.173, 0.345, 1)
