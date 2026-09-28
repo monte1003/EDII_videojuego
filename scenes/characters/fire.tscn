@@ -2,13 +2,17 @@
 
 [ext_resource type="Script" path="res://scripts/characters/character_model.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://assets/characters/fire/fire.glb" id="2_model"]
-[ext_resource type="AnimationLibrary" path="res://assets/characters/fire/fire_idle.glb" id="3_idle"]
-[ext_resource type="AnimationLibrary" path="res://assets/characters/fire/fire_walk.glb" id="4_walk"]
+[ext_resource type="AnimationLibrary" path="res://assets/characters/fire/fire_idle.res" id="3_idle"]
+[ext_resource type="AnimationLibrary" path="res://assets/characters/fire/fire_run.res" id="4_run"]
+[ext_resource type="AnimationLibrary" path="res://assets/characters/fire/fire_jump.res" id="5_jump"]
+[ext_resource type="AnimationLibrary" path="res://assets/characters/fire/fire_land.res" id="6_land"]
 
 [node name="Fire" type="Node3D"]
 script = ExtResource("1_script")
-idle_animation = &"idle/Armature|Idle|baselayer"
-walk_animation = &"walk/Armature|walking_2_inplace|baselayer"
+idle_animation = &"idle/Idle"
+move_animation = &"run/Running"
+jump_animation = &"jump/Jump"
+land_animation = &"land/Land"
 
 [node name="Model" parent="." instance=ExtResource("2_model")]
 
@@ -16,5 +20,7 @@ walk_animation = &"walk/Armature|walking_2_inplace|baselayer"
 root_node = NodePath("../Model")
 libraries = {
 &"idle": ExtResource("3_idle"),
-&"walk": ExtResource("4_walk")
+&"run": ExtResource("4_run"),
+&"jump": ExtResource("5_jump"),
+&"land": ExtResource("6_land")
 }

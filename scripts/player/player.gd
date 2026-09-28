@@ -52,4 +52,4 @@ func _physics_process(delta: float) -> void:
 		var target_yaw := atan2(direction.x, direction.z)
 		_model_pivot.rotation.y = lerp_angle(_model_pivot.rotation.y, target_yaw, turn_speed * delta)
 	if _model:
-		_model.set_moving(moving)
+		_model.set_state(moving, not is_on_floor())

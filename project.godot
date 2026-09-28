@@ -21,6 +21,7 @@ GameState="*res://scripts/autoload/game_state.gd"
 CustomCursor="*res://scripts/autoload/custom_cursor.gd"
 ScreenFlow="*res://scripts/autoload/screen_flow.gd"
 ColorFilter="*res://scripts/autoload/color_filter.gd"
+UiSound="*res://scripts/autoload/ui_sound.gd"
 
 [display]
 
