@@ -15,7 +15,7 @@ const LOOK_HOLD := 0.5
 
 #Used when the scene runs without going through character select
 @export var default_character: CharacterData
-#Screen opened when the tutorial ends. Leave empty until level 1 exists in ScreenFlow
+#Screen opened by "Ir al nivel 1" and by "Omitir tutorial"; empty goes back to the menu
 @export var next_screen: StringName = &""
 
 var _player: Player
@@ -176,7 +176,7 @@ func _finish() -> void:
 	#A late Esc press must not open the pause menu over the final panel
 	_pause_menu.set_process_unhandled_input(false)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_hud.show_finish(next_screen != &"" and ScreenFlow.tree.has(next_screen))
+	_hud.show_finish(next_screen != &"" and ScreenFlow.tree.has(next_screen), "IR AL NIVEL 1")
 
 
 #Moves the same player back: no new bodies, cameras or signal connections

@@ -5,10 +5,13 @@ Rutas del ejecutable y del proyecto: ver `CLAUDE.local.md` (`$GODOT`, `$PROJECT`
 
 ## Estructura
 - `scenes/{menus,characters,levels,ui}` y `scripts/` con las mismas carpetas, más `autoload/`, `data_structures/`, `player/`. `resources/characters/*.tres` (`CharacterData`) y `assets/`.
-- Escena principal: `res://scenes/menus/main_menu.tscn`. Único nivel: `scenes/levels/test_world.tscn`.
+- Escena principal: `res://scenes/menus/main_menu.tscn`. Niveles: `scenes/levels/test_world.tscn` (tutorial) y `scenes/levels/level_01.tscn` (nivel 1, detalles en `docs/nivel_01.md`).
+- Flujo: menú → selección de personaje → tutorial (`test_world`) → "Ir al nivel 1" → `level_01`. En `ScreenFlow` el árbol es `character_select → test_world → level_01`.
 - Autoloads: `GameState`, `CustomCursor`, `ScreenFlow`, `ColorFilter`, `UiSound`.
 - `ScreenFlow` navega con un árbol (`ScreenTree`); las pantallas nuevas se registran en `ScreenFlow._ready()`.
-- Estructuras propias: `AVLTree`, `ScreenTree` en `scripts/data_structures/`.
+- Estructuras propias en `scripts/data_structures/`: `AVLTree`, `ScreenTree`, `WeightedGraph` (listas de adyacencia + Dijkstra) y `MinHeap`. No usar `AStar3D` ni `NavigationServer` para los bots.
+- Bots: `scripts/bots/` (`ChaserBot` con la IA, `BotAppearance` recurso de apariencia, `BotVisual` primitivas provisionales); recursos en `resources/bots/`. El nivel 1 lo arman `Level01Layout` (tabla única de vértices/puentes/costos), `Level01World`, `PlayerLocator`, `LevelHud`, `LevelHelp` (ayuda para jugador casual, se abre al inicio, con F1, con el botón "?" o desde la pausa) y `GraphDebugView`.
+- Acciones nuevas del Input Map: `interact` (E), `toggle_debug` (F3), `demo_route` (F4), `help` (F1). Los PDF explicativos están en `docs/`.
 - Personajes: fire, lightning, plant, water (escena + `.tres` cada uno).
 - `scripts/level_logic/` y `scripts/network/` existen vacíos (no versionados por git).
 
@@ -28,6 +31,11 @@ timeout 60  "$GODOT" --headless --path "$PROJECT" --check-only --script res://sc
 timeout 60  "$GODOT" --path "$PROJECT" --scene <escena>                     # ejecutar con ventana (el usuario prueba)
 ```
 - Buscar `ERROR`/`SCRIPT ERROR`/`Parse Error` en la salida. El aviso "ObjectDB instances were leaked" ya aparece en el estado base; ignorarlo.
+```bash
+timeout 60  "$GODOT" --headless --path "$PROJECT" --script res://scripts/tests/graph_check.gd   # grafo y Dijkstra (sale con 0 si todo pasa)
+timeout 60  "$GODOT" --headless --path "$PROJECT" --scene res://scenes/levels/level_01.tscn --quit-after 120
+```
+- `--script` con `--check-only` no ve los autoloads: los errores de `GameState`/`ScreenFlow` ahí son falsos; comprobar cargando la escena.
 - Estas comprobaciones solo prueban que carga y parsea, **no** la jugabilidad, la cámara, las animaciones ni el input.
 
 ## Reglas de edición
