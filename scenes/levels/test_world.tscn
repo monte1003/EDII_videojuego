@@ -30,6 +30,7 @@ fog_density = 0.004
 [node name="TestWorld" type="Node3D"]
 script = ExtResource("1_script")
 default_character = ExtResource("2_fire")
+next_screen = &"level_01"
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_world")

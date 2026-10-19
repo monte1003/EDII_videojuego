@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BotAppearance" format=3]
+
+[ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"spam"
+display_name = "Spam"
+body_color = Color(0.231, 0.247, 0.29, 1)
+accent_color = Color(0.816, 0.541, 0.271, 1)
+detail = 1
+debug_color = Color(1, 0.663, 0.302, 1)
+tip = "Spam: demasiadas notificaciones te quitan la atención."
