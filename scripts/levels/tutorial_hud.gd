@@ -104,7 +104,8 @@ func show_pause_actions(shown: bool) -> void:
 	_pause_actions.visible = shown
 
 
-func show_finish(can_continue: bool) -> void:
+func show_finish(can_continue: bool, continue_text := "CONTINUAR") -> void:
+	_continue_button.text = continue_text
 	_continue_button.visible = can_continue
 	_finish_panel.show()
 	if can_continue:

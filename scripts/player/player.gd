@@ -4,10 +4,13 @@ extends CharacterBody3D
 @export var move_speed := 5.0
 @export var jump_velocity := 4.5
 @export var turn_speed := 12.0
+@export var push_decay := 18.0
 
 var player_id := 0
 var move_input := Vector2.ZERO
 var jump_requested := false
+#Extra horizontal velocity from outside (bot shoves); it fades out on its own
+var push_velocity := Vector3.ZERO
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _model: CharacterModel
@@ -29,6 +32,20 @@ func set_character(character: CharacterData) -> void:
 	_model_pivot.add_child(_model)
 
 
+#A shove: the horizontal part fades out, the vertical part is a small hop
+func apply_push(impulse: Vector3) -> void:
+	push_velocity = Vector3(impulse.x, 0.0, impulse.z)
+	velocity.y = maxf(velocity.y, impulse.y)
+
+
+#Stops every kind of motion, used when the player is put back somewhere
+func clear_motion() -> void:
+	velocity = Vector3.ZERO
+	push_velocity = Vector3.ZERO
+	move_input = Vector2.ZERO
+	jump_requested = false
+
+
 func set_input_enabled(enabled: bool) -> void:
 	_input.enabled = enabled
 
@@ -43,8 +60,9 @@ func _physics_process(delta: float) -> void:
 
 	#Movement follows the camera direction
 	var direction := _camera_rig.get_yaw_basis() * Vector3(move_input.x, 0.0, move_input.y)
-	velocity.x = direction.x * move_speed
-	velocity.z = direction.z * move_speed
+	velocity.x = direction.x * move_speed + push_velocity.x
+	velocity.z = direction.z * move_speed + push_velocity.z
+	push_velocity = push_velocity.move_toward(Vector3.ZERO, push_decay * delta)
 	move_and_slide()
 
 	var moving := direction.length() > 0.1
