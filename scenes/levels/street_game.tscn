@@ -6,10 +6,10 @@
 [ext_resource type="Script" path="res://scripts/levels/street_world.gd" id="4_world"]
 [ext_resource type="Script" path="res://scripts/levels/street_hud.gd" id="5_hud"]
 [ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="6_help"]
-[ext_resource type="PackedScene" path="res://assets/obstacles/pedestrian/pedestrian_walk.glb" id="6_pedestrian"]
-[ext_resource type="PackedScene" path="res://assets/obstacles/pedestrian/pedestrian_woman_walk.glb" id="7_pedestrian_woman"]
-[ext_resource type="PackedScene" path="res://assets/obstacles/pedestrian/pedestrian_heavy_walk.glb" id="8_pedestrian_heavy"]
-[ext_resource type="PackedScene" uid="uid://t0uc708qt7pu" path="res://assets/obstacles/car/car.glb" id="9_car"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/ping.tscn" id="6_ping"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/bubble.tscn" id="7_bubble"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/like.tscn" id="8_like"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/loop.tscn" id="11_loop"]
 [ext_resource type="PackedScene" uid="uid://d0vwal2pufjyn" path="res://assets/obstacles/cyclist/cyclist.glb" id="10_cyclist"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
@@ -38,9 +38,9 @@ fog_depth_end = 520.0
 [node name="StreetGame" type="Node3D"]
 script = ExtResource("1_script")
 default_character = ExtResource("2_fire")
-car_model = ExtResource("9_car")
 cyclist_model = ExtResource("10_cyclist")
-pedestrian_models = Array[PackedScene]([ExtResource("6_pedestrian"), ExtResource("7_pedestrian_woman"), ExtResource("8_pedestrian_heavy")])
+pedestrian_models = Array[PackedScene]([ExtResource("6_ping"), ExtResource("7_bubble"), ExtResource("8_like"), ExtResource("11_loop")])
+pedestrian_half_size = Vector2(0.4, 0.4)
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_world")

@@ -6,8 +6,8 @@
 [resource]
 script = ExtResource("1_script")
 id = &"street_game"
-title = "La calle"
-tagline = "Aguanta esquivando el tráfico hasta que se acabe el tiempo"
+title = "La Calle"
+tagline = "Esquiva el tráfico y a los bots que caminan por la acera hasta que se acabe el tiempo"
 scene_path = "res://scenes/levels/street_game.tscn"
 accent = Color(0.184, 0.624, 0.722, 1)
 ready = true

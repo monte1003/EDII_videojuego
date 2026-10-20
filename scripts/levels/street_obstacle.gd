@@ -35,6 +35,9 @@ const BOX_TEXT_COLOR := Color("e0561b")
 const BOX_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 #How far a cyclist tilts into a change of side, in radians
 const MAX_LEAN := 0.18
+#Bot models as pedestrians: they are small next to the runner, and they walk, not run
+const BOT_PEDESTRIAN_SCALE := 1.7
+const BOT_WALK_ANIMATION_SCALE := 1.05
 #Colours of the primitive hatchback used when there is no car model
 const GLASS_COLOR := Color("34416f")
 const TIRE_COLOR := Color("23242f")
@@ -63,6 +66,8 @@ var _walked := 0.0
 var _phase := 0.0
 var _visual: Node3D
 var _animation_player: AnimationPlayer
+#A bot model walking the sidewalk; it animates itself
+var _walker: BotLook
 #Meters per second the walk animation covers when it plays at normal speed
 var _animation_walk_speed := 1.0
 
@@ -121,7 +126,8 @@ func build_tank(length: float, width: float) -> void:
 #Every surface gets "material", one flat colour. If the model has an animation it loops,
 #starting at a random point so pedestrians do not walk in step. Without a model a capsule
 #stands in. "half_size" is the hit box: x along the street (the stride), y across it (the
-#shoulders); the model's own bounds are useless here because its rest pose has the arms open
+#shoulders); the model's own bounds are useless here because its rest pose has the arms open.
+#A bot model (BotLook) keeps its own colours, size and animations instead
 func build_pedestrian(model: PackedScene, material: Material, half_size: Vector2, height: float,
 		animation_walk_speed: float) -> void:
 	kind = Kind.PEDESTRIAN
@@ -143,6 +149,9 @@ func build_pedestrian(model: PackedScene, material: Material, half_size: Vector2
 	var instance := model.instantiate() as Node3D
 	_visual.add_child(instance)
 	_visual.rotation.y = PI / 2.0
+	if instance is BotLook:
+		_setup_bot_walker(instance as BotLook)
+		return
 	var bounds := _bounds_of(instance)
 	var size := height / maxf(bounds.size.y, 0.01)
 	instance.scale = Vector3.ONE * size
@@ -162,6 +171,19 @@ func build_pedestrian(model: PackedScene, material: Material, half_size: Vector2
 	animation.loop_mode = Animation.LOOP_LINEAR
 	_animation_player.play(animation_name)
 	_animation_player.seek(randf() * animation.length, true)
+
+
+#The bot models keep their own colours and size and play their run slowed to a walk
+func _setup_bot_walker(bot: BotLook) -> void:
+	if bot is BotModel:
+		(bot as BotModel).run_speed_scale = BOT_WALK_ANIMATION_SCALE
+	bot.scale = Vector3.ONE * BOT_PEDESTRIAN_SCALE
+	_walker = bot
+
+
+func _ready() -> void:
+	if _walker != null:
+		_walker.set_moving(true)
 
 
 #"model" is scaled to "length", stands on the ground and faces +X (the bike model faces -X).
@@ -209,7 +231,7 @@ func lean(direction: float, delta: float) -> void:
 func advance(speed: float, delta: float) -> void:
 	var distance := speed * delta
 	position.x += distance
-	if kind != Kind.PEDESTRIAN:
+	if kind != Kind.PEDESTRIAN or _walker != null:
 		return
 	if _animation_player:
 		_animation_player.speed_scale = clampf(speed / _animation_walk_speed, 0.5, MAX_ANIMATION_SPEED)
