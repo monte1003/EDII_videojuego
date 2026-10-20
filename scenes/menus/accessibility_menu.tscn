@@ -1,0 +1,78 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/menus/accessibility_menu.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/ui/social_background.gd" id="2_background"]
+[ext_resource type="FontVariation" path="res://assets/ui/fonts/heading_font.tres" id="3_font"]
+[ext_resource type="FontVariation" path="res://assets/ui/fonts/body_font.tres" id="5_body"]
+[ext_resource type="PackedScene" path="res://scenes/ui/text_button.tscn" id="4_button"]
+
+[node name="AccessibilityMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+screen_id = &"accessibility"
+
+[node name="Background" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_background")
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Layout" type="VBoxContainer" parent="Center"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="TrailLabel" type="Label" parent="Center/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.427, 0.373, 0.592, 1)
+theme_override_fonts/font = ExtResource("5_body")
+theme_override_font_sizes/font_size = 19
+horizontal_alignment = 1
+
+[node name="TitleLabel" type="Label" parent="Center/Layout"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.882, 0.294, 0.416, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 62
+text = "ACCESIBILIDAD"
+horizontal_alignment = 1
+
+[node name="Content" type="VBoxContainer" parent="Center/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(660, 0)
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Spacer" type="Control" parent="Center/Layout"]
+custom_minimum_size = Vector2(0, 18)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="BackButton" parent="Center/Layout" instance=ExtResource("4_button")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 22
+text = "ATRÁS"
+accent = Color(0.878, 0.541, 0.133, 1)

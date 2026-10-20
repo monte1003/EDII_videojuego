@@ -1,0 +1,75 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/levels/street_game.gd" id="1_script"]
+[ext_resource type="Resource" path="res://resources/characters/fire.tres" id="2_fire"]
+[ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="3_pause"]
+[ext_resource type="Script" path="res://scripts/levels/street_world.gd" id="4_world"]
+[ext_resource type="Script" path="res://scripts/levels/street_hud.gd" id="5_hud"]
+[ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="6_help"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/ping.tscn" id="6_ping"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/bubble.tscn" id="7_bubble"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/like.tscn" id="8_like"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/loop.tscn" id="11_loop"]
+[ext_resource type="PackedScene" uid="uid://d0vwal2pufjyn" path="res://assets/obstacles/cyclist/cyclist.glb" id="10_cyclist"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+sky_top_color = Color(0.737, 0.784, 0.98, 1)
+sky_horizon_color = Color(0.85, 0.72, 0.92, 1)
+ground_bottom_color = Color(0.973, 0.643, 0.702, 1)
+ground_horizon_color = Color(0.85, 0.72, 0.92, 1)
+
+[sub_resource type="Sky" id="Sky_world"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 2
+sky = SubResource("Sky_world")
+ambient_light_source = 3
+ambient_light_energy = 0.35
+tonemap_mode = 2
+fog_enabled = true
+fog_mode = 1
+fog_light_color = Color(0.88, 0.8, 0.95, 1)
+fog_density = 0.75
+fog_sky_affect = 0.0
+fog_depth_begin = 60.0
+fog_depth_end = 520.0
+
+[node name="StreetGame" type="Node3D"]
+script = ExtResource("1_script")
+default_character = ExtResource("2_fire")
+cyclist_model = ExtResource("10_cyclist")
+pedestrian_models = Array[PackedScene]([ExtResource("6_ping"), ExtResource("7_bubble"), ExtResource("8_like"), ExtResource("11_loop")])
+pedestrian_half_size = Vector2(0.4, 0.4)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_world")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.825, -0.462, 0.326, 0, 0.577, 0.817, -0.565, -0.675, 0.476, 0, 10, 0)
+light_color = Color(1, 0.95, 0.93, 1)
+light_energy = 0.7
+shadow_enabled = true
+shadow_blur = 1.5
+directional_shadow_mode = 0
+directional_shadow_max_distance = 60.0
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.6805, 0.7328, 0, -0.7328, 0.6805, 0, 14, 13.5)
+current = true
+fov = 50.0
+
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("4_world")
+
+[node name="Actors" type="Node3D" parent="."]
+
+[node name="Obstacles" type="Node3D" parent="."]
+
+[node name="Hud" type="CanvasLayer" parent="."]
+script = ExtResource("5_hud")
+
+[node name="PauseMenu" parent="." instance=ExtResource("3_pause")]
+
+[node name="Help" type="CanvasLayer" parent="."]
+script = ExtResource("6_help")

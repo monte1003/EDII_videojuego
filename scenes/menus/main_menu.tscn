@@ -1,0 +1,147 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/menus/main_menu.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/ui/social_background.gd" id="2_background"]
+[ext_resource type="PackedScene" path="res://scenes/ui/text_button.tscn" id="4_button"]
+[ext_resource type="PackedScene" path="res://scenes/ui/game_button.tscn" id="5_play"]
+[ext_resource type="Texture2D" path="res://assets/ui/textures/mark.png" id="6_mark"]
+[ext_resource type="Texture2D" path="res://assets/ui/textures/title.png" id="7_title"]
+[ext_resource type="FontVariation" path="res://assets/ui/fonts/button_font.tres" id="9_font"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+screen_id = &"main_menu"
+
+[node name="Background" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_background")
+
+[node name="Foreground" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TestButton" parent="." instance=ExtResource("4_button")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -150.0
+offset_top = 24.0
+offset_right = -24.0
+offset_bottom = 64.0
+grow_horizontal = 0
+focus_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "TEST"
+accent = Color(0.992, 0.337, 0.498, 1)
+
+[node name="Center" type="CenterContainer" parent="Foreground"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+offset_top = -7.0
+mouse_filter = 2
+
+[node name="Layout" type="VBoxContainer" parent="Foreground/Center"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+
+[node name="Mark" type="TextureRect" parent="Foreground/Center/Layout"]
+custom_minimum_size = Vector2(96, 91)
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 2
+texture = ExtResource("6_mark")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Title" type="TextureRect" parent="Foreground/Center/Layout"]
+custom_minimum_size = Vector2(540, 290)
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 2
+texture = ExtResource("7_title")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="TitleGap" type="Control" parent="Foreground/Center/Layout"]
+custom_minimum_size = Vector2(0, 2)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="PlayButton" parent="Foreground/Center/Layout" instance=ExtResource("5_play")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(341, 66)
+layout_mode = 2
+size_flags_horizontal = 4
+focus_mode = 2
+theme_override_font_sizes/font_size = 23
+text = "JUGAR"
+pulse = true
+
+[node name="Gap" type="Control" parent="Foreground/Center/Layout"]
+custom_minimum_size = Vector2(0, 25)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Hint" type="Label" parent="Foreground/Center/Layout"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.482, 0.357, 0.596, 1)
+theme_override_fonts/font = ExtResource("9_font")
+theme_override_font_sizes/font_size = 10
+text = "PULSA ENTER PARA EMPEZAR"
+horizontal_alignment = 1
+
+[node name="BottomGap" type="Control" parent="Foreground/Center/Layout"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="BottomRow" type="HBoxContainer" parent="Foreground/Center/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 34
+alignment = 1
+
+[node name="OptionsButton" parent="Foreground/Center/Layout/BottomRow" instance=ExtResource("4_button")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+focus_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "OPCIONES"
+accent = Color(0.184, 0.624, 0.722, 1)
+
+[node name="ExitButton" parent="Foreground/Center/Layout/BottomRow" instance=ExtResource("4_button")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+focus_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "SALIR"
+accent = Color(0.878, 0.541, 0.133, 1)

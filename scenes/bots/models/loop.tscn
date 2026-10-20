@@ -1,0 +1,23 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/bots/bot_model.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://assets/bots/loop/loop.glb" id="2_model"]
+[ext_resource type="AnimationLibrary" path="res://assets/bots/loop/loop_idle.res" id="3_idle"]
+[ext_resource type="AnimationLibrary" path="res://assets/bots/loop/loop_run.res" id="4_run"]
+[ext_resource type="AnimationLibrary" path="res://assets/bots/loop/loop_alert.res" id="5_alert"]
+[ext_resource type="AnimationLibrary" path="res://assets/bots/loop/loop_push.res" id="6_push"]
+
+[node name="Loop" type="Node3D"]
+script = ExtResource("1_script")
+alert_height = 1.3
+
+[node name="Model" parent="." instance=ExtResource("2_model")]
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("../Model")
+libraries = {
+&"idle": ExtResource("3_idle"),
+&"run": ExtResource("4_run"),
+&"alert": ExtResource("5_alert"),
+&"push": ExtResource("6_push")
+}

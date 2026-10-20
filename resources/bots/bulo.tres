@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BotAppearance" format=3]
+
+[ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"bulo"
+display_name = "Bulo"
+body_color = Color(0.122, 0.376, 0.439, 1)
+accent_color = Color(1, 0.42, 0.42, 1)
+detail = 2
+debug_color = Color(0.239, 0.839, 0.91, 1)
+tip = "Bulo: verifica antes de creer o compartir."

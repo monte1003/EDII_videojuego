@@ -1,0 +1,12 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/text_button.gd" id="1_script"]
+[ext_resource type="FontVariation" path="res://assets/ui/fonts/button_font.tres" id="2_font"]
+
+[node name="TextButton" type="Button"]
+custom_minimum_size = Vector2(0, 54)
+focus_mode = 2
+theme_override_fonts/font = ExtResource("2_font")
+theme_override_font_sizes/font_size = 26
+text = "BOTON"
+script = ExtResource("1_script")

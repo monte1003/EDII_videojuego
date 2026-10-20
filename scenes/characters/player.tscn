@@ -1,20 +1,36 @@
 [gd_scene format=3 uid="uid://cjibei1gr7nm3"]
 
-[ext_resource type="Script" uid="uid://b7xw0ilgugrjr" path="res://scripts/player/player.gd" id="1_rp718"]
+[ext_resource type="Script" uid="uid://b7xw0ilgugrjr" path="res://scripts/player/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/player/player_camera.gd" id="2_camera"]
+[ext_resource type="Script" path="res://scripts/player/player_input.gd" id="3_input"]
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_7ksya"]
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.3
+height = 1.0
 
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_7ksya"]
+[node name="Player" type="CharacterBody3D"]
+script = ExtResource("1_player")
 
-[node name="Player" type="CharacterBody3D" unique_id=1064506660]
-script = ExtResource("1_rp718")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("CapsuleShape3D_body")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1390333529]
-shape = SubResource("CapsuleShape3D_7ksya")
+[node name="ModelPivot" type="Node3D" parent="."]
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=825418692]
-mesh = SubResource("CapsuleMesh_7ksya")
+[node name="CameraRig" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+script = ExtResource("2_camera")
 
-[node name="Camera3D" type="Camera3D" parent="." unique_id=1795121819]
-transform = Transform3D(1, 0, 0, 0, 0.9659258, 0.25881904, 0, -0.25881904, 0.9659258, 0, 2, 4)
-fov = 95.7819
+[node name="PitchPivot" type="Node3D" parent="CameraRig"]
+transform = Transform3D(1, 0, 0, 0, 0.94, 0.342, 0, -0.342, 0.94, 0, 0, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig/PitchPivot"]
+spring_length = 2.8
+margin = 0.2
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig/PitchPivot/SpringArm3D"]
+fov = 70.0
+
+[node name="PlayerInput" type="Node" parent="."]
+process_physics_priority = -1
+script = ExtResource("3_input")
