@@ -1,5 +1,5 @@
 class_name StreetGame
-extends Node3D
+extends RoundScene
 
 #Street minigame: dodge the cars and pedestrians that push you toward the end line until time runs out
 
@@ -32,9 +32,6 @@ class Lane:
 		z = lane_z
 		slot_offset = lane_slot_offset
 
-
-#Used when the scene runs without going through character select
-@export var default_character: CharacterData
 
 @export_group("Round")
 @export var time_limit := 60.0
@@ -95,7 +92,6 @@ var _rng := RandomNumberGenerator.new()
 var _clock := 0.0
 var _phase_timer := 0.0
 var _countdown_shown := 0
-var _paused := false
 #After a victory the whole street stops
 var _frozen := false
 #A tank was drawn but has not found room yet
@@ -105,13 +101,12 @@ var _hud_timer := 0.0
 
 @onready var _camera: Camera3D = $Camera3D
 @onready var _world: StreetWorld = $World
-@onready var _actors: Node3D = $Actors
 @onready var _obstacle_root: Node3D = $Obstacles
 @onready var _hud: StreetHud = $Hud
-@onready var _pause_menu: PauseMenu = $PauseMenu
 
 
 func _ready() -> void:
+	super()
 	if ScreenFlow.tree.has(SCREEN_ID):
 		ScreenFlow.mark_current(SCREEN_ID)
 	_rng.randomize()
@@ -120,10 +115,9 @@ func _ready() -> void:
 	_build_lanes(half_width)
 	_spawn_runner(half_width)
 
-	_pause_menu.opened.connect(_on_pause_opened)
-	_pause_menu.closed.connect(_on_pause_closed)
+	_help.setup(HelpPages.street({"time_limit": time_limit}))
 	_hud.retry_requested.connect(_retry)
-	_hud.menu_requested.connect(ScreenFlow.back)
+	_hud.menu_requested.connect(GameSession.abandon)
 	_hud.set_hint("%s / %s para moverte · %s salta · Esquiva autos y peatones · Aguanta %d s" % [
 		InputHints.key_markup(&"move_forward"), InputHints.key_markup(&"move_back"),
 		InputHints.key_markup(&"jump"), int(time_limit)])
@@ -137,6 +131,10 @@ func _ready() -> void:
 	_hud.show_countdown(str(_countdown_shown))
 
 
+func _help_allowed() -> bool:
+	return phase != Phase.ENDED
+
+
 func _build_lanes(half_width: float) -> void:
 	for index in lane_count:
 		_lanes.append(Lane.new(StreetObstacle.Kind.CAR, -half_width + lane_width * (index + 0.5), 0.0))
@@ -148,11 +146,9 @@ func _build_lanes(half_width: float) -> void:
 
 
 func _spawn_runner(half_width: float) -> void:
-	var character := GameState.get_character(GameState.PLAYER_ONE)
-	if character == null:
-		character = default_character
+	var slot := participants[0]
 	_runner = StreetRunner.new()
-	_runner.player_id = GameState.PLAYER_ONE
+	_runner.player_id = slot.player_id
 	_runner.street_half_width = half_width
 	_runner.sidewalk_height = StreetWorld.SIDEWALK_HEIGHT
 	var edge := half_width + sidewalk_width - _runner.radius
@@ -160,11 +156,11 @@ func _spawn_runner(half_width: float) -> void:
 	_runner.max_z = edge
 	_actors.add_child(_runner)
 	_runner.position = Vector3(start_x, 0.0, 0.0)
-	_runner.set_character(character)
+	_runner.set_character(slot.character)
 
 
 func _physics_process(delta: float) -> void:
-	if _paused:
+	if paused:
 		return
 	_clock += delta
 	match phase:
@@ -232,8 +228,7 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	#A late Esc press must not open the pause menu over the final panel
 	_pause_menu.set_process_unhandled_input(false)
 	if not victory:
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		_hud.show_end(title, message, victory)
+		_end_round(victory, title, message)
 		return
 
 	#Victory: the street stops, the camera moves in front of the runner and then the panel shows
@@ -249,9 +244,7 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	tween.tween_property(_camera, "fov", win_fov, win_zoom_time)
 	tween.chain().tween_callback(_runner.jump)
 	tween.chain().tween_interval(0.8)
-	tween.chain().tween_callback(func() -> void:
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		_hud.show_end(title, message, victory))
+	tween.chain().tween_callback(_end_round.bind(victory, title, message))
 
 
 #Obstacles between the close-up camera and the runner shrink away so they never hide it
@@ -266,8 +259,19 @@ func _clear_view(camera_position: Vector3) -> void:
 			create_tween().tween_property(obstacle, "scale", Vector3.ONE * 0.01, 0.3)
 
 
+#Inside a session the results screen takes over; on its own the HUD shows the end panel
+func _end_round(victory: bool, title: String, message: String) -> void:
+	var lines: Array[Array] = [["Aguantaste", "%d s" % floori(elapsed)], ["Objetivo", "%d s" % int(time_limit)]]
+	if not finish_round(RoundResult.make(SCREEN_ID, victory, title, message, lines)):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_hud.show_end(title, message, victory)
+
+
 func _retry() -> void:
-	get_tree().reload_current_scene()
+	if GameSession.is_playing_round():
+		GameSession.restart_round()
+	else:
+		ScreenFlow.reload_current()
 
 
 func _update_obstacles(delta: float) -> void:
@@ -422,13 +426,3 @@ func _interval_min(kind: int) -> float:
 
 func _interval_max(kind: int) -> float:
 	return car_interval_max if kind == StreetObstacle.Kind.CAR else pedestrian_interval_max
-
-
-func _on_pause_opened() -> void:
-	_paused = true
-	_actors.process_mode = Node.PROCESS_MODE_DISABLED
-
-
-func _on_pause_closed() -> void:
-	_paused = false
-	_actors.process_mode = Node.PROCESS_MODE_INHERIT

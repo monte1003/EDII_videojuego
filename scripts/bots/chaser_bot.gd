@@ -1,10 +1,10 @@
 class_name ChaserBot
 extends CharacterBody3D
 
-#Shared bot AI: plans on the graph with Dijkstra and walks the route; a bridge crossing is committed once started
+#Shared bot AI: its role picks the target vertex, Dijkstra plans the route and the bot walks it; a bridge crossing is committed once started
 
 signal push_announced(bot: ChaserBot)
-signal push_landed(bot: ChaserBot, direction: Vector3)
+signal push_landed(bot: ChaserBot, direction: Vector3, player_id: int)
 signal route_changed(bot: ChaserBot)
 
 enum State { INACTIVE, CHASE, SEARCH }
@@ -13,8 +13,15 @@ enum State { INACTIVE, CHASE, SEARCH }
 @export var move_speed := 4.3
 @export var waypoint_tolerance := 0.6
 @export var gate_inset := 1.0
-@export var stop_distance := 1.1
+@export var stop_distance := 1.5
 @export var turn_speed := 10.0
+#Bots on the same platform keep this distance from each other so they never pile up
+@export var separation_radius := 2.8
+@export_range(0.0, 1.5) var separation_weight := 1.2
+#A bot waits at a gate while another bot crossing the same bridge is closer than this
+@export var bridge_gap := 4.5
+#Meters from the rim of a platform that a bot keeps clear of
+@export var rim_margin := 0.9
 
 @export_group("Planning")
 #Minimum seconds between two Dijkstra calls of the same bot
@@ -34,6 +41,7 @@ enum State { INACTIVE, CHASE, SEARCH }
 @export var push_cooldown := 2.5
 
 var appearance: BotAppearance
+var role: BotRole = ChaseRole.new()
 var state := State.INACTIVE
 var current_vertex: StringName = &""
 var target_vertex: StringName = &""
@@ -48,6 +56,8 @@ var manual_target := false
 var hold_movement := false
 
 var _ctx: ChaseContext
+var _focus: ChaseTarget
+var _push_target: ChaseTarget
 var _clock := 0.0
 var _last_recalc := -100.0
 var _last_seen := 0.0
@@ -69,14 +79,21 @@ var _visual: Node3D
 
 func setup(context: ChaseContext, bot_appearance: BotAppearance, start_vertex: StringName) -> void:
 	_ctx = context
+	_ctx.bots.append(self)
 	current_vertex = start_vertex
 	global_position = _ctx.positions[start_vertex]
 	set_appearance(bot_appearance)
 
 
+func _exit_tree() -> void:
+	if _ctx != null:
+		_ctx.bots.erase(self)
+
+
 #Swaps the look only: nothing else in the bot depends on it
 func set_appearance(bot_appearance: BotAppearance) -> void:
 	appearance = bot_appearance
+	role = BotRoles.make(appearance.role)
 	if _visual:
 		_visual.queue_free()
 		_visual = null
@@ -89,11 +106,15 @@ func set_appearance(bot_appearance: BotAppearance) -> void:
 	_visual_root.add_child(_visual)
 
 
-#Starts the hunt knowing where the player is, whatever the detection radius
+#Starts the hunt knowing where the player is, whatever the detection radius; the role decides where to go
 func activate(known_vertex: StringName) -> void:
 	state = State.CHASE
 	_last_seen = _clock
-	set_target(known_vertex)
+	var watched := _watched()
+	var wanted := &""
+	if not manual_target and watched != null:
+		wanted = role.pick_target(self, _ctx, watched)
+	set_target(wanted if wanted != &"" else known_vertex)
 
 
 func deactivate() -> void:
@@ -110,10 +131,23 @@ func set_target(vertex: StringName) -> void:
 	_dirty = true
 
 
+func role_kind() -> int:
+	return appearance.role if appearance != null else BotRole.Kind.CHASE
+
+
+#The vertex the bot is at, or the one it is crossing toward
+func anchor_vertex() -> StringName:
+	return _leg_vertex if _committed else current_vertex
+
+
+func clock() -> float:
+	return _clock
+
+
 #Where the bot is heading right now, for the debug view
 func planned_vertices() -> Array[StringName]:
 	var result: Array[StringName] = []
-	result.append(_leg_vertex if _committed else current_vertex)
+	result.append(anchor_vertex())
 	result.append_array(route)
 	return result
 
@@ -126,7 +160,7 @@ func debug_info() -> Dictionary:
 	return {
 		"name": appearance.display_name if appearance else "Bot",
 		"color": appearance.debug_color if appearance else Color.WHITE,
-		"from": _leg_vertex if _committed else current_vertex,
+		"from": anchor_vertex(),
 		"target": target_vertex,
 		"route": planned_vertices(),
 		"cost": route_cost,
@@ -155,6 +189,7 @@ func _physics_process(delta: float) -> void:
 		if _windup_left <= 0.0 and not hold_movement:
 			wanted = _walk(delta)
 
+	wanted = _stay_on_platform(_with_separation(wanted))
 	velocity.x = wanted.x
 	velocity.z = wanted.z
 	move_and_slide()
@@ -168,36 +203,46 @@ func _physics_process(delta: float) -> void:
 func _perceive() -> void:
 	if manual_target:
 		return
-	var distance := _flat(_ctx.player.global_position - global_position).length()
-	if distance <= _ctx.detection_radius:
+	var seen := _nearest_noticed()
+	if seen != null:
+		_focus = seen
 		_last_seen = _clock
 		if state == State.SEARCH:
 			state = State.CHASE
-		_choose_target_from_player()
+		var wanted := role.pick_target(self, _ctx, seen)
+		if wanted != &"":
+			set_target(wanted)
 	elif state == State.CHASE and _clock - _last_seen > lose_time:
 		state = State.SEARCH
 		_patrol_timer = 0.0
 
 
-#Chase target: the player's platform, or the bridge end that makes the bot cross it
-func _choose_target_from_player() -> void:
-	var candidates := _ctx.locator.chase_candidates()
-	if candidates.size() == 1:
-		set_target(candidates[0])
-		return
-	var bridge_open := _ctx.graph.is_edge_enabled(candidates[0], candidates[1])
-	var anchor := _leg_vertex if _committed else current_vertex
-	var best: StringName = &""
-	var best_cost := INF if not bridge_open else -1.0
-	for candidate in candidates:
-		var result := _ctx.graph.shortest_path(anchor, candidate, _ctx.forbidden)
-		if not result.found:
+#The closest player this bot notices: inside its detection radius, or any when its role needs no sight
+func _nearest_noticed() -> ChaseTarget:
+	var best: ChaseTarget = null
+	var best_distance := INF
+	for candidate in _ctx.targets:
+		var distance := _flat(candidate.node.global_position - global_position).length()
+		if role.needs_sight() and distance > candidate.detection_radius:
 			continue
-		if bridge_open and result.cost > best_cost or not bridge_open and result.cost < best_cost:
-			best_cost = result.cost
+		if distance < best_distance:
+			best_distance = distance
 			best = candidate
-	if best != &"":
-		set_target(best)
+	return best
+
+
+#The player this bot pays attention to now; the closest one if it has not noticed anybody yet
+func _watched() -> ChaseTarget:
+	if _focus != null:
+		return _focus
+	var best: ChaseTarget = null
+	var best_distance := INF
+	for candidate in _ctx.targets:
+		var distance := _flat(candidate.node.global_position - global_position).length()
+		if distance < best_distance:
+			best_distance = distance
+			best = candidate
+	return best
 
 
 func _try_recalculate() -> void:
@@ -208,8 +253,7 @@ func _try_recalculate() -> void:
 	_seen_version = _ctx.graph.version
 	if target_vertex == &"":
 		return
-	var anchor := _leg_vertex if _committed else current_vertex
-	var result := _ctx.graph.shortest_path(anchor, target_vertex, _ctx.forbidden)
+	var result := _ctx.graph.shortest_path(anchor_vertex(), target_vertex, _ctx.forbidden, _ctx.traffic_for(self))
 	route_found = result.found
 	route_cost = result.cost
 	route_message = result.reason
@@ -237,6 +281,9 @@ func _walk(delta: float) -> Vector3:
 		if not _ctx.graph.is_edge_enabled(current_vertex, next):
 			_dirty = true
 			return Vector3.ZERO
+		#Another bot already on that bridge near the gate: wait, a bridge is too narrow for two
+		if _bridge_taken(current_vertex, next):
+			return Vector3.ZERO
 		_committed = true
 		_leg_vertex = next
 		_leg_point = _gate_point(next, current_vertex)
@@ -248,9 +295,10 @@ func _walk(delta: float) -> Vector3:
 
 #The bot is at its target: chase the player on the same platform, patrol, or wait in the middle
 func _idle_walk(delta: float) -> Vector3:
-	var on_same_platform := not _ctx.locator.on_bridge and _ctx.locator.vertex == current_vertex
+	var watched := _watched()
+	var on_same_platform := watched != null and not watched.locator.on_bridge and watched.locator.vertex == current_vertex
 	if state == State.CHASE and on_same_platform:
-		var to_player := _flat(_ctx.player.global_position - global_position)
+		var to_player := _flat(watched.node.global_position - global_position)
 		if to_player.length() > stop_distance:
 			return to_player.normalized() * move_speed
 		return Vector3.ZERO
@@ -267,12 +315,28 @@ func _idle_walk(delta: float) -> Vector3:
 
 func _pick_patrol_target() -> void:
 	var options: Array[StringName] = []
+	var crowded := _ctx.traffic_for(self)
 	for neighbor in _ctx.graph.neighbors(current_vertex):
 		if not _ctx.forbidden.has(neighbor):
 			options.append(neighbor)
+	#Prefer a platform no other bot is on or heading to
+	var free: Array[StringName] = options.filter(func(vertex: StringName) -> bool: return not crowded.has(vertex))
+	if not free.is_empty():
+		options = free
 	if options.is_empty():
 		return
 	set_target(options[randi() % options.size()])
+
+
+func _bridge_taken(from: StringName, to: StringName) -> bool:
+	for other in _ctx.bots:
+		if other == self or not other._committed:
+			continue
+		var same_bridge := (other.current_vertex == from and other._leg_vertex == to) \
+			or (other.current_vertex == to and other._leg_vertex == from)
+		if same_bridge and _flat(other.global_position - global_position).length() < bridge_gap:
+			return true
+	return false
 
 
 func _gate_point(from: StringName, to: StringName) -> Vector3:
@@ -301,9 +365,42 @@ func _flat(vector: Vector3) -> Vector3:
 
 
 func _to_player_flat() -> Vector3:
-	if _ctx == null or _ctx.player == null:
+	if _ctx == null:
 		return Vector3.ZERO
-	return _flat(_ctx.player.global_position - global_position)
+	var watched := _watched()
+	if watched == null:
+		return Vector3.ZERO
+	return _flat(watched.node.global_position - global_position)
+
+
+#A bot never walks off the rim of its platform: only the players fall
+func _stay_on_platform(wanted: Vector3) -> Vector3:
+	if _committed or state == State.INACTIVE or wanted == Vector3.ZERO:
+		return wanted
+	var centre: Vector3 = _ctx.positions[current_vertex]
+	var radial := _flat(global_position - centre)
+	var limit: float = _ctx.radii.get(current_vertex, 5.5) - rim_margin
+	if radial.length() < limit or wanted.dot(radial) <= 0.0:
+		return wanted
+	var outward := radial.normalized()
+	return wanted - outward * wanted.dot(outward)
+
+
+#Pushes the bot away from other bots on its platform; it also nudges a bot that is standing still
+func _with_separation(wanted: Vector3) -> Vector3:
+	if _committed or state == State.INACTIVE:
+		return wanted
+	var away := Vector3.ZERO
+	for other in _ctx.bots:
+		if other == self or other._committed:
+			continue
+		var offset := _flat(global_position - other.global_position)
+		var distance := offset.length()
+		if distance < separation_radius and distance > 0.01:
+			away += offset / distance * (1.0 - distance / separation_radius)
+	if away == Vector3.ZERO:
+		return wanted
+	return (wanted + away * move_speed * separation_weight).limit_length(move_speed)
 
 
 func _face(direction: Vector3, delta: float) -> void:
@@ -328,21 +425,28 @@ func _update_push(delta: float) -> void:
 		if _windup_left <= 0.0:
 			_resolve_push()
 		return
-	if not push_enabled or _push_cooldown_left > 0.0 or _ctx.player_protected:
+	if not push_enabled or _push_cooldown_left > 0.0:
 		return
-	var offset := _ctx.player.global_position - global_position
-	if _flat(offset).length() <= push_trigger_range and absf(offset.y) < 1.5:
-		_windup_left = push_windup
-		_look().set_alert(true)
-		push_announced.emit(self)
+	for candidate in _ctx.targets:
+		if candidate.protected:
+			continue
+		var offset := candidate.node.global_position - global_position
+		if _flat(offset).length() <= push_trigger_range and absf(offset.y) < 1.5:
+			_push_target = candidate
+			_windup_left = push_windup
+			_look().set_alert(true)
+			push_announced.emit(self)
+			return
 
 
 func _resolve_push() -> void:
 	_look().set_alert(false)
 	_look().play_push()
 	_push_cooldown_left = push_cooldown
-	if _ctx.player_protected:
+	var victim := _push_target
+	_push_target = null
+	if victim == null or victim.protected:
 		return
-	var offset := _flat(_ctx.player.global_position - global_position)
+	var offset := _flat(victim.node.global_position - global_position)
 	if offset.length() <= push_hit_range:
-		push_landed.emit(self, offset.normalized())
+		push_landed.emit(self, offset.normalized(), victim.player_id)

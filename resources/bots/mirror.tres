@@ -13,3 +13,5 @@ detail = 3
 model_scene = ExtResource("2_model")
 debug_color = Color(0.78, 0.49, 1, 1)
 tip = "Espejo: compararte con otros no te hace avanzar."
+role = 3
+behavior = "rodea: se coloca al otro lado del Trol"

@@ -5,6 +5,8 @@ extends Node
 
 signal place_changed
 
+#The player this locator follows; the sensors are shared, so it ignores the others
+var player_id := 0
 var vertex: StringName = &""
 var on_bridge := false
 var bridge_a: StringName = &""
@@ -40,8 +42,12 @@ func chase_candidates() -> Array[StringName]:
 	return [vertex]
 
 
+func _is_mine(body: Node3D) -> bool:
+	return body is Player and (body as Player).player_id == player_id
+
+
 func _on_body_entered(body: Node3D, a: StringName, b: StringName, is_platform: bool) -> void:
-	if not body is Player:
+	if not _is_mine(body):
 		return
 	if is_platform:
 		if not _platforms_inside.has(a):
@@ -52,7 +58,7 @@ func _on_body_entered(body: Node3D, a: StringName, b: StringName, is_platform: b
 
 
 func _on_body_exited(body: Node3D, a: StringName, b: StringName, is_platform: bool) -> void:
-	if not body is Player:
+	if not _is_mine(body):
 		return
 	if is_platform:
 		_platforms_inside.erase(a)

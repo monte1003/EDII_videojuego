@@ -4,10 +4,10 @@
 [ext_resource type="Resource" path="res://resources/characters/fire.tres" id="2_fire"]
 [ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="3_pause"]
 [ext_resource type="Script" path="res://scripts/levels/level_01_world.gd" id="4_world"]
-[ext_resource type="Script" path="res://scripts/levels/player_locator.gd" id="5_locator"]
 [ext_resource type="Script" path="res://scripts/levels/graph_debug_view.gd" id="6_debug"]
 [ext_resource type="Script" path="res://scripts/levels/level_hud.gd" id="7_hud"]
 [ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="13_help"]
+[ext_resource type="Resource" path="res://resources/levels/level_01.tres" id="15_settings"]
 [ext_resource type="Script" path="res://scripts/levels/level_input.gd" id="14_input"]
 [ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="8_appearance"]
 [ext_resource type="Resource" path="res://resources/bots/troll.tres" id="9_troll"]
@@ -37,7 +37,8 @@ fog_density = 0.0008
 [node name="Level01" type="Node3D"]
 script = ExtResource("1_script")
 default_character = ExtResource("2_fire")
-bot_appearances = Array[ExtResource("8_appearance")]([ExtResource("9_troll"), ExtResource("10_hoax"), ExtResource("11_mirror"), ExtResource("12_spam")])
+settings = ExtResource("15_settings")
+bot_appearances = Array[ExtResource("8_appearance")]([ExtResource("9_troll"), ExtResource("12_spam"), ExtResource("10_hoax"), ExtResource("11_mirror")])
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_world")
@@ -55,9 +56,6 @@ directional_shadow_max_distance = 50.0
 script = ExtResource("4_world")
 
 [node name="Actors" type="Node3D" parent="."]
-
-[node name="Locator" type="Node" parent="."]
-script = ExtResource("5_locator")
 
 [node name="LevelInput" type="Node" parent="."]
 script = ExtResource("14_input")

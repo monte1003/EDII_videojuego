@@ -13,3 +13,5 @@ detail = 0
 model_scene = ExtResource("2_model")
 debug_color = Color(1, 0.302, 0.427, 1)
 tip = "Trol: a los comentarios hirientes no se les responde, se bloquean."
+role = 0
+behavior = "persigue directo hasta donde estás"

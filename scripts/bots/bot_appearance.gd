@@ -15,3 +15,7 @@ enum Detail { BROWS, NOTIFICATIONS, X_PLATE, MIRROR_PLATES }
 @export var debug_color := Color.WHITE
 #Short healthy-use message shown the first time this bot tries to push the player
 @export var tip := ""
+#How this bot hunts on the graph
+@export var role := BotRole.Kind.CHASE
+#One line for the help: what this bot does that the others do not
+@export var behavior := ""
