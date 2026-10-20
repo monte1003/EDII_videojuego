@@ -12,6 +12,9 @@ func _ready() -> void:
 	tree.add_screen(&"main_menu", &"character_select", "Personajes", "res://scenes/menus/character_select.tscn")
 	tree.add_screen(&"character_select", &"test_world", "Partida", "res://scenes/levels/test_world.tscn")
 	tree.add_screen(&"test_world", &"level_01", "Nivel 1", "res://scenes/levels/level_01.tscn")
+	#Test menu: every game registered as its child gets a button there
+	tree.add_screen(&"main_menu", &"test_games", "Test", "res://scenes/menus/test_menu.tscn")
+	tree.add_screen(&"test_games", &"multiplayer_game1", "La calle", "res://scenes/levels/multiplayer_game1.tscn")
 	tree.add_screen(&"main_menu", &"options", "Opciones", "res://scenes/menus/options_menu.tscn")
 	tree.add_screen(&"options", &"controls", "Controles", "res://scenes/menus/controls_menu.tscn")
 	tree.add_screen(&"options", &"graphics", "Gráficos", "res://scenes/menus/graphics_menu.tscn")

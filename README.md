@@ -1,11 +1,11 @@
-# Proyecto: Disconnect (Party Game)
+# Proyecto: RumbleNet (Party Game)
 **Asignatura:** Estructura de Datos II
 **Universidad del Norte**
 
 ---
 
 ## 🎮 Descripción del Juego
-**"Disconnect"** es un juego multijugador local (1 a 4 jugadores) tipo *party game* enfocado en la concientización del uso saludable de las redes sociales. El objetivo es divertirse en un entorno caótico y competitivo mientras los jugadores enfrentan obstáculos que simulan distracciones digitales, trolls, y notificaciones, fomentando la "desconexión" y los hábitos saludables.
+**RumbleNet** es un juego multijugador local (1 a 4 jugadores) tipo *party game* enfocado en la concientización del uso saludable de las redes sociales. El objetivo es divertirse en un entorno caótico y competitivo mientras los jugadores enfrentan obstáculos que simulan distracciones digitales, trolls, y notificaciones, fomentando la "desconexión" y los hábitos saludables.
 
 ### Características Principales:
 - **Formato por Partidas:** Cada partida consta de 4 rondas rápidas de 1.5 a 2 minutos.
