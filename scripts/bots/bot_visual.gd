@@ -1,9 +1,7 @@
 class_name BotVisual
 extends Node3D
 
-#Provisional bot made of Godot primitives. It only draws: no physics, no AI.
-#A final model replaces it by setting BotAppearance.model_scene; if that scene has
-#"set_alert(active: bool)" the bot calls it when it announces a push.
+#Provisional bot made of primitives; a final model replaces it through BotAppearance.model_scene
 
 #Materials are shared between every bot of the same colour
 static var _materials: Dictionary = {}

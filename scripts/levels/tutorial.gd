@@ -116,34 +116,17 @@ func _step_text(step: Step) -> Array[String]:
 	match step:
 		Step.MOVE:
 			var keys := " ".join([
-				_key_label(&"move_forward"), _key_label(&"move_left"),
-				_key_label(&"move_back"), _key_label(&"move_right")])
-			return ["Muévete", "Camina hasta la marca cian con %s." % TutorialHud.key_markup(keys)]
+				InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
+				InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
+			return ["Muévete", "Camina hasta la marca cian con %s." % InputHints.markup(keys)]
 		Step.CAMERA:
 			return ["Mira a tu alrededor",
-				"Mueve el %s hasta mirar la baliza magenta." % TutorialHud.key_markup("MOUSE")]
+				"Mueve el %s hasta mirar la baliza magenta." % InputHints.markup("MOUSE")]
 		Step.JUMP:
 			return ["Salta",
-				"Pulsa %s para pasar las barras y los huecos hasta la marca." % TutorialHud.key_markup(_key_label(&"jump"))]
+				"Pulsa %s para pasar las barras y los huecos hasta la marca." % InputHints.markup(InputHints.key_label(&"jump"))]
 		_:
 			return ["Práctica final", "Combina todo y cruza el portal de salida."]
-
-
-#Shows the key bound to an action in the Input Map, so it follows any rebinding
-func _key_label(action: StringName) -> String:
-	for event in InputMap.action_get_events(action):
-		var key := event as InputEventKey
-		if key == null:
-			continue
-		var code := key.keycode
-		if key.physical_keycode != KEY_NONE:
-			code = key.physical_keycode
-			#Shows the label of the player's own layout; the headless server cannot translate it
-			if DisplayServer.get_name() != "headless":
-				code = DisplayServer.keyboard_get_keycode_from_physical(code)
-		var label := OS.get_keycode_string(code)
-		return "ESPACIO" if code == KEY_SPACE else label.to_upper()
-	return "?"
 
 
 func _update_camera(delta: float) -> void:

@@ -1,8 +1,7 @@
 class_name PlayerLocator
 extends Node
 
-#Tells which platform or bridge the player is on, using Area3D sensors instead of distances.
-#While the player is in the air over nothing it keeps the last valid place.
+#Tells which platform or bridge the player is on with Area3D sensors; in the air it keeps the last place
 
 signal place_changed
 

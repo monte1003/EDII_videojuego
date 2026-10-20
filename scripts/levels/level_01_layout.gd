@@ -1,15 +1,7 @@
 class_name Level01Layout
 extends RefCounted
 
-#Single source of truth for level 1: the graph and the physical platforms are both built
-#from these tables, so every edge of the graph is a real bridge and no bridge is invented.
-#Topology and costs follow the design guide (Rumble_Net_Guia_Visual_Explicada.pdf):
-#  - S start, M goal, E "Bloquear", F "Silenciar", D "Pausa digital", H checkpoint.
-#  - Bridges J-M and I-M reach the goal; there is no H-M shortcut.
-#  - B to J costs 6 through B-E-H-J and 11 through B-E-D-G-J when E-H is blocked.
-#The formal design document (the map that prevails according to the guide) was not at hand,
-#so the other bridges were read from the overview picture and the costs were chosen to keep
-#the two numbers above. Edit EDGES to change any cost or bridge.
+#Single source of truth of level 1: the graph and the platforms are both built from these tables
 
 #Meters of centre-to-centre distance that count as one unit of cost
 const UNIT := 7.0
@@ -36,8 +28,7 @@ const RADII := {
 	&"M": 6.5,
 }
 
-#Cost of crossing a bridge: roughly the centre distance divided by UNIT, so a cost of 2
-#is a short bridge and 3 a long one. Both directions share the same cost.
+#Cost of crossing a bridge, about the centre distance over UNIT; B to J costs 6, or 11 with E-H blocked
 const EDGES := [
 	[&"S", &"A", 3.0],
 	[&"S", &"B", 2.0],
