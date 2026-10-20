@@ -1,0 +1,32 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/levels/social_drop.gd" id="1_script"]
+[ext_resource type="Resource" path="res://resources/characters/fire.tres" id="2_fire"]
+[ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="3_pause"]
+[ext_resource type="Script" path="res://scripts/levels/social_drop_world.gd" id="4_world"]
+[ext_resource type="Script" path="res://scripts/levels/social_drop_hud.gd" id="5_hud"]
+[ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="6_help"]
+[ext_resource type="Texture2D" path="res://assets/socialmedia_icons/SM-Facebook_Box.png" id="7_facebook"]
+[ext_resource type="Texture2D" path="res://assets/socialmedia_icons/SM-Reddit_Box.png" id="8_reddit"]
+[ext_resource type="Texture2D" path="res://assets/socialmedia_icons/SM-Snapchat_Box.png" id="9_snapchat"]
+[ext_resource type="Texture2D" path="res://assets/socialmedia_icons/SM-Twitch_Box.png" id="10_twitch"]
+[ext_resource type="Texture2D" path="res://assets/socialmedia_icons/SM-WhatsApp_Box.png" id="11_whatsapp"]
+[ext_resource type="Texture2D" path="res://assets/socialmedia_icons/SM-Youtube_Box.png" id="12_youtube"]
+
+[node name="SocialDrop" type="Node3D"]
+script = ExtResource("1_script")
+icons = Array[Texture2D]([ExtResource("7_facebook"), ExtResource("8_reddit"), ExtResource("9_snapchat"), ExtResource("10_twitch"), ExtResource("11_whatsapp"), ExtResource("12_youtube")])
+default_character = ExtResource("2_fire")
+
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("4_world")
+
+[node name="Actors" type="Node3D" parent="."]
+
+[node name="Hud" type="CanvasLayer" parent="."]
+script = ExtResource("5_hud")
+
+[node name="PauseMenu" parent="." instance=ExtResource("3_pause")]
+
+[node name="Help" type="CanvasLayer" parent="."]
+script = ExtResource("6_help")
