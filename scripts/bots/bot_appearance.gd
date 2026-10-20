@@ -1,7 +1,7 @@
 class_name BotAppearance
 extends Resource
 
-#Look and wording of a bot; set model_scene (a Node3D facing +Z, feet at y = 0) to replace the primitives
+#Look and wording of a bot; set model_scene (a BotLook facing +Z, feet at y = 0) to replace the primitives
 
 enum Detail { BROWS, NOTIFICATIONS, X_PLATE, MIRROR_PLATES }
 

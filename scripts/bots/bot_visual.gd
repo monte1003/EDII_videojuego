@@ -1,13 +1,10 @@
 class_name BotVisual
-extends Node3D
+extends BotLook
 
 #Provisional bot made of primitives; a final model replaces it through BotAppearance.model_scene
 
 #Materials are shared between every bot of the same colour
 static var _materials: Dictionary = {}
-
-var _alert_mark: Node3D
-var _alert_tween: Tween
 
 
 static func _material(color: Color, emission := 0.0) -> StandardMaterial3D:
@@ -67,28 +64,6 @@ func build(appearance: BotAppearance) -> void:
 		BotAppearance.Detail.MIRROR_PLATES:
 			for side in [-1.0, 1.0]:
 				_add_box(Vector3(0.05, 0.26, 0.2), accent, Vector3(side * 0.33, 1.0, 0.0), 0.5)
-
-	_alert_mark = Node3D.new()
-	_alert_mark.position = Vector3(0, 1.62, 0)
-	_alert_mark.visible = false
-	add_child(_alert_mark)
-	var alert_color := Color("ffd23f")
-	_attach(_alert_mark, _box_mesh(Vector3(0.12, 0.3, 0.12)), alert_color, Vector3(0, 0.12, 0), 1.2)
-	_attach(_alert_mark, _box_mesh(Vector3(0.12, 0.12, 0.12)), alert_color, Vector3(0, -0.1, 0), 1.2)
-
-
-#Shown while the bot winds up a push, so the player can dodge it
-func set_alert(active: bool) -> void:
-	if _alert_mark == null:
-		return
-	_alert_mark.visible = active
-	if _alert_tween and _alert_tween.is_valid():
-		_alert_tween.kill()
-	_alert_mark.scale = Vector3.ONE
-	if active:
-		_alert_tween = create_tween().set_loops()
-		_alert_tween.tween_property(_alert_mark, "scale", Vector3.ONE * 1.4, 0.15)
-		_alert_tween.tween_property(_alert_mark, "scale", Vector3.ONE, 0.15)
 
 
 func _add(mesh: Mesh, color: Color, at: Vector3, mesh_scale: Vector3, configure: Callable) -> MeshInstance3D:
