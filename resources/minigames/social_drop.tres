@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MinigameInfo" format=3]
+
+[ext_resource type="Script" path="res://scripts/session/minigame_info.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"social_drop"
+title = "SocialDrop"
+tagline = "Quédate en la casilla del ícono que elija la pantalla gigante y no te caigas en 80 segundos"
+scene_path = "res://scenes/levels/social_drop.tscn"
+accent = Color(0.482, 0.424, 0.965, 1)
+ready = true

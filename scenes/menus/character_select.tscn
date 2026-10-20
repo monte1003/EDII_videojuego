@@ -1,0 +1,193 @@
+[gd_scene format=3 uid="uid://ctbxne1mh205a"]
+
+[ext_resource type="Script" uid="uid://d03digpiff3x2" path="res://scripts/menus/character_select.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://bt3daq3e0of36" path="res://scripts/characters/character_data.gd" id="2_data"]
+[ext_resource type="Resource" path="res://resources/characters/fire.tres" id="3_fire"]
+[ext_resource type="Resource" path="res://resources/characters/water.tres" id="4_water"]
+[ext_resource type="Resource" path="res://resources/characters/plant.tres" id="5_plant"]
+[ext_resource type="Resource" path="res://resources/characters/lightning.tres" id="6_lightning"]
+[ext_resource type="Script" path="res://scripts/ui/social_background.gd" id="7_background"]
+[ext_resource type="FontVariation" path="res://assets/ui/fonts/heading_font.tres" id="8_font"]
+[ext_resource type="PackedScene" path="res://scenes/ui/game_button.tscn" id="9_button"]
+[ext_resource type="Texture2D" uid="uid://bm5pmspxrq6se" path="res://assets/ui/icons/key_enter.svg" id="10_enter"]
+[ext_resource type="Texture2D" uid="uid://jt6s816el2iu" path="res://assets/ui/icons/key_e.svg" id="11_e"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_frame"]
+content_margin_left = 22.0
+content_margin_top = 22.0
+content_margin_right = 22.0
+content_margin_bottom = 22.0
+bg_color = Color(0.992, 0.984, 1, 0.45)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.992, 0.984, 1, 0.95)
+corner_radius_top_left = 28
+corner_radius_top_right = 28
+corner_radius_bottom_right = 28
+corner_radius_bottom_left = 28
+shadow_color = Color(0.165, 0.129, 0.271, 0.12)
+shadow_size = 12
+shadow_offset = Vector2(0, 6)
+
+[sub_resource type="Environment" id="Environment_preview"]
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.6
+
+[node name="CharacterSelect" type="Control" unique_id=172373361]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+screen_id = &"character_select"
+characters = Array[ExtResource("2_data")]([ExtResource("3_fire"), ExtResource("4_water"), ExtResource("5_plant"), ExtResource("6_lightning")])
+
+[node name="Background" type="Control" parent="." unique_id=1622096757]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("7_background")
+
+[node name="Title" type="Label" parent="." unique_id=1196958866]
+layout_mode = 0
+offset_left = 48.0
+offset_top = 18.0
+offset_right = 640.0
+offset_bottom = 100.0
+theme_override_colors/font_color = Color(0.882, 0.294, 0.416, 1)
+theme_override_fonts/font = ExtResource("8_font")
+theme_override_font_sizes/font_size = 46
+text = "SELECCIONA TU PERSONAJE"
+vertical_alignment = 1
+
+[node name="GridFrame" type="PanelContainer" parent="." unique_id=2089061211]
+layout_mode = 0
+offset_left = 60.0
+offset_top = 112.0
+offset_right = 556.0
+offset_bottom = 608.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_frame")
+
+[node name="Grid" type="GridContainer" parent="GridFrame" unique_id=855420674]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 16
+columns = 2
+
+[node name="PreviewArea" type="Control" parent="." unique_id=623476433]
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -540.0
+offset_right = -40.0
+grow_horizontal = 0
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="PlayerTag" type="Label" parent="PreviewArea" unique_id=1618746440]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 4.0
+offset_bottom = 52.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.216, 0.173, 0.345, 1)
+theme_override_fonts/font = ExtResource("8_font")
+theme_override_font_sizes/font_size = 30
+text = "P1"
+horizontal_alignment = 1
+
+[node name="NameLabel" type="Label" parent="PreviewArea" unique_id=1697472951]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 40.0
+offset_bottom = 130.0
+grow_horizontal = 2
+theme_override_fonts/font = ExtResource("8_font")
+theme_override_font_sizes/font_size = 74
+text = "FUEGO"
+horizontal_alignment = 1
+
+[node name="Preview" type="SubViewportContainer" parent="PreviewArea" unique_id=4148601]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 130.0
+offset_bottom = -96.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="PreviewArea/Preview" unique_id=841141977]
+own_world_3d = true
+transparent_bg = true
+handle_input_locally = false
+msaa_3d = 2
+size = Vector2i(500, 422)
+render_target_update_mode = 4
+
+[node name="Camera3D" type="Camera3D" parent="PreviewArea/Preview/SubViewport" unique_id=253322256]
+transform = Transform3D(1, 0, 0, 0, 0.996, 0.087, 0, -0.087, 0.996, 0, 0.75, 3.2)
+fov = 32.0
+
+[node name="Sun" type="DirectionalLight3D" parent="PreviewArea/Preview/SubViewport" unique_id=1225360985]
+transform = Transform3D(0.866, -0.321, 0.383, 0, 0.766, 0.643, -0.5, -0.557, 0.663, 0, 3, 0)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="PreviewArea/Preview/SubViewport" unique_id=635442904]
+environment = SubResource("Environment_preview")
+
+[node name="ModelPivot" type="Node3D" parent="PreviewArea/Preview/SubViewport" unique_id=1701487223]
+unique_name_in_owner = true
+
+[node name="Buttons" type="HBoxContainer" parent="." unique_id=1229775055]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -560.0
+offset_top = -90.0
+offset_right = -40.0
+offset_bottom = -16.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_constants/separation = 18
+alignment = 2
+
+[node name="PlayButton" parent="Buttons" unique_id=122546529 instance=ExtResource("9_button")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(232, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "JUGAR"
+icon = ExtResource("10_enter")
+pulse = true
+
+[node name="BackButton" parent="Buttons" unique_id=450308021 instance=ExtResource("9_button")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(232, 64)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "ATRÁS"
+icon = ExtResource("11_e")
+base_color = Color(0.992, 0.984, 1, 1)
+label_color = Color(0.216, 0.173, 0.345, 1)

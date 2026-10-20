@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="MinigameInfo" format=3]
+
+[ext_resource type="Script" path="res://scripts/session/minigame_info.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/ui/cards/street_game.png" id="2_art"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"street_game"
+title = "La Calle"
+tagline = "Esquiva el tráfico y a los bots que caminan por la acera hasta que se acabe el tiempo"
+scene_path = "res://scenes/levels/street_game.tscn"
+accent = Color(0.184, 0.624, 0.722, 1)
+ready = true
+card_art = ExtResource("2_art")
