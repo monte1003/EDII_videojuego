@@ -18,7 +18,10 @@ class Edge:
 class PathResult:
 	var found := false
 	var path: Array[StringName] = []
+	#Sum of the bridge costs along the path, without penalties
 	var cost := INF
+	#Extra cost of the vertices the path crosses that the caller asked to avoid
+	var penalty := 0.0
 	var reason := ""
 
 
@@ -115,8 +118,8 @@ func undirected_edges() -> Array[Dictionary]:
 	return result
 
 
-#Dijkstra; blocked arcs and "forbidden" vertices are skipped (the start itself may be forbidden)
-func shortest_path(from: StringName, to: StringName, forbidden: Array = []) -> PathResult:
+#Dijkstra; skips blocked arcs and "forbidden" vertices; "penalties" (vertex -> extra cost to enter it) avoid crowded ones
+func shortest_path(from: StringName, to: StringName, forbidden: Array = [], penalties: Dictionary = {}) -> PathResult:
 	var result := PathResult.new()
 	if not _adjacency.has(from) or not _adjacency.has(to):
 		result.reason = "Vértice desconocido: %s o %s" % [from, to]
@@ -145,7 +148,7 @@ func shortest_path(from: StringName, to: StringName, forbidden: Array = []) -> P
 		for edge: Edge in _adjacency[current]:
 			if not edge.enabled or forbidden.has(edge.to) or settled.has(edge.to):
 				continue
-			var candidate: float = dist[current] + edge.weight
+			var candidate: float = dist[current] + edge.weight + penalties.get(edge.to, 0.0)
 			if candidate < dist.get(edge.to, INF):
 				dist[edge.to] = candidate
 				previous[edge.to] = current
@@ -161,7 +164,10 @@ func shortest_path(from: StringName, to: StringName, forbidden: Array = []) -> P
 		path.push_front(step)
 	result.found = true
 	result.path = path
-	result.cost = dist[to]
+	result.cost = 0.0
+	for index in range(1, path.size()):
+		result.cost += weight_of(path[index - 1], path[index])
+	result.penalty = dist[to] - result.cost
 	return result
 
 

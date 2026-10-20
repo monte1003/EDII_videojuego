@@ -13,3 +13,5 @@ detail = 2
 model_scene = ExtResource("2_model")
 debug_color = Color(0.239, 0.839, 0.91, 1)
 tip = "Bulo: verifica antes de creer o compartir."
+role = 2
+behavior = "vigila la entrada de la meta y no se deja silenciar"

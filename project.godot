@@ -22,6 +22,8 @@ CustomCursor="*res://scripts/autoload/custom_cursor.gd"
 ScreenFlow="*res://scripts/autoload/screen_flow.gd"
 ColorFilter="*res://scripts/autoload/color_filter.gd"
 UiSound="*res://scripts/autoload/ui_sound.gd"
+GameSession="*res://scripts/autoload/game_session.gd"
+ScreenFader="*res://scripts/autoload/screen_fader.gd"
 
 [display]
 

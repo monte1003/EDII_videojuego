@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="3_pause"]
 [ext_resource type="Script" path="res://scripts/levels/street_world.gd" id="4_world"]
 [ext_resource type="Script" path="res://scripts/levels/street_hud.gd" id="5_hud"]
+[ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="6_help"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.737, 0.784, 0.98, 1)
@@ -54,3 +55,6 @@ script = ExtResource("4_world")
 script = ExtResource("5_hud")
 
 [node name="PauseMenu" parent="." instance=ExtResource("3_pause")]
+
+[node name="Help" type="CanvasLayer" parent="."]
+script = ExtResource("6_help")

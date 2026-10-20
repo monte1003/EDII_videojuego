@@ -1,14 +1,13 @@
 class_name RoundHud
 extends CanvasLayer
 
-#Shared base of the in-round screens: toast, warning flash, countdown, end panel and pause actions
+#Shared base of the in-round screens: toast, warning flash, countdown, end panel
 
 signal retry_requested
 signal menu_requested
 
-const TEXT_BUTTON := preload("res://scenes/ui/text_button.tscn")
-const HEADING_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
-const BODY_FONT: Font = preload("res://assets/ui/fonts/body_font.tres")
+const HEADING_FONT := UiKit.HEADING_FONT
+const BODY_FONT := UiKit.BODY_FONT
 
 var toast_hold := 3.2
 var toast_fade := 0.5
@@ -26,8 +25,7 @@ var _countdown: Label
 var _end: Control
 var _end_title: Label
 var _end_message: Label
-var _end_first_button: TextButton
-var _pause_actions: Control
+var _end_first_button: GameButton
 
 
 func _ready() -> void:
@@ -77,11 +75,6 @@ func show_end(title: String, message: String, victory: bool) -> void:
 	_end_first_button.grab_focus()
 
 
-func show_pause_actions(shown: bool) -> void:
-	if _pause_actions != null:
-		_pause_actions.visible = shown
-
-
 func _make_root(margin: int) -> MarginContainer:
 	var root := MarginContainer.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -109,21 +102,11 @@ func _vbox(separation := -1) -> VBoxContainer:
 
 
 func _box(color: Color, radius: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.set_corner_radius_all(radius)
-	style.corner_detail = 12
-	return style
+	return UiKit.box(color, radius)
 
 
 func _label(text: String, font: Font, size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_override("font", font)
-	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", color)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return label
+	return UiKit.label(text, font, size, color)
 
 
 func _rich(size: int, color: Color) -> RichTextLabel:
@@ -153,24 +136,7 @@ func _build_pill(color: Color, size: int, text_color: Color) -> PanelContainer:
 
 
 func _card_style(alpha := 0.94) -> StyleBoxFlat:
-	var style := _box(Color(Palette.PAPER, alpha), 28)
-	style.set_border_width_all(2)
-	style.border_color = Palette.LILAC
-	style.content_margin_left = 20
-	style.content_margin_right = 22
-	style.content_margin_top = 10
-	style.content_margin_bottom = 12
-	style.shadow_size = 12
-	style.shadow_color = Color(Palette.INK, 0.25)
-	return style
-
-
-func _make_button(text: String, on_pressed: Signal) -> TextButton:
-	var button := TEXT_BUTTON.instantiate() as TextButton
-	button.text = text
-	button.custom_minimum_size = Vector2(380, 56)
-	button.pressed.connect(on_pressed.emit)
-	return button
+	return UiKit.card_style(alpha)
 
 
 #A dimmed full-screen layer with a centered container named "Center"
@@ -231,7 +197,7 @@ func _make_end(retry_text: String) -> void:
 	card.add_theme_stylebox_override("panel", style)
 	_end.get_node("Center").add_child(card)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
+	box.add_theme_constant_override("separation", UiKit.STACK_GAP)
 	card.add_child(box)
 	_end_title = _label("", HEADING_FONT, 50, Palette.INK)
 	_end_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -241,29 +207,13 @@ func _make_end(retry_text: String) -> void:
 	_end_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_end_message.custom_minimum_size = Vector2(560, 0)
 	box.add_child(_end_message)
-	_end_first_button = _make_button(retry_text, retry_requested)
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 6)
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(gap)
+	_end_first_button = UiKit.game_button(retry_text)
+	_end_first_button.pressed.connect(retry_requested.emit)
 	box.add_child(_end_first_button)
-	box.add_child(_make_button("VOLVER AL MENÚ", menu_requested))
-
-
-#Extra buttons under the pause menu's own exit button; entries are [text, signal]
-func _make_pause_actions(entries: Array, separation := -1) -> void:
-	var holder := CanvasLayer.new()
-	holder.layer = 11
-	add_child(holder)
-	var box := VBoxContainer.new()
-	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	box.offset_left = -200.0
-	box.offset_right = 200.0
-	box.offset_top = 56.0
-	box.offset_bottom = 190.0
-	if separation >= 0:
-		box.add_theme_constant_override("separation", separation)
-	box.hide()
-	holder.add_child(box)
-	for entry in entries:
-		var button := _make_button(entry[0], entry[1])
-		box.add_child(button)
-		#The button script sets dark text on load; the pause backdrop is dark
-		button.add_theme_color_override("font_color", Palette.PAPER)
-	_pause_actions = box
+	var menu_button := UiKit.game_button("VOLVER AL MENÚ", false)
+	menu_button.pressed.connect(menu_requested.emit)
+	box.add_child(menu_button)
