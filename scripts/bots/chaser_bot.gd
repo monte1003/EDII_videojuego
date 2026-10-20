@@ -61,6 +61,7 @@ var _patrol_timer := 0.0
 var _windup_left := 0.0
 var _push_cooldown_left := 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+#Held as Node3D: a BotLook member leaves scripts alive at exit
 var _visual: Node3D
 
 @onready var _visual_root: Node3D = $VisualRoot
@@ -81,7 +82,7 @@ func set_appearance(bot_appearance: BotAppearance) -> void:
 		_visual = null
 	if appearance.model_scene != null:
 		_visual = appearance.model_scene.instantiate() as Node3D
-	else:
+	if _visual == null:
 		var provisional := BotVisual.new()
 		provisional.build(appearance)
 		_visual = provisional
@@ -157,6 +158,8 @@ func _physics_process(delta: float) -> void:
 	velocity.x = wanted.x
 	velocity.z = wanted.z
 	move_and_slide()
+	if _visual != null:
+		_look().set_moving(wanted.length() > 0.1)
 	_face(wanted if wanted.length() > 0.1 else _to_player_flat(), delta)
 	if global_position.y < -15.0:
 		_recover_from_fall()
@@ -289,6 +292,10 @@ func _toward(point: Vector3) -> Vector3:
 	return _flat(point - global_position).normalized() * move_speed
 
 
+func _look() -> BotLook:
+	return _visual as BotLook
+
+
 func _flat(vector: Vector3) -> Vector3:
 	return Vector3(vector.x, 0.0, vector.z)
 
@@ -326,14 +333,13 @@ func _update_push(delta: float) -> void:
 	var offset := _ctx.player.global_position - global_position
 	if _flat(offset).length() <= push_trigger_range and absf(offset.y) < 1.5:
 		_windup_left = push_windup
-		if _visual and _visual.has_method("set_alert"):
-			_visual.call("set_alert", true)
+		_look().set_alert(true)
 		push_announced.emit(self)
 
 
 func _resolve_push() -> void:
-	if _visual and _visual.has_method("set_alert"):
-		_visual.call("set_alert", false)
+	_look().set_alert(false)
+	_look().play_push()
 	_push_cooldown_left = push_cooldown
 	if _ctx.player_protected:
 		return
