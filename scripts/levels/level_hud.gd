@@ -25,6 +25,11 @@ func _ready() -> void:
 	var top_center := _vbox(8)
 	top_center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(top_center)
+	#Room for the help button that floats over the top right corner
+	var help_gap := Control.new()
+	help_gap.custom_minimum_size = Vector2(110, 0)
+	help_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_child(help_gap)
 	top_center.add_child(_make_toast())
 	_protection = _build_pill(Palette.AMBER, 22, Palette.PAPER)
 	_protection_label = _protection.get_child(0) as Label
@@ -62,7 +67,6 @@ func _ready() -> void:
 
 	_make_countdown()
 	_make_end("REINTENTAR NIVEL")
-	_make_pause_actions([["AYUDA", help_requested], ["REINTENTAR NIVEL", retry_requested]])
 	_build_help_button()
 
 
