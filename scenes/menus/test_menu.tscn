@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/menus/options_menu.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/menus/test_menu.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/ui/social_background.gd" id="2_background"]
 [ext_resource type="FontVariation" path="res://assets/ui/fonts/heading_font.tres" id="3_font"]
 [ext_resource type="FontVariation" path="res://assets/ui/fonts/body_font.tres" id="5_body"]
