@@ -1,10 +1,9 @@
 class_name WeightedGraph
 extends RefCounted
 
-#Weighted graph stored as adjacency lists, with its own Dijkstra.
-#It only holds data and algorithms: no nodes, positions or bot code live here.
+#Weighted graph as adjacency lists with its own Dijkstra; data and algorithms only
 
-#A directed arc of the adjacency list. A two-way bridge is stored as two arcs
+#A directed arc; a two-way bridge is stored as two arcs
 class Edge:
 	var to: StringName
 	var weight: float
@@ -19,7 +18,10 @@ class Edge:
 class PathResult:
 	var found := false
 	var path: Array[StringName] = []
+	#Sum of the bridge costs along the path, without penalties
 	var cost := INF
+	#Extra cost of the vertices the path crosses that the caller asked to avoid
+	var penalty := 0.0
 	var reason := ""
 
 
@@ -48,7 +50,7 @@ func vertices() -> Array[StringName]:
 	return ids
 
 
-#Adds (or updates) the connection a-b; with "bidirectional" both arcs are created
+#Adds or updates a-b; bidirectional creates both arcs
 func add_edge(a: StringName, b: StringName, weight: float, bidirectional := true) -> bool:
 	if not _adjacency.has(a) or not _adjacency.has(b) or a == b or weight < 0.0:
 		push_error("WeightedGraph: conexión inválida %s-%s" % [a, b])
@@ -81,7 +83,6 @@ func weight_of(a: StringName, b: StringName) -> float:
 	return edge.weight if edge != null else INF
 
 
-#Neighbours reachable from "id"; blocked connections are left out unless asked for
 func neighbors(id: StringName, include_blocked := false) -> Array[StringName]:
 	var result: Array[StringName] = []
 	for edge: Edge in _adjacency.get(id, []):
@@ -117,9 +118,8 @@ func undirected_edges() -> Array[Dictionary]:
 	return result
 
 
-#Dijkstra from "from" to "to". Blocked arcs and "forbidden" vertices are never used
-#(the start may be forbidden: only entering a forbidden vertex is not allowed)
-func shortest_path(from: StringName, to: StringName, forbidden: Array = []) -> PathResult:
+#Dijkstra; skips blocked arcs and "forbidden" vertices; "penalties" (vertex -> extra cost to enter it) avoid crowded ones
+func shortest_path(from: StringName, to: StringName, forbidden: Array = [], penalties: Dictionary = {}) -> PathResult:
 	var result := PathResult.new()
 	if not _adjacency.has(from) or not _adjacency.has(to):
 		result.reason = "Vértice desconocido: %s o %s" % [from, to]
@@ -148,7 +148,7 @@ func shortest_path(from: StringName, to: StringName, forbidden: Array = []) -> P
 		for edge: Edge in _adjacency[current]:
 			if not edge.enabled or forbidden.has(edge.to) or settled.has(edge.to):
 				continue
-			var candidate: float = dist[current] + edge.weight
+			var candidate: float = dist[current] + edge.weight + penalties.get(edge.to, 0.0)
 			if candidate < dist.get(edge.to, INF):
 				dist[edge.to] = candidate
 				previous[edge.to] = current
@@ -164,7 +164,10 @@ func shortest_path(from: StringName, to: StringName, forbidden: Array = []) -> P
 		path.push_front(step)
 	result.found = true
 	result.path = path
-	result.cost = dist[to]
+	result.cost = 0.0
+	for index in range(1, path.size()):
+		result.cost += weight_of(path[index - 1], path[index])
+	result.penalty = dist[to] - result.cost
 	return result
 
 

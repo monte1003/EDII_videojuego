@@ -1,8 +1,7 @@
 class_name Level01World
 extends Node3D
 
-#Builds the physical level 1 from Level01Layout: one round platform per vertex and one
-#bridge per edge. Meshes use a handful of shared materials and no extra lights.
+#Builds level 1 from Level01Layout: a round platform per vertex and a bridge per edge
 
 const LILAC := Color("a98df0")
 const LILAC_LIGHT := Color("c5b3f7")
@@ -15,20 +14,17 @@ const BRIDGE_WIDTH := 4.2
 const THICKNESS := 0.6
 const FALL_Y := -12.0
 
-#Offsets of the stations from the centre of their platform
-const E_STATION_OFFSET := Vector3(-2.4, 0.0, -2.4)
-const F_STATION_OFFSET := Vector3(2.4, 0.0, -2.4)
-const D_REFUGE_OFFSET := Vector3(-2.2, 0.0, 0.0)
-
-#Floating names over the places that matter: title, short explanation, colour, label height
+#Floating names: title, explanation, colour, height and the distance the title can be read from
 const NAMES := {
-	&"S": ["SALIDA", "Aquí empiezas", Color("fdfbff"), 4.2],
-	&"M": ["META", "Zona de desconexión", Color("ffc857"), 7.6],
-	&"E": ["BLOQUEAR", "Cierra un puente a los bots", Color("ee4fb8"), 3.6],
-	&"F": ["SILENCIAR", "Los bots te ven menos", Color("4fd6e8"), 3.6],
-	&"D": ["PAUSA DIGITAL", "Refugio: nadie te empuja", Color("ffc857"), 4.4],
-	&"H": ["CHECKPOINT", "Guarda tu progreso", Color("ffc857"), 6.6],
+	&"S": ["SALIDA", "Aquí empiezas", Color("fdfbff"), 4.0, 30.0],
+	&"M": ["META", "Zona de desconexión", Color("ffc857"), 8.0, 140.0],
+	&"E": ["BLOQUEAR", "Cierra un puente a los bots", Color("ee4fb8"), 3.7, 30.0],
+	&"F": ["SILENCIAR", "Los bots te ven menos", Color("4fd6e8"), 3.7, 30.0],
+	&"D": ["PAUSA DIGITAL", "Refugio: nadie te empuja", Color("ffc857"), 4.6, 30.0],
+	&"H": ["CHECKPOINT", "Guarda tu progreso", Color("ffc857"), 4.9, 30.0],
 }
+#Distance up to which the explanation under a title is shown
+const SUBTITLE_RANGE := 14.0
 const NAME_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 
 var station_positions: Dictionary = {}
@@ -36,21 +32,21 @@ var refuge_center := Vector3.ZERO
 
 var _materials: Dictionary = {}
 var _barrier: MeshInstance3D
-var _checkpoint_ring_material: StandardMaterial3D
-var _flag: MeshInstance3D
+var _props: Level01Props
 
 
-func build(locator: PlayerLocator) -> void:
+#Every player has its own locator; the sensors tell each of them where it is
+func build(locators: Array[PlayerLocator], refuge_radius: float) -> void:
 	for id: StringName in Level01Layout.POSITIONS:
-		_build_platform(id, locator)
+		_build_platform(id, locators)
 	for edge in Level01Layout.EDGES:
-		_build_bridge(edge[0], edge[1], locator)
+		_build_bridge(edge[0], edge[1], locators)
 	_build_start_marks()
-	_build_station(&"E", E_STATION_OFFSET, MAGENTA)
-	_build_station(&"F", F_STATION_OFFSET, CYAN)
-	_build_refuge()
-	_build_checkpoint()
-	_build_goal()
+	_props = Level01Props.new()
+	add_child(_props)
+	_props.build(refuge_radius)
+	station_positions = _props.station_positions
+	refuge_center = _props.refuge_center
 	_build_barrier()
 	_build_name_labels()
 	_scatter_decor()
@@ -61,13 +57,13 @@ func set_block_visual(active: bool) -> void:
 
 
 func set_checkpoint_active(active: bool) -> void:
-	var color := AMBER if active else CYAN
-	_checkpoint_ring_material.albedo_color = color
-	_checkpoint_ring_material.emission = color
-	_flag.material_override = _material(MAGENTA if active else LILAC_DARK, 1.4 if active else 0.0)
+	_props.set_checkpoint_active(active)
 
 
-#---- helpers ---------------------------------------------------------------------------
+#The station glows while its ability is working
+func set_station_active(id: StringName, active: bool) -> void:
+	_props.set_active(id, active)
+
 
 func _material(color: Color, emission := 0.0, alpha := 1.0) -> StandardMaterial3D:
 	var key := "%s_%s_%s" % [color.to_html(), emission, alpha]
@@ -126,9 +122,7 @@ func _sensor(shape: Shape3D, xform: Transform3D) -> Area3D:
 	return area
 
 
-#---- platforms and bridges -------------------------------------------------------------
-
-func _build_platform(id: StringName, locator: PlayerLocator) -> void:
+func _build_platform(id: StringName, locators: Array[PlayerLocator]) -> void:
 	var centre: Vector3 = Level01Layout.POSITIONS[id]
 	var radius := Level01Layout.radius_of(id)
 
@@ -165,10 +159,11 @@ func _build_platform(id: StringName, locator: PlayerLocator) -> void:
 	sensor_shape.radius = radius - 0.1
 	sensor_shape.height = 9.0
 	var area := _sensor(sensor_shape, Transform3D(Basis.IDENTITY, centre + Vector3(0, 3.8, 0)))
-	locator.watch_platform(id, area)
+	for locator in locators:
+		locator.watch_platform(id, area)
 
 
-func _build_bridge(a: StringName, b: StringName, locator: PlayerLocator) -> void:
+func _build_bridge(a: StringName, b: StringName, locators: Array[PlayerLocator]) -> void:
 	var from: Vector3 = Level01Layout.POSITIONS[a]
 	var to: Vector3 = Level01Layout.POSITIONS[b]
 	var radius_a := Level01Layout.radius_of(a)
@@ -199,10 +194,9 @@ func _build_bridge(a: StringName, b: StringName, locator: PlayerLocator) -> void
 	sensor_shape.size = Vector3(BRIDGE_WIDTH, 9.0, maxf(distance - radius_a - radius_b, 0.5))
 	var sensor_centre := from + direction * ((radius_a + distance - radius_b) / 2.0) + Vector3(0, 3.8, 0)
 	var area := _sensor(sensor_shape, Transform3D(basis, sensor_centre))
-	locator.watch_bridge(a, b, area)
+	for locator in locators:
+		locator.watch_bridge(a, b, area)
 
-
-#---- landmarks -------------------------------------------------------------------------
 
 func _build_start_marks() -> void:
 	var centre: Vector3 = Level01Layout.POSITIONS[Level01Layout.START]
@@ -211,90 +205,6 @@ func _build_start_marks() -> void:
 	for step in 2:
 		var arrow := _mesh(self, prism, _material(MAGENTA, 0.6), centre + Vector3(0, 0.04, -2.6 - step * 1.8))
 		arrow.rotation_degrees.x = -90.0
-
-
-func _build_station(id: StringName, offset: Vector3, color: Color) -> void:
-	var at: Vector3 = Level01Layout.POSITIONS[id] + offset
-	station_positions[id] = at
-	_mesh(self, _box(Vector3(1.7, 0.9, 1.0)), _material(LILAC_DARK), at + Vector3(0, 0.45, 0), true)
-	var screen := _mesh(self, _box(Vector3(1.5, 0.8, 0.1)), _material(color, 1.4), at + Vector3(0, 1.2, 0.25))
-	screen.rotation_degrees.x = -20.0
-	#A small disc on the floor shows the area where the station answers
-	var ring := CylinderMesh.new()
-	ring.top_radius = 1.6
-	ring.bottom_radius = 1.6
-	ring.height = 0.03
-	_mesh(self, ring, _material(color, 0.6, 0.35), at + Vector3(0, 0.02, 0))
-
-
-func _build_refuge() -> void:
-	var centre: Vector3 = Level01Layout.POSITIONS[&"D"] + D_REFUGE_OFFSET
-	refuge_center = centre
-	station_positions[&"D"] = centre
-	var wall_material := _material(LILAC_DARK)
-	_mesh(self, _box(Vector3(0.4, 2.4, 4.4)), wall_material, centre + Vector3(-1.8, 1.2, 0), true)
-	_mesh(self, _box(Vector3(3.8, 0.4, 4.6)), _material(LILAC), centre + Vector3(0, 2.6, 0), true)
-	for side in [-1.0, 1.0]:
-		_mesh(self, _box(Vector3(3.4, 2.4, 0.4)), wall_material, centre + Vector3(0, 1.2, side * 2.1), true)
-	#Warm window and bench: this is the calm corner
-	_mesh(self, _box(Vector3(0.1, 0.8, 1.6)), _material(AMBER, 1.5), centre + Vector3(-1.55, 1.5, 0))
-	_mesh(self, _box(Vector3(0.7, 0.35, 2.0)), _material(MAGENTA), centre + Vector3(-0.9, 0.18, 0))
-	var ring := CylinderMesh.new()
-	ring.top_radius = 3.6
-	ring.bottom_radius = 3.6
-	ring.height = 0.03
-	_mesh(self, ring, _material(AMBER, 0.5, 0.25), centre + Vector3(0, 0.02, 0))
-
-
-func _build_checkpoint() -> void:
-	var centre: Vector3 = Level01Layout.POSITIONS[&"H"]
-	var ring := CylinderMesh.new()
-	ring.top_radius = 1.5
-	ring.bottom_radius = 1.5
-	ring.height = 0.04
-	_checkpoint_ring_material = StandardMaterial3D.new()
-	_checkpoint_ring_material.albedo_color = CYAN
-	_checkpoint_ring_material.emission_enabled = true
-	_checkpoint_ring_material.emission = CYAN
-	_checkpoint_ring_material.emission_energy_multiplier = 1.4
-	_mesh(self, ring, _checkpoint_ring_material, centre + Vector3(0, 0.03, 0))
-	var pole := CylinderMesh.new()
-	pole.top_radius = 0.06
-	pole.bottom_radius = 0.08
-	pole.height = 3.2
-	pole.radial_segments = 8
-	_mesh(self, pole, _material(LILAC_DARK), centre + Vector3(0, 1.6, 0))
-	_flag = _mesh(self, _box(Vector3(1.0, 0.65, 0.05)), _material(LILAC_DARK), centre + Vector3(0.55, 2.8, 0))
-
-
-func _build_goal() -> void:
-	var centre: Vector3 = Level01Layout.POSITIONS[Level01Layout.GOAL]
-	var gold := _material(AMBER, 0.8)
-	for side in [-1.0, 1.0]:
-		var pillar := CylinderMesh.new()
-		pillar.top_radius = 0.35
-		pillar.bottom_radius = 0.4
-		pillar.height = 4.6
-		pillar.radial_segments = 12
-		_mesh(self, pillar, gold, centre + Vector3(side * 3.2, 2.3, 0), true)
-	_mesh(self, _box(Vector3(7.2, 0.7, 0.7)), gold, centre + Vector3(0, 4.8, 0), true)
-	var crown := SphereMesh.new()
-	crown.radius = 0.55
-	crown.height = 1.1
-	_mesh(self, crown, _material(MAGENTA, 1.2), centre + Vector3(0, 5.8, 0))
-	#Finish line
-	for i in 6:
-		var light := i % 2 == 0
-		_mesh(self, _box(Vector3(1.0, 0.04, 0.8)), _material(Color("fdfbff") if light else Color("372c58")),
-			centre + Vector3(-2.5 + i * 1.0, 0.03, 1.2))
-	#A faint beam that can be seen from the start
-	var beam := CylinderMesh.new()
-	beam.top_radius = 0.9
-	beam.bottom_radius = 1.2
-	beam.height = 26.0
-	beam.radial_segments = 12
-	beam.rings = 1
-	_mesh(self, beam, _material(CYAN, 0.8, 0.14), centre + Vector3(0, 13.0, 0))
 
 
 #A translucent wall across the bridge that Bloquear closes for the bots
@@ -310,32 +220,10 @@ func _build_barrier() -> void:
 	_barrier.visible = false
 
 
-#Soft floating shapes far from the route; no collisions
 func _scatter_decor() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 11
-	var colors: Array[Color] = [Color("f6e9ff"), LILAC_DARK, Palette.SKY_BOTTOM]
-	for i in 30:
-		var side := -1.0 if i % 2 == 0 else 1.0
-		var at := Vector3(side * rng.randf_range(34.0, 70.0), rng.randf_range(-14.0, 8.0), rng.randf_range(-95.0, 25.0))
-		var radius := rng.randf_range(2.0, 5.0)
-		var mesh: Mesh
-		if i % 2 == 0:
-			var sphere := SphereMesh.new()
-			sphere.radius = radius
-			sphere.height = radius * 2.0
-			sphere.radial_segments = 16
-			sphere.rings = 8
-			mesh = sphere
-		else:
-			var stone := CylinderMesh.new()
-			stone.top_radius = radius
-			stone.bottom_radius = radius * 0.55
-			stone.height = radius * 0.9
-			stone.radial_segments = 16
-			mesh = stone
-		var instance := _mesh(self, mesh, _material(colors[i % 3]), at)
-		instance.scale.y = rng.randf_range(0.6, 1.0)
+	var backdrop := Level01Backdrop.new()
+	add_child(backdrop)
+	backdrop.build()
 
 
 #Names float over the stations so the player knows what each place is for
@@ -343,19 +231,26 @@ func _build_name_labels() -> void:
 	for id: StringName in NAMES:
 		var entry: Array = NAMES[id]
 		var at: Vector3 = station_positions.get(id, Level01Layout.POSITIONS[id])
-		_label(entry[0], 64, entry[2], at + Vector3(0, entry[3], 0))
-		_label(entry[1], 34, Color("fdfbff"), at + Vector3(0, entry[3] - 0.95, 0))
+		_label(entry[0], 54, entry[2], at + Vector3(0, entry[3], 0), entry[4])
+		_label(entry[1], 30, Color("fdfbff"), at + Vector3(0, entry[3] - 0.8, 0), SUBTITLE_RANGE)
 
 
-func _label(text: String, size: int, color: Color, at: Vector3) -> void:
+func _label(text: String, size: int, color: Color, at: Vector3, visible_range: float) -> void:
 	var label := Label3D.new()
 	label.text = text
 	label.font = NAME_FONT
 	label.font_size = size
-	label.pixel_size = 0.0215 * size / 64.0 if size > 40 else 0.016
+	#Same size on screen at any distance, so a name never fills the view when the player stands under it
+	label.fixed_size = true
+	label.pixel_size = 0.0015
 	label.modulate = color
-	label.outline_size = 20
+	label.outline_size = 12
 	label.outline_modulate = Color("2a2145")
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
 	label.position = at
+	#Fades out with distance so far labels never pile up on the screen
+	label.visibility_range_end = visible_range
+	label.visibility_range_end_margin = visible_range * 0.25
+	label.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 	add_child(label)

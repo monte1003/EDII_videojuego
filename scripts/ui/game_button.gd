@@ -46,6 +46,13 @@ func _ready() -> void:
 		_start_beat()
 
 
+#Changes the text after the button is on screen (the label is a child, not the button's own)
+func set_caption(new_text: String) -> void:
+	text = new_text
+	if _caption != null:
+		_caption.text = new_text
+
+
 func _on_resized() -> void:
 	pivot_offset = size / 2.0
 	_ring.pivot_offset = _ring.size / 2.0
