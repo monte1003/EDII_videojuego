@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BotAppearance" format=3]
+
+[ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/loop.tscn" id="2_model"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"loop"
+display_name = "Bucle"
+body_color = Color(0.663, 0.541, 0.941, 1)
+accent_color = Color(0.251, 0.839, 0.839, 1)
+model_scene = ExtResource("2_model")
+debug_color = Color(0.482, 0.890, 0.890, 1)
