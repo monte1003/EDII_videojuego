@@ -1,15 +1,11 @@
-class_name MultiplayerGame1
+class_name StreetGame
 extends Node3D
 
-#Street minigame: a street with a sidewalk on each side. Cars flow along the lanes and
-#pedestrians along the sidewalks, all toward the end line (+X). The runner can only move
-#across the street (up and down on screen) and every hit throws it back toward the end
-#line. It wins by holding out until the time runs out and loses when pushed past the line.
-#The flow gets faster during the round.
+#Street minigame: dodge the cars and pedestrians that push you toward the end line until time runs out
 
 enum Phase { COUNTDOWN, RUNNING, ENDED }
 
-const SCREEN_ID := &"multiplayer_game1"
+const SCREEN_ID := &"street_game"
 #1.5 m wide: half of the sidewalk, so the sidewalk is not a safe place
 const PEDESTRIAN_RADIUS := 0.75
 const PEDESTRIAN_HEIGHT := 1.8
@@ -24,8 +20,7 @@ const PEDESTRIAN_COLORS: Array[Color] = [
 class Lane:
 	var kind: int
 	var z: float
-	#Each obstacle goes at z + offset or z - offset, picked at random (0 for car lanes).
-	#On a sidewalk it is a quarter of its width: the upper half or the lower half
+	#Offset from z (0 on car lanes); on a sidewalk a quarter of its width, upper or lower half
 	var slot_offset: float
 	var timer := 0.0
 	var last_spawn := -100.0
@@ -128,11 +123,10 @@ func _ready() -> void:
 	_pause_menu.opened.connect(_on_pause_opened)
 	_pause_menu.closed.connect(_on_pause_closed)
 	_hud.retry_requested.connect(_retry)
-	#Back to the parent screen (the test menu), so the next test is one click away
 	_hud.menu_requested.connect(ScreenFlow.back)
 	_hud.set_hint("%s / %s para moverte · %s salta · Esquiva autos y peatones · Aguanta %d s" % [
-		InputHints.key_markup(_runner.up_action), InputHints.key_markup(_runner.down_action),
-		InputHints.key_markup(_runner.jump_action), int(time_limit)])
+		InputHints.key_markup(&"move_forward"), InputHints.key_markup(&"move_back"),
+		InputHints.key_markup(&"jump"), int(time_limit)])
 	_hud.set_time(time_limit)
 	_hud.set_speed(start_speed_scale)
 	_hud.set_danger(0.0)
@@ -142,8 +136,6 @@ func _ready() -> void:
 	_countdown_shown = ceili(_phase_timer)
 	_hud.show_countdown(str(_countdown_shown))
 
-
-#---- setup -----------------------------------------------------------------------------
 
 func _build_lanes(half_width: float) -> void:
 	for index in lane_count:
@@ -171,8 +163,6 @@ func _spawn_runner(half_width: float) -> void:
 	_runner.set_character(character)
 
 
-#---- frame loop ------------------------------------------------------------------------
-
 func _physics_process(delta: float) -> void:
 	if _paused:
 		return
@@ -198,7 +188,7 @@ func _begin_round() -> void:
 	phase = Phase.RUNNING
 	elapsed = 0.0
 	_hud.hide_countdown()
-	_runner.input_enabled = true
+	_runner.set_input_enabled(true)
 	_hud.toast("¡Aguanta! Cada choque te empuja hacia el FIN")
 
 
@@ -238,7 +228,7 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	if phase == Phase.ENDED:
 		return
 	phase = Phase.ENDED
-	_runner.input_enabled = false
+	_runner.set_input_enabled(false)
 	#A late Esc press must not open the pause menu over the final panel
 	_pause_menu.set_process_unhandled_input(false)
 	if not victory:
@@ -279,8 +269,6 @@ func _clear_view(camera_position: Vector3) -> void:
 func _retry() -> void:
 	get_tree().reload_current_scene()
 
-
-#---- obstacles -------------------------------------------------------------------------
 
 func _update_obstacles(delta: float) -> void:
 	for lane in _lanes:
@@ -338,8 +326,7 @@ func _spawn_pedestrian(lane: Lane) -> void:
 	_place(pedestrian, lane.z + slot, StreetWorld.SIDEWALK_HEIGHT)
 
 
-#A tank fills this lane and one next to it, so it counts as two cars side by side.
-#Returns false when no neighbour lane has room; the caller then spawns a normal car
+#A tank fills this lane and a neighbour, so it counts as two cars; false when no neighbour has room
 func _try_spawn_tank(lane: Lane) -> bool:
 	var car_lanes: Array[Lane] = []
 	for candidate in _lanes:
@@ -371,8 +358,7 @@ func _try_spawn_tank(lane: Lane) -> bool:
 	return false
 
 
-#Vehicles in lanes other than "ignored" that would run side by side with a new one of
-#"length". Every vehicle shares one speed, so the gap between spawn times never changes
+#Cars in other lanes that would run side by side with a new vehicle of "length"
 func _side_by_side(length: float, ignored: Array[Lane]) -> int:
 	var count := 0
 	for other in _lanes:
@@ -437,8 +423,6 @@ func _interval_min(kind: int) -> float:
 func _interval_max(kind: int) -> float:
 	return car_interval_max if kind == StreetObstacle.Kind.CAR else pedestrian_interval_max
 
-
-#---- pause -----------------------------------------------------------------------------
 
 func _on_pause_opened() -> void:
 	_paused = true

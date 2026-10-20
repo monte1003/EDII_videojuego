@@ -1,8 +1,7 @@
 class_name Level01World
 extends Node3D
 
-#Builds the physical level 1 from Level01Layout: one round platform per vertex and one
-#bridge per edge. Meshes use a handful of shared materials and no extra lights.
+#Builds level 1 from Level01Layout: a round platform per vertex and a bridge per edge
 
 const LILAC := Color("a98df0")
 const LILAC_LIGHT := Color("c5b3f7")
@@ -67,8 +66,6 @@ func set_checkpoint_active(active: bool) -> void:
 	_flag.material_override = _material(MAGENTA if active else LILAC_DARK, 1.4 if active else 0.0)
 
 
-#---- helpers ---------------------------------------------------------------------------
-
 func _material(color: Color, emission := 0.0, alpha := 1.0) -> StandardMaterial3D:
 	var key := "%s_%s_%s" % [color.to_html(), emission, alpha]
 	if _materials.has(key):
@@ -125,8 +122,6 @@ func _sensor(shape: Shape3D, xform: Transform3D) -> Area3D:
 	add_child(area)
 	return area
 
-
-#---- platforms and bridges -------------------------------------------------------------
 
 func _build_platform(id: StringName, locator: PlayerLocator) -> void:
 	var centre: Vector3 = Level01Layout.POSITIONS[id]
@@ -201,8 +196,6 @@ func _build_bridge(a: StringName, b: StringName, locator: PlayerLocator) -> void
 	var area := _sensor(sensor_shape, Transform3D(basis, sensor_centre))
 	locator.watch_bridge(a, b, area)
 
-
-#---- landmarks -------------------------------------------------------------------------
 
 func _build_start_marks() -> void:
 	var centre: Vector3 = Level01Layout.POSITIONS[Level01Layout.START]
@@ -282,7 +275,6 @@ func _build_goal() -> void:
 	crown.radius = 0.55
 	crown.height = 1.1
 	_mesh(self, crown, _material(MAGENTA, 1.2), centre + Vector3(0, 5.8, 0))
-	#Finish line
 	for i in 6:
 		var light := i % 2 == 0
 		_mesh(self, _box(Vector3(1.0, 0.04, 0.8)), _material(Color("fdfbff") if light else Color("372c58")),

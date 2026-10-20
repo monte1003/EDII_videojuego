@@ -11,7 +11,6 @@ var _back_base := Vector2.ZERO
 @onready var _play_button: Button = %PlayButton
 @onready var _options_button: Button = %OptionsButton
 @onready var _exit_button: Button = %ExitButton
-@onready var _test_button: Button = %TestButton
 @onready var _foreground: Control = %Foreground
 @onready var _background: Control = %Background
 
@@ -21,7 +20,6 @@ func _ready() -> void:
 	_play_button.pressed.connect(ScreenFlow.open.bind(&"character_select"))
 	_options_button.pressed.connect(ScreenFlow.open.bind(&"options"))
 	_exit_button.pressed.connect(get_tree().quit)
-	_test_button.pressed.connect(ScreenFlow.open.bind(&"test_games"))
 	_play_button.grab_focus()
 	_front_base = _foreground.position
 	_back_base = _background.position

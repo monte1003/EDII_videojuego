@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_script")
-id = &"trol"
+id = &"troll"
 display_name = "Trol"
 body_color = Color(0.353, 0.071, 0.149, 1)
 accent_color = Color(0.106, 0.039, 0.071, 1)

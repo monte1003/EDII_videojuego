@@ -1,7 +1,6 @@
 extends SceneTree
 
-#Checks of the graph and Dijkstra against the costs of the design guide.
-#Run: godot --headless --path <project> --script res://scripts/tests/graph_check.gd
+#Checks the graph and Dijkstra; run: godot --headless --path . --script res://scripts/tests/graph_check.gd
 
 var _failures := 0
 
