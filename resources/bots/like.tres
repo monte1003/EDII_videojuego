@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BotAppearance" format=3]
+
+[ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/like.tscn" id="2_model"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"like"
+display_name = "Like"
+body_color = Color(1.000, 0.310, 0.604, 1)
+accent_color = Color(0.373, 0.839, 0.910, 1)
+model_scene = ExtResource("2_model")
+debug_color = Color(1.000, 0.478, 0.722, 1)
