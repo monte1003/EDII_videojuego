@@ -1,9 +1,7 @@
 class_name GraphDebugView
 extends Node3D
 
-#Draws the graph the bots really use: vertex ids, open and blocked bridges with their costs,
-#and the current route of every bot. It only reads the graph and the bots; hiding it changes
-#nothing in the game.
+#Draws the graph the bots really use: vertex ids, bridges with their costs and every bot's route
 
 const OPEN_COLOR := Color("3ddc84")
 const BLOCKED_COLOR := Color("ff3b3b")
@@ -41,7 +39,6 @@ func setup(graph: WeightedGraph, positions: Dictionary) -> void:
 		_edge_labels[key] = label
 
 
-#Rebuilds the lines and labels from the current graph and the bots' routes
 func redraw(bots: Array[ChaserBot]) -> void:
 	_mesh.clear_surfaces()
 	var quads := 0

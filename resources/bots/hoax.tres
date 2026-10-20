@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_script")
-id = &"bulo"
+id = &"hoax"
 display_name = "Bulo"
 body_color = Color(0.122, 0.376, 0.439, 1)
 accent_color = Color(1, 0.42, 0.42, 1)

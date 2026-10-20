@@ -1,8 +1,7 @@
 class_name StreetWorld
 extends Node3D
 
-#Static scenery of the street minigame, built from the numbers of the game script.
-#The street runs along X; the obstacles flow toward +X, where the end line is.
+#Static scenery of the street minigame; the street runs along X and the end line is at +X
 
 const SIDEWALK_HEIGHT := 0.12
 const HEADING_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
@@ -22,11 +21,9 @@ func build(street_half_width: float, sidewalk_width: float, lane_count: int,
 	for side in [-1.0, 1.0]:
 		_box(Vector3(center_x, SIDEWALK_HEIGHT / 2.0, side * (street_half_width + sidewalk_width / 2.0)),
 			Vector3(length, SIDEWALK_HEIGHT, sidewalk_width), Color("ddd6ea"))
-		#Curb
 		_box(Vector3(center_x, (SIDEWALK_HEIGHT + 0.02) / 2.0, side * (street_half_width + 0.12)),
 			Vector3(length, SIDEWALK_HEIGHT + 0.02, 0.24), Color("f5f1fb"))
 
-	#Dashed lines between the lanes
 	var lane_width := street_half_width * 2.0 / lane_count
 	for lane in range(1, lane_count):
 		var z := -street_half_width + lane * lane_width

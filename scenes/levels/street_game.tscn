@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/levels/multiplayer_game1.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/levels/street_game.gd" id="1_script"]
 [ext_resource type="Resource" path="res://resources/characters/fire.tres" id="2_fire"]
 [ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="3_pause"]
 [ext_resource type="Script" path="res://scripts/levels/street_world.gd" id="4_world"]
@@ -22,7 +22,7 @@ ambient_light_source = 3
 ambient_light_energy = 0.35
 tonemap_mode = 2
 
-[node name="MultiplayerGame1" type="Node3D"]
+[node name="StreetGame" type="Node3D"]
 script = ExtResource("1_script")
 default_character = ExtResource("2_fire")
 

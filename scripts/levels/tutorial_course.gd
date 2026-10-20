@@ -29,8 +29,7 @@ var _beacon_material := _make_material(MAGENTA, 1.6)
 var _beacon_light: OmniLight3D
 
 
-#Every size comes from the player's real jump so the course matches the controller:
-#obstacles are under half the jump height and gaps are about half the jump reach
+#Every size comes from the player's real jump so the course matches the controller
 func build(jump_height: float, jump_reach: float) -> void:
 	var low := snappedf(jump_height * 0.45, 0.05)
 	var gap_small := snappedf(jump_reach * 0.45, 0.1)

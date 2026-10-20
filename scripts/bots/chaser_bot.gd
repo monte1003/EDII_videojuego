@@ -1,13 +1,7 @@
 class_name ChaserBot
 extends CharacterBody3D
 
-#Shared AI of every bot. It plans on the graph (Dijkstra) and walks the planned route with
-#physics. The look lives under VisualRoot and can be swapped without touching this script.
-#
-#Walking model: a route is a list of vertices. To cross from u to v the bot first walks to a
-#"gate" just inside platform u, then (committed) along the bridge to a gate just inside v.
-#Both gates are inside convex platforms, so straight lines never leave the walkable ground.
-#Once committed, a bot always finishes the crossing, even if the bridge gets blocked.
+#Shared bot AI: plans on the graph with Dijkstra and walks the route; a bridge crossing is committed once started
 
 signal push_announced(bot: ChaserBot)
 signal push_landed(bot: ChaserBot, direction: Vector3)
@@ -168,8 +162,6 @@ func _physics_process(delta: float) -> void:
 		_recover_from_fall()
 
 
-#---- perception ------------------------------------------------------------------------
-
 func _perceive() -> void:
 	if manual_target:
 		return
@@ -184,8 +176,7 @@ func _perceive() -> void:
 		_patrol_timer = 0.0
 
 
-#The player's platform; if the player is on a bridge, the end that makes the bot cross it
-#when it is open, or the nearest end when it is blocked (the bot waits at the entrance)
+#Chase target: the player's platform, or the bridge end that makes the bot cross it
 func _choose_target_from_player() -> void:
 	var candidates := _ctx.locator.chase_candidates()
 	if candidates.size() == 1:
@@ -206,8 +197,6 @@ func _choose_target_from_player() -> void:
 		set_target(best)
 
 
-#---- planning --------------------------------------------------------------------------
-
 func _try_recalculate() -> void:
 	if _clock - _last_recalc < recalc_interval:
 		return
@@ -227,8 +216,6 @@ func _try_recalculate() -> void:
 			route.append(result.path[index])
 	route_changed.emit(self)
 
-
-#---- walking ---------------------------------------------------------------------------
 
 func _walk(delta: float) -> Vector3:
 	if _committed:
@@ -326,8 +313,6 @@ func _recover_from_fall() -> void:
 	velocity = Vector3.ZERO
 	_dirty = true
 
-
-#---- push ------------------------------------------------------------------------------
 
 func _update_push(delta: float) -> void:
 	_push_cooldown_left = maxf(_push_cooldown_left - delta, 0.0)

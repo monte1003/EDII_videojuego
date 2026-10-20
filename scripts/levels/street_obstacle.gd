@@ -1,9 +1,7 @@
 class_name StreetObstacle
 extends Node3D
 
-#A car or a pedestrian of the street minigame. The look is made of placeholder primitives
-#until the final models arrive; the game only reads the numbers below, so a model can
-#replace the look without touching the rules.
+#A car, tank or pedestrian of the street minigame, drawn with placeholder primitives
 
 enum Kind { CAR, PEDESTRIAN, TANK }
 

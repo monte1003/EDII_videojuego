@@ -1,8 +1,7 @@
 class_name LevelHelp
 extends CanvasLayer
 
-#Short, plain-language help for casual players. It opens before the round (start mode, ends
-#with "¡EMPEZAR!") and later from the "?" button, F1 or the pause menu (review mode).
+#Plain-language help: before the round (start mode), then from "?", F1 or the pause menu (review mode)
 
 #Emitted when the player closes the help; start_mode tells if it was the one before the round
 signal finished(start_mode: bool)
@@ -86,8 +85,6 @@ func _show_page() -> void:
 	_next.text = ("¡EMPEZAR!" if _start_mode else "CERRAR") if last else "SIGUIENTE"
 
 
-#---- content ---------------------------------------------------------------------------
-
 func _make_pages(config: Dictionary) -> Array[Dictionary]:
 	var key := InputHints.markup
 	var interact := InputHints.key_label(&"interact")
@@ -133,8 +130,6 @@ func _make_pages(config: Dictionary) -> Array[Dictionary]:
 		},
 	]
 
-
-#---- interface -------------------------------------------------------------------------
 
 func _build() -> void:
 	_root = ColorRect.new()
