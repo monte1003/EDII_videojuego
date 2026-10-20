@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_script")
-id = &"espejo"
+id = &"mirror"
 display_name = "Espejo"
 body_color = Color(0.227, 0.133, 0.388, 1)
 accent_color = Color(0.663, 0.545, 0.941, 1)

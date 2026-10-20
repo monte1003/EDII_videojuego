@@ -1,8 +1,7 @@
 class_name ChaseContext
 extends RefCounted
 
-#Everything a bot needs to know about the level, in one object. The level fills and updates
-#it; the bots only read it, so the bot code knows nothing about the level scene.
+#What a bot knows about the level, filled by the level and only read by the bots
 
 var graph: WeightedGraph
 #Vertex id -> centre of its platform

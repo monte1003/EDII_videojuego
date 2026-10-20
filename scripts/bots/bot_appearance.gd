@@ -1,9 +1,7 @@
 class_name BotAppearance
 extends Resource
 
-#Looks and wording of a bot. The AI never reads the colours or the model: it only needs
-#the debug colour and the tip. To use a final model, set "model_scene" (a scene whose root
-#is a Node3D facing +Z, with its feet at y = 0); the provisional primitives are skipped.
+#Look and wording of a bot; set model_scene (a Node3D facing +Z, feet at y = 0) to replace the primitives
 
 enum Detail { BROWS, NOTIFICATIONS, X_PLATE, MIRROR_PLATES }
 

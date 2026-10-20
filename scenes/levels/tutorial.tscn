@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/levels/test_world.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/levels/tutorial.gd" id="1_script"]
 [ext_resource type="Resource" path="res://resources/characters/fire.tres" id="2_fire"]
 [ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="3_pause"]
 [ext_resource type="Script" path="res://scripts/levels/tutorial_course.gd" id="4_course"]
@@ -27,7 +27,7 @@ fog_enabled = true
 fog_light_color = Color(0.85, 0.76, 0.95, 1)
 fog_density = 0.004
 
-[node name="TestWorld" type="Node3D"]
+[node name="Tutorial" type="Node3D"]
 script = ExtResource("1_script")
 default_character = ExtResource("2_fire")
 next_screen = &"level_01"

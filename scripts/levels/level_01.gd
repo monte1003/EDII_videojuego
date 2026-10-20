@@ -1,10 +1,7 @@
 class_name Level01
 extends Node3D
 
-#Level 1, "Escapa del feed": reach the goal M before time or attempts run out while bots
-#chase the player over the bridges. This script runs the round (phases, timer, attempts,
-#abilities); the graph lives in WeightedGraph, the walking in ChaserBot and the drawing
-#in Level01World, LevelHud and GraphDebugView.
+#Level 1 "Escapa del feed": reach the goal before time or attempts run out while bots chase over the bridges
 
 enum Phase { INTRO, COUNTDOWN, RUNNING, ENDED }
 
@@ -93,6 +90,7 @@ var _demo_blocked := false
 @onready var _actors: Node3D = $Actors
 @onready var _world: Level01World = $World
 @onready var _locator: PlayerLocator = $Locator
+@onready var _level_input: LevelInput = $LevelInput
 @onready var _debug_view: GraphDebugView = $DebugView
 @onready var _hud: LevelHud = $Hud
 @onready var _pause_menu: PauseMenu = $PauseMenu
@@ -118,6 +116,10 @@ func _ready() -> void:
 	_pause_menu.opened.connect(_on_pause_opened)
 	_pause_menu.closed.connect(_on_pause_closed)
 	_hud.help_requested.connect(_open_help_review)
+	_level_input.help_pressed.connect(_open_help_review)
+	_level_input.debug_toggled.connect(_toggle_debug)
+	_level_input.demo_toggled.connect(_toggle_demo)
+	_level_input.interact_pressed.connect(_on_interact)
 	_help.finished.connect(_on_help_finished)
 	_hud.retry_requested.connect(_retry)
 	_hud.menu_requested.connect(ScreenFlow.go_to_root)
@@ -135,8 +137,6 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_help.open(true)
 
-
-#---- setup -----------------------------------------------------------------------------
 
 func _spawn_player() -> void:
 	var character := GameState.get_character(GameState.PLAYER_ONE)
@@ -197,8 +197,6 @@ func _spawn_position(vertex: StringName) -> Vector3:
 	return Level01Layout.POSITIONS[vertex] + Vector3(0, 0.05, 0)
 
 
-#---- phases ----------------------------------------------------------------------------
-
 #Numbers shown in the help texts, taken from the exported settings of the level
 func _help_config() -> Dictionary:
 	return {
@@ -256,8 +254,6 @@ func _finish(victory: bool, title: String, message: String) -> void:
 func _retry() -> void:
 	get_tree().reload_current_scene()
 
-
-#---- frame loop ------------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
 	if _paused:
@@ -345,21 +341,21 @@ func _ability_text(active_left: float, cooldown_left: float) -> String:
 	return "Listo"
 
 
-#---- abilities -------------------------------------------------------------------------
+func _toggle_debug() -> void:
+	_debug_view.visible = not _debug_view.visible
+	_hud.set_debug_visible(_debug_view.visible)
+	_debug_dirty = true
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("toggle_debug"):
-		_debug_view.visible = not _debug_view.visible
-		_hud.set_debug_visible(_debug_view.visible)
-		_debug_dirty = true
-	elif event.is_action_pressed("help"):
-		_open_help_review()
-	elif event.is_action_pressed("demo_route"):
-		if _demo_bot == null:
-			_start_demo()
-		else:
-			_end_demo()
-	elif event.is_action_pressed("interact") and phase == Phase.RUNNING and not _paused:
+
+func _toggle_demo() -> void:
+	if _demo_bot == null:
+		_start_demo()
+	else:
+		_end_demo()
+
+
+func _on_interact() -> void:
+	if phase == Phase.RUNNING and not _paused:
 		_try_interact()
 
 
@@ -416,8 +412,6 @@ func _update_prompt() -> void:
 	else:
 		_hud.show_prompt(text)
 
-
-#---- player events ---------------------------------------------------------------------
 
 func _on_place_changed() -> void:
 	_debug_dirty = true
@@ -505,8 +499,6 @@ func _on_pause_closed() -> void:
 	_hud.show_pause_actions(false)
 
 
-#---- debug view and Dijkstra demo ------------------------------------------------------
-
 func _update_debug(delta: float) -> void:
 	if not _debug_view.visible:
 		return
@@ -551,8 +543,7 @@ func _debug_text(all_bots: Array[ChaserBot]) -> String:
 	return "\n".join(lines)
 
 
-#Reproducible showcase: a bot at B heads for J. Its route is shown, then E-H is blocked
-#and the route is recalculated, so the cost goes from 6 (B-E-H-J) to 11 (B-E-D-G-J)
+#Demo: a bot goes from B to J, then E-H is blocked and the route cost goes from 6 to 11
 func _start_demo() -> void:
 	if phase == Phase.ENDED:
 		return

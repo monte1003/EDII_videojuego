@@ -8,10 +8,11 @@
 [ext_resource type="Script" path="res://scripts/levels/graph_debug_view.gd" id="6_debug"]
 [ext_resource type="Script" path="res://scripts/levels/level_hud.gd" id="7_hud"]
 [ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="13_help"]
+[ext_resource type="Script" path="res://scripts/levels/level_input.gd" id="14_input"]
 [ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="8_appearance"]
-[ext_resource type="Resource" path="res://resources/bots/trol.tres" id="9_trol"]
-[ext_resource type="Resource" path="res://resources/bots/bulo.tres" id="10_bulo"]
-[ext_resource type="Resource" path="res://resources/bots/espejo.tres" id="11_espejo"]
+[ext_resource type="Resource" path="res://resources/bots/troll.tres" id="9_troll"]
+[ext_resource type="Resource" path="res://resources/bots/hoax.tres" id="10_hoax"]
+[ext_resource type="Resource" path="res://resources/bots/mirror.tres" id="11_mirror"]
 [ext_resource type="Resource" path="res://resources/bots/spam.tres" id="12_spam"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
@@ -36,7 +37,7 @@ fog_density = 0.0008
 [node name="Level01" type="Node3D"]
 script = ExtResource("1_script")
 default_character = ExtResource("2_fire")
-bot_appearances = Array[ExtResource("8_appearance")]([ExtResource("9_trol"), ExtResource("10_bulo"), ExtResource("11_espejo"), ExtResource("12_spam")])
+bot_appearances = Array[ExtResource("8_appearance")]([ExtResource("9_troll"), ExtResource("10_hoax"), ExtResource("11_mirror"), ExtResource("12_spam")])
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_world")
@@ -57,6 +58,9 @@ script = ExtResource("4_world")
 
 [node name="Locator" type="Node" parent="."]
 script = ExtResource("5_locator")
+
+[node name="LevelInput" type="Node" parent="."]
+script = ExtResource("14_input")
 
 [node name="DebugView" type="Node3D" parent="."]
 script = ExtResource("6_debug")

@@ -1,10 +1,9 @@
 class_name WeightedGraph
 extends RefCounted
 
-#Weighted graph stored as adjacency lists, with its own Dijkstra.
-#It only holds data and algorithms: no nodes, positions or bot code live here.
+#Weighted graph as adjacency lists with its own Dijkstra; data and algorithms only
 
-#A directed arc of the adjacency list. A two-way bridge is stored as two arcs
+#A directed arc; a two-way bridge is stored as two arcs
 class Edge:
 	var to: StringName
 	var weight: float
@@ -48,7 +47,7 @@ func vertices() -> Array[StringName]:
 	return ids
 
 
-#Adds (or updates) the connection a-b; with "bidirectional" both arcs are created
+#Adds or updates a-b; bidirectional creates both arcs
 func add_edge(a: StringName, b: StringName, weight: float, bidirectional := true) -> bool:
 	if not _adjacency.has(a) or not _adjacency.has(b) or a == b or weight < 0.0:
 		push_error("WeightedGraph: conexión inválida %s-%s" % [a, b])
@@ -81,7 +80,6 @@ func weight_of(a: StringName, b: StringName) -> float:
 	return edge.weight if edge != null else INF
 
 
-#Neighbours reachable from "id"; blocked connections are left out unless asked for
 func neighbors(id: StringName, include_blocked := false) -> Array[StringName]:
 	var result: Array[StringName] = []
 	for edge: Edge in _adjacency.get(id, []):
@@ -117,8 +115,7 @@ func undirected_edges() -> Array[Dictionary]:
 	return result
 
 
-#Dijkstra from "from" to "to". Blocked arcs and "forbidden" vertices are never used
-#(the start may be forbidden: only entering a forbidden vertex is not allowed)
+#Dijkstra; blocked arcs and "forbidden" vertices are skipped (the start itself may be forbidden)
 func shortest_path(from: StringName, to: StringName, forbidden: Array = []) -> PathResult:
 	var result := PathResult.new()
 	if not _adjacency.has(from) or not _adjacency.has(to):
