@@ -32,7 +32,7 @@ ambient_light_energy = 0.25
 tonemap_mode = 2
 fog_enabled = true
 fog_light_color = Color(0.85, 0.76, 0.95, 1)
-fog_density = 0.0008
+fog_density = 0.0022
 
 [node name="Level01" type="Node3D"]
 script = ExtResource("1_script")
