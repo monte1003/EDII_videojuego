@@ -35,6 +35,12 @@ const BOX_TEXT_COLOR := Color("e0561b")
 const BOX_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 #How far a cyclist tilts into a change of side, in radians
 const MAX_LEAN := 0.18
+#Colours of the primitive hatchback used when there is no car model
+const GLASS_COLOR := Color("34416f")
+const TIRE_COLOR := Color("23242f")
+const HUB_COLOR := Color("d9dbe8")
+const HEADLIGHT_COLOR := Color("fff3b0")
+const TAILLIGHT_COLOR := Color("ff5c7a")
 
 static var _phone_body_material: StandardMaterial3D
 static var _phone_screen_material: StandardMaterial3D
@@ -64,7 +70,8 @@ var _animation_walk_speed := 1.0
 #"model" is scaled to "length", stands on the ground and faces +X (the car model faces -X).
 #Its body is white, so multiplying the texture by "color" paints the body and leaves the
 #windows, tyres and lights dark. The hit box is the scaled model's footprint. Without a
-#model a box car of "length" by "width" stands in
+#model a primitive hatchback of "length" by "width" stands in: low body, tapered glass
+#cabin, wheels and lights
 func build_car(model: PackedScene, color: Color, length: float, width: float) -> void:
 	kind = Kind.CAR
 	if model != null:
@@ -83,10 +90,18 @@ func build_car(model: PackedScene, color: Color, length: float, width: float) ->
 			_tint(node as MeshInstance3D, color)
 		return
 	half_extents = Vector2(length, width) / 2.0
-	_add_box(Vector3(0.0, 0.55, 0.0), Vector3(length, 0.8, width), color)
-	_add_box(Vector3(-length * 0.08, 1.25, 0.0), Vector3(length * 0.5, 0.6, width * 0.86), color.lightened(0.35))
-	#Headlights on the +X side show which way the car is going
-	_add_box(Vector3(length / 2.0, 0.6, 0.0), Vector3(0.08, 0.22, width * 0.7), Color("fff3b0"))
+	var cabin_x := -length * 0.07
+	_add_box(Vector3(0.0, 0.34, 0.0), Vector3(length * 0.98, 0.3, width * 0.94), color.darkened(0.4))
+	_add_box(Vector3(0.0, 0.7, 0.0), Vector3(length, 0.55, width), color)
+	_add_box(Vector3(length * 0.5 - 0.1, 0.62, 0.0), Vector3(0.22, 0.2, width * 0.98), color.lightened(0.18))
+	_add_mesh(_frustum(Vector2(length * 0.56, width * 0.86), Vector2(length * 0.36, width * 0.7), 0.58),
+		Vector3(cabin_x, 0.98, 0.0), GLASS_COLOR)
+	_add_box(Vector3(cabin_x - length * 0.01, 1.58, 0.0), Vector3(length * 0.38, 0.08, width * 0.72), color.lightened(0.3))
+	for side in [-1.0, 1.0]:
+		_add_wheel(Vector3(length * 0.3, 0.42, side * (width / 2.0 - 0.08)), side)
+		_add_wheel(Vector3(-length * 0.3, 0.42, side * (width / 2.0 - 0.08)), side)
+		_add_box(Vector3(length / 2.0 + 0.02, 0.74, side * width * 0.3), Vector3(0.08, 0.2, 0.46), HEADLIGHT_COLOR, true)
+		_add_box(Vector3(-length / 2.0 - 0.02, 0.74, side * width * 0.3), Vector3(0.08, 0.18, 0.4), TAILLIGHT_COLOR, true)
 
 
 #Rare obstacle as wide as two lanes; its gun points +X, the way it goes
@@ -210,14 +225,67 @@ func overlaps(point: Vector3, radius: float) -> bool:
 		and absf(point.z - position.z) <= half_extents.y + radius
 
 
-func _add_box(center: Vector3, size: Vector3, color: Color) -> void:
+func _add_box(center: Vector3, size: Vector3, color: Color, glow := false) -> void:
 	var mesh := BoxMesh.new()
 	mesh.size = size
+	_add_mesh(mesh, center, color, glow)
+
+
+func _add_mesh(mesh: Mesh, center: Vector3, color: Color, glow := false) -> MeshInstance3D:
 	var instance := MeshInstance3D.new()
 	instance.mesh = mesh
-	instance.material_override = _material(color)
+	instance.material_override = _material(color, glow)
 	instance.position = center
 	add_child(instance)
+	return instance
+
+
+#Wheel with its hub; "side" is the side of the car (-1 or 1) so the hub shows outward
+func _add_wheel(center: Vector3, side: float) -> void:
+	var tire := CylinderMesh.new()
+	tire.top_radius = 0.42
+	tire.bottom_radius = 0.42
+	tire.height = 0.34
+	tire.radial_segments = 14
+	tire.rings = 1
+	var wheel := _add_mesh(tire, center, TIRE_COLOR)
+	wheel.rotation.x = PI / 2.0
+	var hub := CylinderMesh.new()
+	hub.top_radius = 0.2
+	hub.bottom_radius = 0.2
+	hub.height = 0.05
+	hub.radial_segments = 10
+	hub.rings = 1
+	var cap := _add_mesh(hub, center + Vector3(0.0, 0.0, side * 0.18), HUB_COLOR)
+	cap.rotation.x = PI / 2.0
+
+
+#Box that is narrower at the top: bottom and top are (length, width) on the XZ plane
+func _frustum(bottom: Vector2, top: Vector2, height: float) -> ArrayMesh:
+	var low := [Vector3(-bottom.x / 2.0, 0.0, -bottom.y / 2.0), Vector3(bottom.x / 2.0, 0.0, -bottom.y / 2.0),
+		Vector3(bottom.x / 2.0, 0.0, bottom.y / 2.0), Vector3(-bottom.x / 2.0, 0.0, bottom.y / 2.0)]
+	var high := [Vector3(-top.x / 2.0, height, -top.y / 2.0), Vector3(top.x / 2.0, height, -top.y / 2.0),
+		Vector3(top.x / 2.0, height, top.y / 2.0), Vector3(-top.x / 2.0, height, top.y / 2.0)]
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var center := Vector3(0.0, height / 2.0, 0.0)
+	for index in 4:
+		var next := (index + 1) % 4
+		_quad(tool, low[index], low[next], high[next], high[index], center)
+	_quad(tool, high[0], high[1], high[2], high[3], center)
+	tool.generate_normals()
+	return tool.commit()
+
+
+#Godot front faces are clockwise seen from outside; "center" tells which way is out
+func _quad(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, center: Vector3) -> void:
+	var normal := (b - a).cross(c - a)
+	var outward := (a + b + c + d) / 4.0 - center
+	var corners := [a, b, c, d]
+	if normal.dot(outward) > 0.0:
+		corners = [a, d, c, b]
+	for index in [0, 1, 2, 0, 2, 3]:
+		tool.add_vertex(corners[index])
 
 
 func _add_delivery_box(length: float) -> void:
@@ -327,8 +395,12 @@ func _tint(mesh_instance: MeshInstance3D, color: Color) -> void:
 		mesh_instance.set_surface_override_material(surface, _car_materials[key])
 
 
-func _material(color: Color) -> StandardMaterial3D:
+func _material(color: Color, glow := false) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
 	material.roughness = 0.85
+	if glow:
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = 0.8
 	return material

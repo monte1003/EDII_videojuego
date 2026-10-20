@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BotAppearance" format=3]
+
+[ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/bots/models/troll.tscn" id="2_model"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"troll"
+display_name = "Trol"
+body_color = Color(0.353, 0.071, 0.149, 1)
+accent_color = Color(0.106, 0.039, 0.071, 1)
+detail = 0
+model_scene = ExtResource("2_model")
+debug_color = Color(1, 0.302, 0.427, 1)
+tip = "Trol: a los comentarios hirientes no se les responde, se bloquean."
+role = 0
+behavior = "persigue directo hasta donde estás"

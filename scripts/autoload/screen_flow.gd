@@ -6,20 +6,29 @@ var tree := ScreenTree.new()
 
 var current: StringName = &""
 
+#The screen being loaded and the last one asked for meanwhile; it opens when the wipe ends
+var _heading: StringName = &""
+var _pending: ScreenTree.ScreenNode
+
 
 func _ready() -> void:
 	tree.add_root(&"main_menu", "Menú principal", "res://scenes/menus/main_menu.tscn")
 	tree.add_screen(&"main_menu", &"character_select", "Personajes", "res://scenes/menus/character_select.tscn")
-	tree.add_screen(&"character_select", &"test_world", "Partida", "res://scenes/levels/test_world.tscn")
-	tree.add_screen(&"test_world", &"level_01", "Nivel 1", "res://scenes/levels/level_01.tscn")
-	#Test menu: every game registered as its child gets a button there
-	tree.add_screen(&"main_menu", &"test_games", "Test", "res://scenes/menus/test_menu.tscn")
-	tree.add_screen(&"test_games", &"multiplayer_game1", "La calle", "res://scenes/levels/multiplayer_game1.tscn")
+	tree.add_screen(&"character_select", &"lobby", "Sala", "res://scenes/menus/lobby.tscn")
+	tree.add_screen(&"lobby", &"practice", "Práctica", "res://scenes/menus/practice_menu.tscn")
+	tree.add_screen(&"lobby", &"warmup", "Calentamiento", "res://scenes/levels/warmup.tscn")
+	tree.add_screen(&"lobby", &"round_intro", "Sorteo", "res://scenes/menus/round_intro.tscn")
+	for info in MinigameCatalog.ENTRIES:
+		tree.add_screen(&"lobby", info.id, info.title, info.scene_path)
+	tree.add_screen(&"lobby", &"round_results", "Resultados de la ronda", "res://scenes/menus/round_results.tscn")
+	tree.add_screen(&"lobby", &"session_results", "Fin de la partida", "res://scenes/menus/session_results.tscn")
 	tree.add_screen(&"main_menu", &"options", "Opciones", "res://scenes/menus/options_menu.tscn")
 	tree.add_screen(&"options", &"controls", "Controles", "res://scenes/menus/controls_menu.tscn")
 	tree.add_screen(&"options", &"graphics", "Gráficos", "res://scenes/menus/graphics_menu.tscn")
 	tree.add_screen(&"options", &"accessibility", "Accesibilidad", "res://scenes/menus/accessibility_menu.tscn")
 	current = tree.root.id
+	#ScreenFader is the last autoload: connect once all of them exist
+	_connect_fader.call_deferred()
 
 
 #Each screen says who it is when it loads, so running a scene on its own also works
@@ -51,6 +60,13 @@ func go_to_root() -> void:
 	_change_to(tree.root)
 
 
+#Loads the current screen again, for the restart of a minigame that runs on its own
+func reload_current() -> void:
+	var node := tree.find(current)
+	if node != null:
+		_change_to(node)
+
+
 func children_of(id: StringName) -> Array[ScreenTree.ScreenNode]:
 	var node := tree.find(id)
 	return node.children if node != null else [] as Array[ScreenTree.ScreenNode]
@@ -69,7 +85,29 @@ func title_of(id: StringName) -> String:
 	return node.title if node != null else ""
 
 
+#During a wipe the last request is kept, except a repeat of the screen being loaded (a double click)
 func _change_to(node: ScreenTree.ScreenNode) -> void:
+	if ScreenFader.busy:
+		if node.id != _heading:
+			_pending = node
+		return
+	_go(node)
+
+
+func _go(node: ScreenTree.ScreenNode) -> void:
 	current = node.id
+	_heading = node.id
 	screen_changed.emit(node.id)
-	get_tree().change_scene_to_file(node.scene_path)
+	ScreenFader.change_scene(node.scene_path)
+
+
+func _connect_fader() -> void:
+	ScreenFader.finished.connect(_on_fader_finished)
+
+
+func _on_fader_finished() -> void:
+	_heading = &""
+	var node := _pending
+	_pending = null
+	if node != null and node.id != current:
+		_go(node)

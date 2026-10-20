@@ -1,9 +1,7 @@
 class_name StreetRunner
 extends Node3D
 
-#Player of the street minigame. It only moves across the street (Z). Its X position changes
-#only when an obstacle throws it back, so every hit is ground that cannot be won back.
-#It can jump, just for fun: the hit test ignores the height, so jumping never saves it.
+#Player of the street minigame: it only moves across the street, hits throw it back and jumping is decorative
 
 #The models are 1 m tall, so 1.4 leaves them a bit under half of a 3 m sidewalk
 @export var model_scale := 1.4
@@ -15,12 +13,10 @@ extends Node3D
 #Minimum grace after a hit; it also lasts while the runner still touches any obstacle
 @export var invulnerable_time := 1.2
 @export var turn_speed := 12.0
-@export var up_action: StringName = &"move_forward"
-@export var down_action: StringName = &"move_back"
-@export var jump_action: StringName = &"jump"
 
 var player_id := 0
-var input_enabled := false
+var move_axis := 0.0
+var jump_requested := false
 var min_z := -7.0
 var max_z := 7.0
 #Beyond this |z| the runner is on a raised sidewalk
@@ -41,9 +37,11 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _forced_yaw := NAN
 var _model: CharacterModel
 var _model_pivot := Node3D.new()
+var _street_input := StreetInput.new()
 
 
 func _ready() -> void:
+	add_child(_street_input)
 	add_child(_model_pivot)
 	_model_pivot.scale = Vector3.ONE * model_scale
 	_model_pivot.rotation.y = _yaw_for(0.0)
@@ -58,6 +56,10 @@ func set_character(character: CharacterData) -> void:
 		return
 	_model = character.model_scene.instantiate() as CharacterModel
 	_model_pivot.add_child(_model)
+
+
+func set_input_enabled(enabled: bool) -> void:
+	_street_input.enabled = enabled
 
 
 func can_be_hit() -> bool:
@@ -79,7 +81,7 @@ func jump() -> void:
 
 #Victory pose: no more motion and the runner turns to look at "point"
 func celebrate(point: Vector3) -> void:
-	input_enabled = false
+	set_input_enabled(false)
 	push_speed = 0.0
 	side_speed = 0.0
 	_invulnerable = false
@@ -89,11 +91,10 @@ func celebrate(point: Vector3) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	var axis := 0.0
-	if input_enabled:
-		axis = Input.get_axis(up_action, down_action)
-		if Input.is_action_just_pressed(jump_action):
-			jump()
+	var axis := move_axis
+	if jump_requested:
+		jump()
+		jump_requested = false
 	position.z = clampf(position.z + (axis * move_speed + side_speed) * delta, min_z, max_z)
 	position.x += push_speed * delta
 	push_speed = move_toward(push_speed, 0.0, push_decay * delta)
@@ -119,7 +120,6 @@ func _physics_process(delta: float) -> void:
 		_model.set_state(absf(axis) > 0.1, _jump_height > 0.0)
 
 
-#Faces the oncoming traffic (-X) and leans toward the side it moves to.
-#Models face +Z, so the yaw of a direction d is atan2(d.x, d.z)
+#Faces the oncoming traffic and leans toward its side; models face +Z, so the yaw is atan2(d.x, d.z)
 func _yaw_for(axis: float) -> float:
 	return atan2(-1.0, axis * 1.2)

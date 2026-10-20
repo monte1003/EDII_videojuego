@@ -6,8 +6,15 @@ class ScreenNode:
 	var id: StringName
 	var title: String
 	var scene_path: String
-	var parent: ScreenNode
 	var children: Array[ScreenNode] = []
+	#The parent is a weak reference: parent and child holding each other would never be freed
+	var parent: ScreenNode:
+		get:
+			return _parent.get_ref() as ScreenNode if _parent != null else null
+		set(value):
+			_parent = weakref(value) if value != null else null
+
+	var _parent: WeakRef
 
 	func _init(node_id: StringName, node_title: String, path: String) -> void:
 		id = node_id
@@ -33,6 +40,9 @@ func add_screen(parent_id: StringName, id: StringName, title: String, scene_path
 	var parent := find(parent_id)
 	if parent == null:
 		push_error("ScreenTree: la pantalla padre %s no existe" % parent_id)
+		return null
+	if has(id):
+		push_error("ScreenTree: la pantalla %s ya existe" % id)
 		return null
 	var node := ScreenNode.new(id, title, scene_path)
 	node.parent = parent
