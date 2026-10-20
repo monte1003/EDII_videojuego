@@ -12,7 +12,7 @@ static func key_label(action: StringName) -> String:
 		var code := key.keycode
 		if key.physical_keycode != KEY_NONE:
 			code = key.physical_keycode
-			#The headless display server cannot translate a physical key to the user's layout
+			#Headless mode cannot translate a physical key to the user's layout
 			if DisplayServer.get_name() != "headless":
 				code = DisplayServer.keyboard_get_keycode_from_physical(code)
 		return "ESPACIO" if code == KEY_SPACE else OS.get_keycode_string(code).to_upper()
