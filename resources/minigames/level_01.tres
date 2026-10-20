@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="MinigameInfo" format=3]
+
+[ext_resource type="Script" path="res://scripts/session/minigame_info.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/ui/cards/level_01.png" id="2_art"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"level_01"
+title = "Escapa del feed"
+tagline = "Llega a la meta antes de que los bots te alcancen"
+scene_path = "res://scenes/levels/level_01.tscn"
+accent = Color(0.882, 0.294, 0.416, 1)
+ready = true
+card_art = ExtResource("2_art")

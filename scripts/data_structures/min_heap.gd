@@ -1,8 +1,7 @@
 class_name MinHeap
 extends RefCounted
 
-#Binary min-heap used as the priority queue of Dijkstra.
-#Equal priorities leave in insertion order, so the routes are deterministic.
+#Binary min-heap for Dijkstra; equal priorities leave in insertion order
 
 var _items: Array[Variant] = []
 var _priorities: Array[float] = []
@@ -26,7 +25,6 @@ func push(item: Variant, priority: float) -> void:
 	_sift_up(_items.size() - 1)
 
 
-#Removes and returns the item with the lowest priority
 func pop() -> Variant:
 	var top: Variant = _items[0]
 	var last := _items.size() - 1

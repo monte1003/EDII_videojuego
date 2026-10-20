@@ -18,3 +18,8 @@ const AMBER := Color("e08a22")
 
 #El relleno coral de los botones de accion, como el JUGAR de la referencia del menu
 const PILL := Color("fd567f")
+
+#Card borders, warning flashes and the dimmed backdrop of the in-round screens
+const LILAC := Color("cdbcf7")
+const GOLD := Color("ffd23f")
+const NIGHT := Color(0.06, 0.05, 0.14)
