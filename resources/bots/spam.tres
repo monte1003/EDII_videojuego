@@ -13,3 +13,5 @@ detail = 1
 model_scene = ExtResource("2_model")
 debug_color = Color(1, 0.663, 0.302, 1)
 tip = "Spam: demasiadas notificaciones te quitan la atención."
+role = 1
+behavior = "te espera adelante, en tu camino a la meta"

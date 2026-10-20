@@ -17,6 +17,7 @@ var _back_base := Vector2.ZERO
 
 func _ready() -> void:
 	super()
+	GameSession.reset()
 	_play_button.pressed.connect(ScreenFlow.open.bind(&"character_select"))
 	_options_button.pressed.connect(ScreenFlow.open.bind(&"options"))
 	_exit_button.pressed.connect(get_tree().quit)

@@ -87,4 +87,4 @@ func _on_preview_gui_input(event: InputEvent) -> void:
 
 func _play() -> void:
 	GameState.select_character(GameState.PLAYER_ONE, characters[_selected_index])
-	ScreenFlow.open(&"tutorial")
+	ScreenFlow.open(&"lobby")
