@@ -10,14 +10,12 @@ extends Node3D
 enum Phase { COUNTDOWN, RUNNING, ENDED }
 
 const SCREEN_ID := &"multiplayer_game1"
-#1.5 m wide: half of the sidewalk, so the sidewalk is not a safe place
-const PEDESTRIAN_RADIUS := 0.75
+#Hit box of a pedestrian: half the stride along the street and half the shoulders across it,
+#measured on the "Texting Walk" of the three models (about 0.6 x 0.5 m)
+const PEDESTRIAN_HALF_SIZE := Vector2(0.3, 0.25)
 const PEDESTRIAN_HEIGHT := 1.8
 const CAR_COLORS: Array[Color] = [
 	Color("e14b6a"), Color("2f9fb8"), Color("e08a22"), Color("7b6cf6"), Color("3fb27f"), Color("fd567f"),
-]
-const PEDESTRIAN_COLORS: Array[Color] = [
-	Color("f4c27a"), Color("9ad1f5"), Color("c9a0f0"), Color("f59ab3"), Color("8fd6b4"),
 ]
 
 #A row where obstacles appear: a car lane or a sidewalk
@@ -58,9 +56,34 @@ class Lane:
 
 @export_group("Obstacles")
 @export var car_speed := 7.0
+#One white car (Meshy) for every car; only its colour changes. Empty falls back to boxes
+@export var car_model: PackedScene
+#The model is scaled to this length; its width follows from its own proportions
 @export var car_length := 4.0
+#Width of the box cars without a model, also used to size the tank
 @export var car_width := 2.4
 @export var pedestrian_speed := 2.6
+#People walking while looking at their phone (Meshy); each pedestrian picks one at random.
+#Empty falls back to capsules
+@export var pedestrian_models: Array[PackedScene] = []
+#Flat, matte colours (one per pedestrian, at random), so the eye goes to the player
+@export var pedestrian_colors: Array[Color] = [Color("7d7891"), Color("6f8f7a")]
+#Meters per second the walk animation covers at normal speed; faster pedestrians play it faster
+@export var pedestrian_animation_speed := 1.2
+#Delivery cyclists ride the sidewalks much faster than people walk, so the sidewalk is not a
+#safe place to wait. This share of the sidewalk spawns is a cyclist instead of a pedestrian
+@export_range(0.0, 1.0) var cyclist_chance := 1.0 / 7.0
+@export var cyclist_model: PackedScene
+@export var cyclist_color := Color("c0805a")
+@export var cyclist_length := 1.8
+@export var cyclist_speed := 6.0
+@export var cyclist_knockback := 10.5
+#A cyclist moves to the other half of the sidewalk when someone is this close ahead, if that
+#half is free from a bit behind it to this far ahead
+@export var cyclist_overtake_distance := 4.0
+#Gap a cyclist always keeps to whoever is ahead when it cannot overtake (it slows down)
+@export var cyclist_min_gap := 0.6
+@export var cyclist_side_speed := 2.5
 #Speed multiplier of the whole flow at the start and at the end of the round
 @export var start_speed_scale := 1.0
 @export var end_speed_scale := 2.2
@@ -101,6 +124,8 @@ var _clock := 0.0
 var _phase_timer := 0.0
 var _countdown_shown := 0
 var _paused := false
+var _pedestrian_materials: Array[StandardMaterial3D] = []
+var _cyclist_material: StandardMaterial3D
 #After a victory the whole street stops
 var _frozen := false
 #A tank was drawn but has not found room yet
@@ -120,6 +145,16 @@ func _ready() -> void:
 	if ScreenFlow.tree.has(SCREEN_ID):
 		ScreenFlow.mark_current(SCREEN_ID)
 	_rng.randomize()
+	for color in pedestrian_colors:
+		var material := StandardMaterial3D.new()
+		material.albedo_color = color
+		material.roughness = 1.0
+		material.metallic_specular = 0.0
+		_pedestrian_materials.append(material)
+	_cyclist_material = StandardMaterial3D.new()
+	_cyclist_material.albedo_color = cyclist_color
+	_cyclist_material.roughness = 1.0
+	_cyclist_material.metallic_specular = 0.0
 	var half_width := lane_count * lane_width / 2.0
 	_world.build(half_width, sidewalk_width, lane_count, spawn_x - 10.0, despawn_x + 10.0, end_x)
 	_build_lanes(half_width)
@@ -130,7 +165,7 @@ func _ready() -> void:
 	_hud.retry_requested.connect(_retry)
 	#Back to the parent screen (the test menu), so the next test is one click away
 	_hud.menu_requested.connect(ScreenFlow.back)
-	_hud.set_hint("%s / %s para moverte · %s salta · Esquiva autos y peatones · Aguanta %d s" % [
+	_hud.set_hint("%s / %s para moverte · %s salta · Esquiva autos, peatones y bicis · Aguanta %d s" % [
 		InputHints.key_markup(_runner.up_action), InputHints.key_markup(_runner.down_action),
 		InputHints.key_markup(_runner.jump_action), int(time_limit)])
 	_hud.set_time(time_limit)
@@ -248,6 +283,8 @@ func _finish(victory: bool, title: String, message: String) -> void:
 
 	#Victory: the street stops, the camera moves in front of the runner and then the panel shows
 	_frozen = true
+	#Also stops the walk animations
+	_obstacle_root.process_mode = Node.PROCESS_MODE_DISABLED
 	_hud.hide_play_ui()
 	#Aimed above the head: the jump goes about 1.3 m up
 	var focus := _runner.position + Vector3(0.0, 0.85 * _runner.model_scale, 0.0)
@@ -289,9 +326,12 @@ func _update_obstacles(delta: float) -> void:
 			_try_spawn(lane)
 
 	var multiplier := _speed_scale()
+	_steer_cyclists(multiplier, delta)
 	for index in range(_obstacles.size() - 1, -1, -1):
 		var obstacle := _obstacles[index]
-		obstacle.position.x += obstacle.base_speed * multiplier * delta
+		if obstacle.kind != StreetObstacle.Kind.CYCLIST:
+			obstacle.current_speed = obstacle.base_speed * multiplier
+		obstacle.advance(obstacle.current_speed, delta)
 		if obstacle.position.x - obstacle.half_extents.x > despawn_x:
 			obstacle.queue_free()
 			_obstacles.remove_at(index)
@@ -321,7 +361,7 @@ func _try_spawn(lane: Lane) -> void:
 		return
 	_mark_spawned(lane, car_length)
 	var car := StreetObstacle.new()
-	car.build_car(CAR_COLORS[_rng.randi() % CAR_COLORS.size()], car_length, car_width)
+	car.build_car(car_model, CAR_COLORS[_rng.randi() % CAR_COLORS.size()], car_length, car_width)
 	car.base_speed = car_speed
 	car.knockback = car_knockback
 	_place(car, lane.z, 0.0)
@@ -329,12 +369,29 @@ func _try_spawn(lane: Lane) -> void:
 
 func _spawn_pedestrian(lane: Lane) -> void:
 	_mark_spawned(lane, 0.0)
+	var slot := lane.slot_offset if _rng.randf() < 0.5 else -lane.slot_offset
+	if _rng.randf() < cyclist_chance:
+		var cyclist := StreetObstacle.new()
+		cyclist.build_cyclist(cyclist_model, _cyclist_material, cyclist_length)
+		cyclist.base_speed = cyclist_speed
+		cyclist.current_speed = cyclist_speed * _speed_scale()
+		cyclist.knockback = cyclist_knockback
+		cyclist.lane_z = lane.z
+		cyclist.target_z = lane.z + slot
+		_place(cyclist, lane.z + slot, StreetWorld.SIDEWALK_HEIGHT)
+		return
 	var pedestrian := StreetObstacle.new()
-	pedestrian.build_pedestrian(PEDESTRIAN_COLORS[_rng.randi() % PEDESTRIAN_COLORS.size()],
-		PEDESTRIAN_RADIUS, PEDESTRIAN_HEIGHT)
+	var model: PackedScene = null
+	if not pedestrian_models.is_empty():
+		model = pedestrian_models[_rng.randi() % pedestrian_models.size()]
+	var material: StandardMaterial3D = null
+	if not _pedestrian_materials.is_empty():
+		material = _pedestrian_materials[_rng.randi() % _pedestrian_materials.size()]
+	pedestrian.build_pedestrian(model, material, PEDESTRIAN_HALF_SIZE, PEDESTRIAN_HEIGHT, pedestrian_animation_speed)
 	pedestrian.base_speed = pedestrian_speed
 	pedestrian.knockback = pedestrian_knockback
-	var slot := lane.slot_offset if _rng.randf() < 0.5 else -lane.slot_offset
+	pedestrian.lane_z = lane.z
+	pedestrian.target_z = lane.z + slot
 	_place(pedestrian, lane.z + slot, StreetWorld.SIDEWALK_HEIGHT)
 
 
@@ -399,6 +456,87 @@ func _place(obstacle: StreetObstacle, z: float, height: float) -> void:
 	_obstacles.append(obstacle)
 
 
+#Cyclists catch up with the people ahead of them on the sidewalk. A cyclist that gets close
+#moves to the other half of the sidewalk if that half is free along the whole overtake;
+#otherwise it slows down and follows, never closer than cyclist_min_gap. Its speed is set
+#from the leader's speed of the last frame, before anything moves this frame
+func _steer_cyclists(multiplier: float, delta: float) -> void:
+	for cyclist in _obstacles:
+		if cyclist.kind != StreetObstacle.Kind.CYCLIST:
+			continue
+		var leader := _leader_of(cyclist)
+		var settled := is_equal_approx(cyclist.position.z, cyclist.target_z)
+		if leader != null and settled and _gap(cyclist, leader) < cyclist_overtake_distance:
+			var other_z := 2.0 * cyclist.lane_z - cyclist.target_z
+			if _side_free(cyclist, other_z):
+				cyclist.target_z = other_z
+				#The band now covers both halves until the move ends, so the leader may change
+				leader = _leader_of(cyclist)
+
+		var speed := cyclist.base_speed * multiplier
+		if leader != null:
+			var room := maxf(_gap(cyclist, leader) - cyclist_min_gap, 0.0)
+			speed = minf(speed, leader.current_speed + room * 2.0)
+		cyclist.current_speed = speed
+
+		var offset := cyclist.target_z - cyclist.position.z
+		var step := cyclist_side_speed * delta
+		cyclist.position.z += clampf(offset, -step, step)
+		cyclist.lean(signf(offset) if absf(offset) > 0.01 else 0.0, delta)
+
+
+#Nearest pedestrian or cyclist ahead on the same sidewalk whose band across the sidewalk
+#touches the cyclist's band. While a cyclist changes side its band covers both halves
+func _leader_of(cyclist: StreetObstacle) -> StreetObstacle:
+	var low := minf(cyclist.position.z, cyclist.target_z) - cyclist.half_extents.y
+	var high := maxf(cyclist.position.z, cyclist.target_z) + cyclist.half_extents.y
+	var best: StreetObstacle = null
+	var best_gap := INF
+	for other in _obstacles:
+		if other == cyclist or other.kind == StreetObstacle.Kind.CAR or other.kind == StreetObstacle.Kind.TANK:
+			continue
+		if other.lane_z != cyclist.lane_z or other.position.x <= cyclist.position.x:
+			continue
+		if not _band_touches(other, low, high):
+			continue
+		var gap := _gap(cyclist, other)
+		if gap < best_gap:
+			best_gap = gap
+			best = other
+	return best
+
+
+#True when nobody is on the band around "z" from a bit behind the cyclist (whoever is
+#there must not end up inside it) to the overtake distance ahead
+func _side_free(cyclist: StreetObstacle, z: float) -> bool:
+	var low := z - cyclist.half_extents.y
+	var high := z + cyclist.half_extents.y
+	var back := cyclist.position.x - cyclist.half_extents.x - 1.5
+	var front := cyclist.position.x + cyclist.half_extents.x + cyclist_overtake_distance
+	for other in _obstacles:
+		if other == cyclist or other.lane_z != cyclist.lane_z:
+			continue
+		if other.kind == StreetObstacle.Kind.CAR or other.kind == StreetObstacle.Kind.TANK:
+			continue
+		if not _band_touches(other, low, high):
+			continue
+		if other.position.x + other.half_extents.x >= back and other.position.x - other.half_extents.x <= front:
+			return false
+	return true
+
+
+#Whether "obstacle" (including the side it is moving to) overlaps the Z range low..high
+func _band_touches(obstacle: StreetObstacle, low: float, high: float) -> bool:
+	var other_low := minf(obstacle.position.z, obstacle.target_z) - obstacle.half_extents.y
+	var other_high := maxf(obstacle.position.z, obstacle.target_z) + obstacle.half_extents.y
+	return other_low < high + 0.05 and other_high > low - 0.05
+
+
+#Free meters between the front of "cyclist" and the back of "leader"
+func _gap(cyclist: StreetObstacle, leader: StreetObstacle) -> float:
+	return (leader.position.x - leader.half_extents.x) - (cyclist.position.x + cyclist.half_extents.x)
+
+
 #The runner stays invulnerable while it touches any obstacle, so one contact is one hit
 func _check_hits() -> void:
 	var hit_by: StreetObstacle = null
@@ -415,6 +553,8 @@ func _check_hits() -> void:
 			_hud.warn("¡Choque!")
 		StreetObstacle.Kind.TANK:
 			_hud.warn("¡TANQUE!")
+		StreetObstacle.Kind.CYCLIST:
+			_hud.warn("¡Bici!")
 		_:
 			_hud.warn("¡Ups!")
 
@@ -443,8 +583,10 @@ func _interval_max(kind: int) -> float:
 func _on_pause_opened() -> void:
 	_paused = true
 	_actors.process_mode = Node.PROCESS_MODE_DISABLED
+	_obstacle_root.process_mode = Node.PROCESS_MODE_DISABLED
 
 
 func _on_pause_closed() -> void:
 	_paused = false
 	_actors.process_mode = Node.PROCESS_MODE_INHERIT
+	_obstacle_root.process_mode = Node.PROCESS_MODE_INHERIT
