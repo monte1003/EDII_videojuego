@@ -70,3 +70,33 @@ static func street(config: Dictionary) -> Array[Dictionary]:
 				InputHints.key_markup(&"jump"), InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
 		},
 	]
+
+
+static func social_drop(config: Dictionary) -> Array[Dictionary]:
+	var key := InputHints.markup
+	var keys := "%s %s %s %s" % [
+		InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
+		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")]
+	return [
+		{
+			"title": "Tu misión",
+			"body": "Estás sobre una plataforma de %dx%d casillas, cada una con el ícono de una red social. Frente a ti hay una pantalla gigante.\n\nAguanta %d segundos sin caerte para ganar." % [
+				config["columns"], config["rows"], int(config["time_limit"])],
+		},
+		{
+			"title": "La pantalla",
+			"body": "La pantalla cambia de ícono muy rápido. Cuando el sonido se vuelve más agudo está por detenerse.\n\nEl ícono en el que se detiene es el que se queda: corre a una casilla con ese ícono, %s. Las que van a caer parpadean en rojo justo antes.\n\n%d segundos después vuelven todas en otro orden y se repite. Cada vez tienes menos tiempo para moverte." % [
+				key.call("las demás desaparecen"), int(config["rest_seconds"])],
+		},
+		{
+			"title": "Cohetes",
+			"body": "Cuando quedan %d segundos empiezan a pasar cohetes de lado a lado, cada uno por una de las %d filas.\n\nAntes de que salga, su fila %s. Si el cohete te alcanza, te derriba de la plataforma: cámbiate de fila o salta justo cuando pase." % [
+				int(config["rocket_seconds_left"]), config["rows"], key.call("parpadea en rojo")],
+		},
+		{
+			"title": "Cómo se maneja",
+			"body": "Moverte: %s\nSaltar: %s\nPausa: %s · Esta ayuda: %s\n\nLa cámara está fija: ves todo el tablero desde arriba." % [
+				key.call(keys), InputHints.key_markup(&"jump"),
+				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
+		},
+	]
