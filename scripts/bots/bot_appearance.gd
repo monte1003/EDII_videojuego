@@ -1,9 +1,7 @@
 class_name BotAppearance
 extends Resource
 
-#Looks and wording of a bot. The AI never reads the colours or the model: it only needs
-#the debug colour and the tip. To use a final model, set "model_scene" (a scene whose root
-#is a Node3D facing +Z, with its feet at y = 0); the provisional primitives are skipped.
+#Look and wording of a bot; set model_scene (a BotLook facing +Z, feet at y = 0) to replace the primitives
 
 enum Detail { BROWS, NOTIFICATIONS, X_PLATE, MIRROR_PLATES }
 
@@ -17,3 +15,7 @@ enum Detail { BROWS, NOTIFICATIONS, X_PLATE, MIRROR_PLATES }
 @export var debug_color := Color.WHITE
 #Short healthy-use message shown the first time this bot tries to push the player
 @export var tip := ""
+#How this bot hunts on the graph
+@export var role := BotRole.Kind.CHASE
+#One line for the help: what this bot does that the others do not
+@export var behavior := ""

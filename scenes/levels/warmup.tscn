@@ -1,0 +1,25 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/levels/warmup.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/levels/warmup_world.gd" id="2_world"]
+[ext_resource type="Script" path="res://scripts/levels/level_input.gd" id="3_input"]
+[ext_resource type="Script" path="res://scripts/levels/warmup_hud.gd" id="4_hud"]
+[ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="5_pause"]
+[ext_resource type="Resource" path="res://resources/characters/fire.tres" id="6_fire"]
+
+[node name="Warmup" type="Node3D"]
+script = ExtResource("1_script")
+default_character = ExtResource("6_fire")
+
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("2_world")
+
+[node name="Actors" type="Node3D" parent="."]
+
+[node name="LevelInput" type="Node" parent="."]
+script = ExtResource("3_input")
+
+[node name="Hud" type="CanvasLayer" parent="."]
+script = ExtResource("4_hud")
+
+[node name="PauseMenu" parent="." instance=ExtResource("5_pause")]
