@@ -1,0 +1,39 @@
+[gd_scene format=3 uid="uid://dorn4rmlm6qk3"]
+
+[ext_resource type="PackedScene" uid="uid://cjibei1gr7nm3" path="res://scenes/characters/player.tscn" id="1_cax4w"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_7ksya"]
+size = Vector3(20, 1, 20)
+
+[sub_resource type="BoxMesh" id="BoxMesh_7ksya"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_cielo"]
+
+[sub_resource type="Sky" id="Sky_cielo"]
+sky_material = SubResource("ProceduralSkyMaterial_cielo")
+
+[sub_resource type="Environment" id="Environment_cielo"]
+background_mode = 2
+sky = SubResource("Sky_cielo")
+tonemap_mode = 2
+
+[node name="NivelDePrueba" type="Node3D" unique_id=1727769818]
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1380487463]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=1916078505]
+shape = SubResource("BoxShape3D_7ksya")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="StaticBody3D" unique_id=326691088]
+transform = Transform3D(20, 0, 0, 0, 1, 0, 0, 0, 20, 0, 0, 0)
+mesh = SubResource("BoxMesh_7ksya")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=482913570]
+environment = SubResource("Environment_cielo")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1812890914]
+transform = Transform3D(1, 0, 0, 0, 0.7071068, 0.7071068, 0, -0.7071068, 0.7071068, 0, 5, 0)
+shadow_enabled = true
+
+[node name="Player" parent="." unique_id=1064506660 instance=ExtResource("1_cax4w")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.65283585, 1.5, 2.369234)
