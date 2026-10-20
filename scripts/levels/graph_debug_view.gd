@@ -28,12 +28,12 @@ func setup(graph: WeightedGraph, positions: Dictionary) -> void:
 	add_child(instance)
 
 	for id: StringName in positions:
-		var label := _make_label(String(id), 72, Color("fdfbff"))
+		var label := _make_label(String(id), 110, Color("fdfbff"))
 		label.position = positions[id] + Vector3(0, 3.0, 0)
 		add_child(label)
 	for edge in graph.undirected_edges():
 		var key := _edge_key(edge["a"], edge["b"])
-		var label := _make_label("", 56, OPEN_COLOR)
+		var label := _make_label("", 96, OPEN_COLOR)
 		label.position = (positions[edge["a"]] + positions[edge["b"]]) / 2.0 + Vector3(0, 1.4, 0)
 		add_child(label)
 		_edge_labels[key] = label

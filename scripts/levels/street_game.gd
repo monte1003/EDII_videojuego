@@ -8,12 +8,13 @@ enum Phase { COUNTDOWN, RUNNING, ENDED }
 const SCREEN_ID := &"street_game"
 #1.5 m wide: half of the sidewalk, so the sidewalk is not a safe place
 const PEDESTRIAN_RADIUS := 0.75
-const PEDESTRIAN_HEIGHT := 1.8
 const CAR_COLORS: Array[Color] = [
 	Color("e14b6a"), Color("2f9fb8"), Color("e08a22"), Color("7b6cf6"), Color("3fb27f"), Color("fd567f"),
 ]
-const PEDESTRIAN_COLORS: Array[Color] = [
-	Color("f4c27a"), Color("9ad1f5"), Color("c9a0f0"), Color("f59ab3"), Color("8fd6b4"),
+#The four bot models that level 1 does not use walk the sidewalks
+const PEDESTRIAN_MODELS: Array[PackedScene] = [
+	preload("res://scenes/bots/models/ping.tscn"), preload("res://scenes/bots/models/bubble.tscn"),
+	preload("res://scenes/bots/models/like.tscn"), preload("res://scenes/bots/models/loop.tscn"),
 ]
 
 #A row where obstacles appear: a car lane or a sidewalk
@@ -123,7 +124,6 @@ func _ready() -> void:
 		InputHints.key_markup(&"jump"), int(time_limit)])
 	_hud.set_time(time_limit)
 	_hud.set_speed(start_speed_scale)
-	_hud.set_danger(0.0)
 
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_phase_timer = countdown_seconds
@@ -198,7 +198,6 @@ func _update_running(delta: float) -> void:
 
 	_check_hits()
 	if _runner.position.x >= end_x:
-		_hud.set_danger(1.0)
 		_finish(false, "Te arrastró la corriente",
 			"Aguantaste %d s. Cada choque te hace retroceder: anticipa el camino e inténtalo de nuevo." % floori(elapsed))
 		return
@@ -213,7 +212,6 @@ func _update_running(delta: float) -> void:
 		_hud_timer = 0.0
 		_hud.set_time(time_limit - elapsed)
 		_hud.set_speed(_speed_scale())
-		_hud.set_danger((_runner.position.x - start_x) / (end_x - start_x))
 
 
 func _speed_scale() -> float:
@@ -322,8 +320,7 @@ func _try_spawn(lane: Lane) -> void:
 func _spawn_pedestrian(lane: Lane) -> void:
 	_mark_spawned(lane, 0.0)
 	var pedestrian := StreetObstacle.new()
-	pedestrian.build_pedestrian(PEDESTRIAN_COLORS[_rng.randi() % PEDESTRIAN_COLORS.size()],
-		PEDESTRIAN_RADIUS, PEDESTRIAN_HEIGHT)
+	pedestrian.build_pedestrian(PEDESTRIAN_MODELS[_rng.randi() % PEDESTRIAN_MODELS.size()], PEDESTRIAN_RADIUS)
 	pedestrian.base_speed = pedestrian_speed
 	pedestrian.knockback = pedestrian_knockback
 	var slot := lane.slot_offset if _rng.randf() < 0.5 else -lane.slot_offset
