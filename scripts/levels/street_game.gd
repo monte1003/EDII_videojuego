@@ -5,10 +5,6 @@ extends RoundScene
 
 enum Phase { COUNTDOWN, RUNNING, ENDED }
 
-const SCREEN_ID := &"street_game"
-#Hit box of a pedestrian: half the stride along the street and half the shoulders across it,
-#measured on the "Texting Walk" of the three models (about 0.6 x 0.5 m)
-const PEDESTRIAN_HALF_SIZE := Vector2(0.3, 0.25)
 const PEDESTRIAN_HEIGHT := 1.8
 const CAR_COLORS: Array[Color] = [
 	Color("e14b6a"), Color("2f9fb8"), Color("e08a22"), Color("7b6cf6"), Color("3fb27f"), Color("fd567f"),
@@ -31,6 +27,9 @@ class Lane:
 		slot_offset = lane_slot_offset
 
 
+#Id of this street in the minigame catalog
+@export var minigame_id: StringName = &"street_game"
+
 @export_group("Round")
 @export var time_limit := 60.0
 @export var countdown_seconds := 3.0
@@ -48,16 +47,20 @@ class Lane:
 
 @export_group("Obstacles")
 @export var car_speed := 7.0
-#One white car (Meshy) for every car; only its colour changes. Empty falls back to boxes
+#Empty draws Juan's primitive hatchback in one of CAR_COLORS. A model here (like the white
+#Meshy car in assets/obstacles/car) is tinted with those colours instead
 @export var car_model: PackedScene
-#The model is scaled to this length; its width follows from its own proportions
+#Length of the car; a model keeps its own proportions for the width
 @export var car_length := 4.0
-#Width of the box cars without a model, also used to size the tank
+#Width of the primitive car, also used to size the tank
 @export var car_width := 2.4
 @export var pedestrian_speed := 2.6
-#People walking while looking at their phone (Meshy); each pedestrian picks one at random.
-#Empty falls back to capsules
+#Each pedestrian picks one at random: the bot models, or people walking while looking at
+#their phone (Meshy, assets/obstacles/pedestrian). Empty falls back to capsules
 @export var pedestrian_models: Array[PackedScene] = []
+#Hit box: half the stride along the street and half the width across it. For the Meshy people
+#it was measured on their "Texting Walk" (about 0.6 x 0.5 m), for the bots on their run (0.8 m)
+@export var pedestrian_half_size := Vector2(0.3, 0.25)
 #Flat, matte colours (one per pedestrian, at random), so the eye goes to the player
 @export var pedestrian_colors: Array[Color] = [Color("7d7891"), Color("6f8f7a")]
 #Meters per second the walk animation covers at normal speed; faster pedestrians play it faster
@@ -132,8 +135,8 @@ var _hud_timer := 0.0
 
 func _ready() -> void:
 	super()
-	if ScreenFlow.tree.has(SCREEN_ID):
-		ScreenFlow.mark_current(SCREEN_ID)
+	if ScreenFlow.tree.has(minigame_id):
+		ScreenFlow.mark_current(minigame_id)
 	_rng.randomize()
 	for color in pedestrian_colors:
 		var material := StandardMaterial3D.new()
@@ -296,7 +299,7 @@ func _clear_view(camera_position: Vector3) -> void:
 #Inside a session the results screen takes over; on its own the HUD shows the end panel
 func _end_round(victory: bool, title: String, message: String) -> void:
 	var lines: Array[Array] = [["Aguantaste", "%d s" % floori(elapsed)], ["Objetivo", "%d s" % int(time_limit)]]
-	if not finish_round(RoundResult.make(SCREEN_ID, victory, title, message, lines)):
+	if not finish_round(RoundResult.make(minigame_id, victory, title, message, lines)):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_hud.show_end(title, message, victory)
 
@@ -376,7 +379,7 @@ func _spawn_pedestrian(lane: Lane) -> void:
 	var material: StandardMaterial3D = null
 	if not _pedestrian_materials.is_empty():
 		material = _pedestrian_materials[_rng.randi() % _pedestrian_materials.size()]
-	pedestrian.build_pedestrian(model, material, PEDESTRIAN_HALF_SIZE, PEDESTRIAN_HEIGHT, pedestrian_animation_speed)
+	pedestrian.build_pedestrian(model, material, pedestrian_half_size, PEDESTRIAN_HEIGHT, pedestrian_animation_speed)
 	pedestrian.base_speed = pedestrian_speed
 	pedestrian.knockback = pedestrian_knockback
 	pedestrian.lane_z = lane.z
