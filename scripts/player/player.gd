@@ -46,6 +46,17 @@ func clear_motion() -> void:
 	jump_requested = false
 
 
+#For rounds with a fixed camera of their own: the mouse no longer turns the rig, so the
+#movement keys always go the same way on screen (forward is -Z)
+func lock_camera() -> void:
+	_camera_rig.set_process_unhandled_input(false)
+
+
+#Only the look grows: the body that collides stays the same size
+func set_model_scale(factor: float) -> void:
+	_model_pivot.scale = Vector3.ONE * factor
+
+
 func set_input_enabled(enabled: bool) -> void:
 	_input.enabled = enabled
 
