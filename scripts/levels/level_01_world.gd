@@ -220,32 +220,10 @@ func _build_barrier() -> void:
 	_barrier.visible = false
 
 
-#Soft floating shapes far from the route; no collisions
 func _scatter_decor() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 11
-	var colors: Array[Color] = [Color("f6e9ff"), LILAC_DARK, Palette.SKY_BOTTOM]
-	for i in 30:
-		var side := -1.0 if i % 2 == 0 else 1.0
-		var at := Vector3(side * rng.randf_range(34.0, 70.0), rng.randf_range(-14.0, 8.0), rng.randf_range(-95.0, 25.0))
-		var radius := rng.randf_range(2.0, 5.0)
-		var mesh: Mesh
-		if i % 2 == 0:
-			var sphere := SphereMesh.new()
-			sphere.radius = radius
-			sphere.height = radius * 2.0
-			sphere.radial_segments = 16
-			sphere.rings = 8
-			mesh = sphere
-		else:
-			var stone := CylinderMesh.new()
-			stone.top_radius = radius
-			stone.bottom_radius = radius * 0.55
-			stone.height = radius * 0.9
-			stone.radial_segments = 16
-			mesh = stone
-		var instance := _mesh(self, mesh, _material(colors[i % 3]), at)
-		instance.scale.y = rng.randf_range(0.6, 1.0)
+	var backdrop := Level01Backdrop.new()
+	add_child(backdrop)
+	backdrop.build()
 
 
 #Names float over the stations so the player knows what each place is for

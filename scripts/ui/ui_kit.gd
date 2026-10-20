@@ -5,6 +5,7 @@ extends RefCounted
 
 const HEADING_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 const BODY_FONT: Font = preload("res://assets/ui/fonts/body_font.tres")
+const BOLD_FONT: Font = preload("res://assets/ui/fonts/bold_font.tres")
 const BUTTON_FONT: Font = preload("res://assets/ui/fonts/button_font.tres")
 const GAME_BUTTON := preload("res://scenes/ui/game_button.tscn")
 const TEXT_BUTTON := preload("res://scenes/ui/text_button.tscn")
