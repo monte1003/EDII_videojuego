@@ -26,3 +26,9 @@ static func markup(text: String) -> String:
 
 static func key_markup(action: StringName) -> String:
 	return markup(key_label(action))
+
+
+#The four movement keys together, as in "W A S D"
+static func move_markup() -> String:
+	return markup(" ".join([key_label(&"move_forward"), key_label(&"move_left"),
+		key_label(&"move_back"), key_label(&"move_right")]))

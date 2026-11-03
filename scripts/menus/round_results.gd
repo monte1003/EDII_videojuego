@@ -5,7 +5,7 @@ extends Screen
 const BUTTON_WIDTH := 340.0
 const ENTER_ICON := preload("res://assets/ui/icons/key_enter.svg")
 
-var _card: PanelContainer
+var _column: VBoxContainer
 var _button: GameButton
 
 
@@ -36,65 +36,62 @@ func _build() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
-	_card = PanelContainer.new()
-	var style := UiKit.card_style(0.96, 36)
-	style.content_margin_left = 54
-	style.content_margin_right = 54
-	style.content_margin_top = 30
-	style.content_margin_bottom = 34
-	style.shadow_size = 22
-	_card.add_theme_stylebox_override("panel", style)
-	center.add_child(_card)
-	var column := VBoxContainer.new()
-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_theme_constant_override("separation", 10)
-	_card.add_child(column)
+	_column = VBoxContainer.new()
+	_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_column.add_theme_constant_override("separation", 14)
+	center.add_child(_column)
 
 	var where := "PRÁCTICA" if GameSession.practice else "RONDA %d DE %d" % [GameSession.round_index + 1, GameSession.plan.size()]
-	var caption := UiKit.heading("%s  ·  %s" % [where, info.title.to_upper() if info != null else ""], 22, Palette.INK_SOFT)
+	var caption := UiKit.label("%s  ·  %s" % [where, info.title.to_upper() if info != null else ""], UiKit.BUTTON_FONT, 13, Palette.INK_SOFT)
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(caption)
-	var headline := UiKit.heading(result.headline, 56, accent)
+	_column.add_child(caption)
+	var headline := UiKit.label(result.headline.to_upper(), UiKit.BUTTON_FONT, 34, accent)
 	headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(headline)
-	var detail := UiKit.body(result.detail, 23)
+	_column.add_child(headline)
+	var detail := UiKit.body(result.detail, 21)
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	detail.custom_minimum_size = Vector2(560, 0)
-	column.add_child(detail)
+	detail.custom_minimum_size = Vector2(640, 0)
+	_column.add_child(detail)
 
 	if not result.stats.is_empty():
+		var gap_stats := Control.new()
+		gap_stats.custom_minimum_size = Vector2(0, 8)
+		_column.add_child(gap_stats)
 		var stats := GridContainer.new()
 		stats.columns = result.stats.size()
-		stats.add_theme_constant_override("h_separation", 46)
+		stats.add_theme_constant_override("h_separation", 54)
 		stats.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		column.add_child(stats)
+		_column.add_child(stats)
 		for line in result.stats:
 			var cell := VBoxContainer.new()
-			cell.add_theme_constant_override("separation", -2)
-			var value := UiKit.heading(str(line[1]), 40)
+			cell.add_theme_constant_override("separation", 2)
+			var value := UiKit.label(str(line[1]), UiKit.BUTTON_FONT, 26, Palette.INK)
 			value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			cell.add_child(value)
-			var name_label := UiKit.body(str(line[0]).to_upper(), 16)
+			var name_label := UiKit.label(str(line[0]).to_upper(), UiKit.BUTTON_FONT, 10, Palette.INK_SOFT)
 			name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			cell.add_child(name_label)
 			stats.add_child(cell)
 
 	if not GameSession.practice:
-		column.add_child(_build_progress())
+		var gap_pips := Control.new()
+		gap_pips.custom_minimum_size = Vector2(0, 4)
+		_column.add_child(gap_pips)
+		_column.add_child(_build_progress())
 	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(0, 6)
-	column.add_child(gap)
+	gap.custom_minimum_size = Vector2(0, 14)
+	_column.add_child(gap)
 	_button = UiKit.game_button(_next_text(), true, BUTTON_WIDTH, true)
 	_button.icon = ENTER_ICON
 	_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_button.pressed.connect(GameSession.advance)
-	column.add_child(_button)
+	_column.add_child(_button)
 	if not GameSession.practice:
-		var leave := UiKit.text_button("ABANDONAR PARTIDA", Palette.AMBER, 18)
+		var leave := UiKit.text_button("ABANDONAR PARTIDA", Palette.AMBER, 14)
 		leave.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		leave.pressed.connect(GameSession.abandon)
-		column.add_child(leave)
+		_column.add_child(leave)
 
 
 func _next_text() -> String:
@@ -121,9 +118,9 @@ func _build_progress() -> Control:
 
 func _animate_in() -> void:
 	await get_tree().process_frame
-	_card.pivot_offset = _card.size / 2.0
-	_card.scale = Vector2.ONE * 0.9
-	_card.modulate.a = 0.0
+	_column.pivot_offset = _column.size / 2.0
+	_column.scale = Vector2.ONE * 0.94
+	_column.modulate.a = 0.0
 	var tween := create_tween().set_parallel().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(_card, "scale", Vector2.ONE, 0.4)
-	tween.tween_property(_card, "modulate:a", 1.0, 0.25)
+	tween.tween_property(_column, "scale", Vector2.ONE, 0.4)
+	tween.tween_property(_column, "modulate:a", 1.0, 0.25)

@@ -11,6 +11,8 @@ var move_input := Vector2.ZERO
 var jump_requested := false
 #Extra horizontal velocity from outside (bot shoves); it fades out on its own
 var push_velocity := Vector3.ZERO
+#Constant drift of the ground under the player (a conveyor belt); the round sets it every frame
+var external_velocity := Vector3.ZERO
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _model: CharacterModel
@@ -30,6 +32,19 @@ func set_character(character: CharacterData) -> void:
 		_model.queue_free()
 	_model = character.model_scene.instantiate() as CharacterModel
 	_model_pivot.add_child(_model)
+
+
+func view_camera() -> Camera3D:
+	return _camera_rig.get_node("PitchPivot/SpringArm3D/Camera3D") as Camera3D
+
+
+#The way the camera is turned around the vertical axis
+func view_yaw() -> float:
+	return _camera_rig.global_rotation.y
+
+
+func frame_camera(distance: float, pitch_degrees: float) -> void:
+	_camera_rig.frame(distance, pitch_degrees)
 
 
 #A shove: the horizontal part fades out, the vertical part is a small hop
@@ -71,8 +86,8 @@ func _physics_process(delta: float) -> void:
 
 	#Movement follows the camera direction
 	var direction := _camera_rig.get_yaw_basis() * Vector3(move_input.x, 0.0, move_input.y)
-	velocity.x = direction.x * move_speed + push_velocity.x
-	velocity.z = direction.z * move_speed + push_velocity.z
+	velocity.x = direction.x * move_speed + push_velocity.x + external_velocity.x
+	velocity.z = direction.z * move_speed + push_velocity.z + external_velocity.z
 	push_velocity = push_velocity.move_toward(Vector3.ZERO, push_decay * delta)
 	move_and_slide()
 

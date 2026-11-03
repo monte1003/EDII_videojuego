@@ -88,7 +88,7 @@ func _text(shown: Array[ChaserBot]) -> String:
 	return "\n".join(lines)
 
 
-#A bot goes from B to J, then E-H closes and the route cost goes from 6 to 11
+#A bot goes from B to L, then F-J closes and the route cost goes from 8.5 to 9.5
 func _start_demo() -> void:
 	if not _level.rules.is_running() or _level.bot_appearances.is_empty():
 		return
@@ -98,10 +98,10 @@ func _start_demo() -> void:
 	_demo_bot.push_enabled = false
 	_demo_bot.manual_target = true
 	_demo_bot.hold_movement = true
-	_demo_bot.activate(&"J")
+	_demo_bot.activate(&"L")
 	_demo_time = 0.0
 	_demo_blocked = false
-	_hud.toast("Demostración: de B a J por el camino de menor costo")
+	_hud.toast("Demostración: de B a L por el camino de menor costo")
 
 
 func _update_demo(delta: float) -> void:
@@ -111,10 +111,10 @@ func _update_demo(delta: float) -> void:
 	if _demo_time >= 3.0 and not _demo_blocked:
 		_demo_blocked = true
 		_level.set_bridge_closed(true)
-		_hud.toast("Se bloquea E-H: Dijkstra elige otro camino")
+		_hud.toast("Se bloquea %s-%s: Dijkstra elige otro camino" % [Level01Layout.BLOCK_EDGE[0], Level01Layout.BLOCK_EDGE[1]])
 	if _demo_time >= 5.0:
 		_demo_bot.hold_movement = false
 	if _demo_blocked and _demo_time >= 3.0 + _level.settings.block_duration:
 		_level.set_bridge_closed(false)
-	if _demo_bot.current_vertex == &"J" and not _demo_bot.is_crossing():
+	if _demo_bot.current_vertex == &"L" and not _demo_bot.is_crossing():
 		end_demo()

@@ -6,8 +6,8 @@
 [resource]
 script = ExtResource("1_script")
 id = &"level_01"
-title = "Escapa del feed"
-tagline = "Llega a la meta antes de que los bots te alcancen"
+title = "Carrera del feed"
+tagline = "Llega primero a la desconexión: cintas, puentes que caen y bots"
 scene_path = "res://scenes/levels/level_01.tscn"
 accent = Color(0.882, 0.294, 0.416, 1)
 ready = true
