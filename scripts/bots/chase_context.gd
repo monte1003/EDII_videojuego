@@ -19,6 +19,15 @@ var targets: Array[ChaseTarget] = []
 var bots: Array[ChaserBot] = []
 
 
+#The racer that is closest to the goal
+func leader() -> ChaseTarget:
+	var best: ChaseTarget = null
+	for target in targets:
+		if best == null or target.progress < best.progress:
+			best = target
+	return best
+
+
 func target_of(player_id: int) -> ChaseTarget:
 	for target in targets:
 		if target.player_id == player_id:

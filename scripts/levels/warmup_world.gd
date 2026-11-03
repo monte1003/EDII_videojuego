@@ -5,15 +5,28 @@ extends Node3D
 
 const SLAB_RADIUS := 13.0
 const SLAB_THICKNESS := 0.6
-const FLOOR_COLOR := Color("cdbcf7")
-const SKIRT_COLOR := Color("9d88e0")
+const FLOOR_COLOR := Color("b79cf8")
+const MINT := Color("86e8c6")
 const CYAN := Color("4fd6e8")
 const MAGENTA := Color("ee4fb8")
 const AMBER := Color("ffc857")
+const BOARD_TEXTURE: Texture2D = preload("res://assets/textures/board_checker.png")
+#Giant pieces floating around the plaza: model, how many, size range and whether the size is the height
+const DECOR: Array[Dictionary] = [
+	{"id": &"cloud", "count": 8, "size": Vector2(14.0, 24.0), "tall": false},
+	{"id": &"heart", "count": 4, "size": Vector2(4.0, 7.0), "tall": true},
+	{"id": &"bubble", "count": 3, "size": Vector2(6.0, 9.0), "tall": false},
+	{"id": &"bell", "count": 2, "size": Vector2(4.0, 6.0), "tall": true},
+	{"id": &"phone", "count": 2, "size": Vector2(8.0, 12.0), "tall": true},
+	{"id": &"island", "count": 3, "size": Vector2(9.0, 14.0), "tall": false},
+]
 
 var station_position := Vector3.ZERO
 
-var _station_material: StandardMaterial3D
+var _station_materials: Array[StandardMaterial3D] = []
+var _board_materials: Dictionary = {}
+var _decor: Array[Dictionary] = []
+var _clock := 0.0
 
 
 func build(jump_height: float, jump_reach: float) -> void:
@@ -32,42 +45,53 @@ func build(jump_height: float, jump_reach: float) -> void:
 
 #The console lights up when the player uses it
 func set_station_active(active: bool) -> void:
-	var color := AMBER if active else MAGENTA
-	_station_material.albedo_color = color
-	_station_material.emission = color
+	for material in _station_materials:
+		material.emission_enabled = active
+		material.emission = AMBER
+		material.emission_energy_multiplier = 0.6
+
+
+func _process(delta: float) -> void:
+	_clock += delta
+	for entry in _decor:
+		var node: Node3D = entry["node"]
+		var wave: float = _clock * entry["speed"] + entry["phase"]
+		node.position.y = entry["base_y"] + sin(wave) * 0.8
+		node.rotation.y = entry["yaw"] + sin(wave * 0.7) * 0.2
 
 
 func _build_sky() -> void:
 	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color(0.737, 0.784, 0.98)
-	sky_material.sky_horizon_color = Color(0.85, 0.72, 0.92)
-	sky_material.ground_bottom_color = Color(0.973, 0.643, 0.702)
-	sky_material.ground_horizon_color = Color(0.85, 0.72, 0.92)
+	sky_material.sky_top_color = Color(0.36, 0.62, 1.0)
+	sky_material.sky_horizon_color = Color(1.0, 0.84, 0.93)
+	sky_material.sky_curve = 0.2
+	sky_material.ground_bottom_color = Color(1.0, 0.8, 0.86)
+	sky_material.ground_horizon_color = Color(1.0, 0.84, 0.93)
 	var sky := Sky.new()
 	sky.sky_material = sky_material
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.ambient_light_energy = 0.9
+	environment.ambient_light_energy = 0.7
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.fog_enabled = true
-	environment.fog_light_color = Color(0.85, 0.76, 0.95)
-	environment.fog_density = 0.004
+	environment.fog_light_color = Color(0.96, 0.8, 0.98)
+	environment.fog_density = 0.0016
 	var world := WorldEnvironment.new()
 	world.environment = environment
 	add_child(world)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52, 35, 0)
-	sun.light_color = Color(1, 0.95, 0.93)
-	sun.light_energy = 0.8
+	sun.light_color = Color(1, 0.94, 0.86)
+	sun.light_energy = 0.75
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 45.0
 	add_child(sun)
 
 
 func _build_slab() -> void:
-	_cylinder_body(Vector3(0.0, 0.0, 0.0), SLAB_RADIUS, FLOOR_COLOR)
+	_cylinder_body(Vector3(0.0, 0.0, 0.0), SLAB_RADIUS, _board(FLOOR_COLOR))
 	var rim := MeshInstance3D.new()
 	var torus := TorusMesh.new()
 	torus.inner_radius = SLAB_RADIUS - 0.18
@@ -81,7 +105,7 @@ func _build_slab() -> void:
 
 
 func _island(center: Vector3, radius: float) -> void:
-	_cylinder_body(center, radius, FLOOR_COLOR)
+	_cylinder_body(center, radius, _board(MINT))
 	var mark := MeshInstance3D.new()
 	var disc := CylinderMesh.new()
 	disc.top_radius = 1.1
@@ -94,7 +118,7 @@ func _island(center: Vector3, radius: float) -> void:
 	add_child(mark)
 
 
-func _cylinder_body(center: Vector3, radius: float, color: Color) -> void:
+func _cylinder_body(center: Vector3, radius: float, material: Material) -> void:
 	var body := StaticBody3D.new()
 	body.position = center + Vector3(0.0, -SLAB_THICKNESS / 2.0, 0.0)
 	var shape := CylinderShape3D.new()
@@ -110,11 +134,12 @@ func _cylinder_body(center: Vector3, radius: float, color: Color) -> void:
 	mesh.radial_segments = 48
 	var instance := MeshInstance3D.new()
 	instance.mesh = mesh
-	instance.material_override = _material(color)
+	instance.material_override = material
 	body.add_child(instance)
 	add_child(body)
 
 
+#A low striped bumper: the box is what stops the player and the models are laid end to end along it
 func _bar(at: Vector3, yaw: float, height: float) -> void:
 	var body := StaticBody3D.new()
 	body.position = at + Vector3(0.0, height / 2.0, 0.0)
@@ -125,12 +150,13 @@ func _bar(at: Vector3, yaw: float, height: float) -> void:
 	var collider := CollisionShape3D.new()
 	collider.shape = shape
 	body.add_child(collider)
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.material_override = _material(MAGENTA, 0.5)
-	body.add_child(instance)
+	var base := PropKit.base_size(&"bumper")
+	var pieces := maxi(roundi(size.x / (height / base.y * base.x)), 1)
+	var piece_length := size.x / pieces
+	for index in pieces:
+		var piece := PropKit.make(&"bumper", Vector3(piece_length, 0.0, 0.0))
+		piece.position = Vector3(-size.x / 2.0 + piece_length * (index + 0.5), -height / 2.0, 0.0)
+		body.add_child(piece)
 	add_child(body)
 
 
@@ -141,7 +167,7 @@ func _station(at: Vector3) -> void:
 	mesh.bottom_radius = 0.85
 	mesh.height = 1.1
 	base.mesh = mesh
-	base.material_override = _material(Color("6d55c2"))
+	base.material_override = _material(Color("7a5fdc"))
 	base.position = at + Vector3(0.0, 0.55, 0.0)
 	add_child(base)
 	var body := StaticBody3D.new()
@@ -153,35 +179,51 @@ func _station(at: Vector3) -> void:
 	collider.shape = shape
 	body.add_child(collider)
 	add_child(body)
-	var screen := MeshInstance3D.new()
-	var disc := CylinderMesh.new()
-	disc.top_radius = 0.5
-	disc.bottom_radius = 0.5
-	disc.height = 0.06
-	screen.mesh = disc
-	_station_material = _material(MAGENTA, 1.6)
-	screen.material_override = _station_material
-	screen.position = at + Vector3(0.0, 1.13, 0.0)
-	add_child(screen)
+	var heart := PropKit.make(&"heart", Vector3(0.0, 1.1, 0.0))
+	heart.position = at + Vector3(0.0, 1.45, 0.0)
+	add_child(heart)
+	_station_materials = PropKit.own_materials(heart)
+	_register_decor(heart, 0.0, 0.0, 1.1)
+	set_station_active(false)
 
 
 func _scatter_decor() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 11
-	var colors: Array[Color] = [Color("a98df0"), MAGENTA, CYAN, AMBER]
-	for index in 14:
-		var angle := rng.randf() * TAU
-		var distance := rng.randf_range(24.0, 48.0)
-		var bubble := MeshInstance3D.new()
-		var sphere := SphereMesh.new()
-		var radius := rng.randf_range(0.8, 2.4)
-		sphere.radius = radius
-		sphere.height = radius * 2.0
-		bubble.mesh = sphere
-		bubble.material_override = _material(colors[index % colors.size()], 0.25, 0.7)
-		bubble.position = Vector3(cos(angle) * distance, rng.randf_range(-6.0, 9.0), sin(angle) * distance)
-		bubble.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(bubble)
+	for kind in DECOR:
+		for _step in kind["count"] as int:
+			var size := rng.randf_range((kind["size"] as Vector2).x, (kind["size"] as Vector2).y)
+			var item: Node3D
+			if kind["tall"]:
+				item = PropKit.make_tall(kind["id"], size, Color.WHITE, false)
+			else:
+				item = PropKit.make_long(kind["id"], size, Color.WHITE, false)
+			var angle := rng.randf() * TAU
+			var distance := 30.0 + size * 0.5 + rng.randf_range(0.0, 22.0)
+			item.position = Vector3(cos(angle) * distance, rng.randf_range(-4.0, 14.0), sin(angle) * distance)
+			item.rotation.y = -angle + PI / 2.0
+			add_child(item)
+			_register_decor(item, item.rotation.y, rng.randf() * TAU, rng.randf_range(0.35, 0.8))
+
+
+func _register_decor(node: Node3D, yaw: float, phase: float, speed: float) -> void:
+	_decor.append({"node": node, "base_y": node.position.y, "yaw": yaw, "phase": phase, "speed": speed})
+
+
+#A game-show floor: the checker texture tinted with the colour of the piece, mapped in world space
+func _board(color: Color) -> StandardMaterial3D:
+	var key := color.to_html()
+	if _board_materials.has(key):
+		return _board_materials[key]
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.albedo_texture = BOARD_TEXTURE
+	material.roughness = 0.55
+	material.uv1_triplanar = true
+	material.uv1_world_triplanar = true
+	material.uv1_scale = Vector3.ONE / 6.0
+	_board_materials[key] = material
+	return material
 
 
 func _material(color: Color, emission := 0.0, alpha := 1.0) -> StandardMaterial3D:
