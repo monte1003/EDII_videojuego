@@ -1,15 +1,16 @@
 class_name Level01
 extends RoundScene
 
-#Level 1 "Escapa del feed": the scene spawns and shows; the rules live in Level01Rules and each bot hunts by its role
+#Level 1 "Carrera del feed": one to four racers cross a graph of islands while four bots hunt them; the scene spawns and shows,
+#the rules live in Level01Rules, the feed in Level01Events and each bot hunts by its role
 
 enum Phase { COUNTDOWN, RUNNING, ENDED }
 
 const BOT_SCENE := preload("res://scenes/bots/chaser_bot.tscn")
 const SCREEN_ID := &"level_01"
 const FALL_Y := -12.0
-#Meters between the starting points of several players
-const START_SPREAD := 1.6
+#Meters between the starting places of the racers
+const START_SPREAD := 2.2
 
 #Tuning numbers of the round; leave empty to use the defaults
 @export var settings: Level01Settings
@@ -19,19 +20,27 @@ const START_SPREAD := 1.6
 var phase := Phase.COUNTDOWN
 var graph: WeightedGraph
 var rules: Level01Rules
+var events: Level01Events
 var bots: Array[ChaserBot] = []
 
 var _context := ChaseContext.new()
+#Every racer by id
 var _players: Dictionary = {}
 var _locators: Dictionary = {}
+var _names: Dictionary = {}
 var _local_id := 0
 var _rng := RandomNumberGenerator.new()
 var _phase_timer := 0.0
 var _countdown_shown := 0
 var _hud_timer := 0.0
+var _standings_timer := 0.0
+#Where each racer that arrived walks to, so the gate of the goal stays free for the next one
+var _cheering: Dictionary = {}
 var _hints_shown: Dictionary = {}
 #Bots waiting for their turn, each with the second of the round at which it is released
 var _release_schedule: Array[Dictionary] = []
+#The graph with every bridge open: the distance to the goal of the standings does not jump when the feed takes one down
+var _cost_to_goal: Dictionary = {}
 var _debug: Level01Debug
 
 @onready var _world: Level01World = $World
@@ -51,24 +60,30 @@ func _ready() -> void:
 		_rng.randomize()
 
 	graph = Level01Layout.build_graph()
-	var ids: Array[int] = []
+	_measure_the_course()
+	var human_ids: Array[int] = []
 	for slot in participants:
-		ids.append(slot.player_id)
-	_local_id = ids[0]
-	rules = Level01Rules.new(settings, ids, Level01Layout.START)
+		human_ids.append(slot.player_id)
+	_local_id = human_ids[0]
+	rules = Level01Rules.new(settings, human_ids, Level01Layout.START)
 	rules.block_changed.connect(set_bridge_closed)
 	rules.outcome_decided.connect(_on_outcome)
 	rules.player_fell.connect(_on_player_fell)
+	rules.racer_finished.connect(_on_racer_finished)
+	rules.window_opened.connect(_on_window_opened)
 
-	_spawn_players()
-	_world.build(_locator_list(), settings.refuge_radius)
+	_spawn_racers()
+	_world.build(_locator_list(), settings.refuge_radius, settings.belt_speed)
 	_setup_context()
 	_spawn_bots()
+	events = Level01Events.new(settings, _rng, Level01Layout.fragile_edges())
+	events.warned.connect(_on_feed_warned)
+	events.closed.connect(_on_feed_closed)
+	events.reopened.connect(_on_feed_reopened)
 
 	_debug = Level01Debug.new()
 	add_child(_debug)
 	_debug.setup(self, $DebugView, _hud)
-	_hud.help_requested.connect(open_help)
 	_level_input.debug_toggled.connect(_debug.toggle_view)
 	_level_input.demo_toggled.connect(_debug.toggle_demo)
 	_level_input.interact_pressed.connect(_on_interact)
@@ -79,6 +94,7 @@ func _ready() -> void:
 	_hud.set_attempts(settings.attempts, settings.attempts)
 	_hud.hide_countdown()
 	_update_ability_chips()
+	_update_standings()
 	_help.setup(HelpPages.level_one(settings, bot_appearances))
 	_begin_countdown()
 
@@ -100,7 +116,7 @@ func make_bot(appearance: BotAppearance, vertex: StringName) -> ChaserBot:
 	return bot
 
 
-#Closes or opens the E-H bridge for the bots; the bridge itself stays walkable for the players
+#Closes or opens the bridge Bloquear works on for the bots; it stays walkable for the players
 func set_bridge_closed(closed: bool) -> void:
 	graph.set_edge_enabled(Level01Layout.BLOCK_EDGE[0], Level01Layout.BLOCK_EDGE[1], not closed)
 	_world.set_block_visual(closed)
@@ -128,19 +144,43 @@ func _help_allowed() -> bool:
 	return phase != Phase.ENDED
 
 
-func _spawn_players() -> void:
-	var points: Array[Vector3] = []
-	for index in participants.size():
-		points.append(_spawn_position(Level01Layout.START) + Vector3(START_SPREAD * (index - (participants.size() - 1) / 2.0), 0, 0))
+#The cost of the way to the goal from every island, with every bridge open
+func _measure_the_course() -> void:
+	var open := Level01Layout.build_graph()
+	for id: StringName in Level01Layout.POSITIONS:
+		var route := open.shortest_path(id, Level01Layout.GOAL)
+		_cost_to_goal[id] = route.cost if route.found else INF
+
+
+func _spawn_racers() -> void:
+	var points := _start_slots(participants.size())
 	for player in spawn_players(_actors, points):
 		player.set_input_enabled(false)
-		_players[player.player_id] = player
-		var locator := PlayerLocator.new()
-		locator.player_id = player.player_id
-		locator.place_changed.connect(_on_place_changed.bind(player.player_id))
-		add_child(locator)
-		_locators[player.player_id] = locator
-		locator.force_vertex(Level01Layout.START)
+		_register_racer(player, GameState.get_player_name(player.player_id), player.player_id)
+		_names[player.player_id] = "TÚ" if player.player_id == _local_id else GameState.get_player_name(player.player_id)
+
+
+#Free places across the start, the middle ones first
+func _start_slots(count: int) -> Array[Vector3]:
+	var offsets: Array[float] = []
+	for index in count:
+		offsets.append(START_SPREAD * (index - (count - 1) / 2.0))
+	offsets.sort_custom(func(a: float, b: float) -> bool: return absf(a) < absf(b))
+	var slots: Array[Vector3] = []
+	for offset in offsets:
+		slots.append(_spawn_position(Level01Layout.START) + Vector3(offset, 0.0, 0.0))
+	return slots
+
+
+func _register_racer(player: Player, shown_name: String, id: int) -> void:
+	_players[id] = player
+	_names[id] = shown_name
+	var locator := PlayerLocator.new()
+	locator.player_id = id
+	locator.place_changed.connect(_on_place_changed.bind(id))
+	add_child(locator)
+	_locators[id] = locator
+	locator.force_vertex(Level01Layout.START)
 
 
 func _locator_list() -> Array[PlayerLocator]:
@@ -200,7 +240,11 @@ func _begin_countdown() -> void:
 	_phase_timer = settings.countdown_seconds
 	_countdown_shown = ceili(_phase_timer)
 	_hud.show_countdown(str(_countdown_shown))
-	_hud.toast("Llega a la isla M · %s abre la ayuda" % InputHints.key_label(&"help"))
+	var move_keys := " ".join([InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
+		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
+	_hud.show_mission("Llega a la isla %s" % Level01Layout.GOAL, [
+		"%s|mover" % move_keys, "%s|saltar" % InputHints.key_label(&"jump"),
+		"%s|usar" % InputHints.key_label(&"interact"), "%s|ayuda" % InputHints.key_label(&"help")], 5.0)
 
 
 func _begin_round() -> void:
@@ -208,7 +252,7 @@ func _begin_round() -> void:
 	for id: int in _players:
 		(_players[id] as Player).set_input_enabled(id == _local_id)
 	_hud.hide_countdown()
-	_hud.toast("¡Corre! Los bots salen de a uno: el primer perseguidor, en %d s" % int(settings.bot_head_start))
+	_hud.warn("¡CORRE!")
 
 
 #Each bot leaves when its role says, like the ghosts leaving their house one after the other
@@ -219,19 +263,26 @@ func _release_due_bots() -> void:
 			continue
 		(entry["bot"] as ChaserBot).activate(local_locator().vertex)
 		_release_schedule.remove_at(index)
-		_hint_once(&"release", "¡Los bots te buscan! Cada uno lo hace a su manera")
+		_hint_once(&"release", "Los bots te buscan")
 
 
 func _update_running(delta: float) -> void:
 	rules.tick(delta)
 	if phase != Phase.RUNNING:
 		return
+	events.tick(delta, _can_close)
 	_release_due_bots()
-	for id: int in _players:
+	for id: int in _players.keys():
+		if not _players.has(id):
+			continue
 		if (_players[id] as Player).global_position.y < FALL_Y:
 			rules.fall(id)
 			if phase != Phase.RUNNING:
 				return
+	_walk_finished()
+	_apply_belts()
+	_apply_hazards()
+	_update_progress()
 	_update_context()
 	_update_prompt()
 	_hud_timer += delta
@@ -239,9 +290,94 @@ func _update_running(delta: float) -> void:
 		_hud_timer = 0.0
 		_hud.set_time(rules.time_left)
 		_update_ability_chips()
+		_update_window()
+	_standings_timer += delta
+	if _standings_timer >= 0.25:
+		_standings_timer = 0.0
+		_update_standings()
 	var refuge := _local_state().refuge_left
 	if refuge > 0.0 and _flat_distance(_any_player().global_position, _world.refuge_center) > settings.refuge_radius:
 		rules.leave_refuge(_local_id)
+
+
+#Whoever arrived walks into the goal island and stops there
+func _walk_finished() -> void:
+	for id: int in _cheering:
+		var player := _players[id] as Player
+		var to: Vector3 = _cheering[id] - player.global_position
+		to.y = 0.0
+		if to.length() < 0.8:
+			player.move_input = Vector2.ZERO
+			continue
+		var local := (player.get_node("CameraRig") as PlayerCamera).get_yaw_basis().inverse() * to.normalized()
+		player.move_input = Vector2(local.x, local.z)
+
+
+#A conveyor bridge drags whoever is on it, racers and bots alike
+func _apply_belts() -> void:
+	for id: int in _players:
+		var player := _players[id] as Player
+		var locator := _locators[id] as PlayerLocator
+		var flow := Vector3.ZERO
+		if locator.on_bridge and player.is_on_floor():
+			flow = Level01Layout.belt_flow(locator.bridge_a, locator.bridge_b) * settings.belt_speed
+		player.external_velocity = flow
+	for bot in bots:
+		var pair := bot.crossing_pair()
+		bot.external_velocity = Level01Layout.belt_flow(pair[0], pair[1]) * settings.belt_speed if pair.size() == 2 else Vector3.ZERO
+
+
+#The bars turn and whoever they touch is thrown; a jump goes over them
+func _apply_hazards() -> void:
+	_world.update_hazards(rules.elapsed)
+	for id: int in _players:
+		var locator := _locators[id] as PlayerLocator
+		if locator.on_bridge or not Level01Layout.SPINNERS.has(locator.vertex):
+			continue
+		var player := _players[id] as Player
+		var spinner: Dictionary = Level01Layout.SPINNERS[locator.vertex]
+		var centre: Vector3 = Level01Layout.POSITIONS[locator.vertex]
+		if not Level01Hazards.hits(centre, spinner, rules.elapsed, player.global_position, player.global_position.y - centre.y):
+			continue
+		if not rules.register_hit(id):
+			continue
+		var direction := Level01Hazards.push_direction(centre, spinner, player.global_position)
+		player.apply_push(direction * settings.spinner_push + Vector3.UP * settings.push_lift)
+		if id == _local_id:
+			_hud.warn("¡Barra!")
+			_hud.flash(Palette.CORAL, 0.35, 0.4)
+
+
+#How far each racer is from the goal, for the standings and for the bots that wait for the leader
+func _update_progress() -> void:
+	for id: int in _players:
+		var value := _progress_of(id)
+		rules.state_of(id).progress = value
+		var target := _context.target_of(id)
+		if target != null:
+			target.progress = value
+
+
+func _progress_of(id: int) -> float:
+	var position := (_players[id] as Player).global_position
+	var best := INF
+	for vertex in (_locators[id] as PlayerLocator).chase_candidates():
+		var away := Vector2(position.x - Level01Layout.POSITIONS[vertex].x, position.z - Level01Layout.POSITIONS[vertex].z).length()
+		best = minf(best, _cost_to_goal.get(vertex, INF) + away / Level01Layout.UNIT)
+	return best
+
+
+func _update_standings() -> void:
+	var order := rules.standings()
+	_hud.set_place(order.find(_local_id) + 1, order.size())
+
+
+#The doors of the goal close a while after the first racer arrives
+func _update_window() -> void:
+	if rules.window_left > 0.0:
+		_hud.show_window("LA META CIERRA EN %d" % ceili(rules.window_left))
+	else:
+		_hud.hide_window()
 
 
 func _update_context() -> void:
@@ -249,15 +385,15 @@ func _update_context() -> void:
 		target.detection_radius = rules.detection_radius(target.player_id)
 		target.protected = rules.is_protected(target.player_id)
 	if rules.is_protected(_local_id):
-		_hud.show_protection("Protegido %.1f s" % rules.protection_left(_local_id))
+		_hud.show_protection("Protegido")
 	else:
 		_hud.hide_protection()
 
 
 func _update_ability_chips() -> void:
-	_world.set_station_active(&"E", rules.active_left(_local_id, Level01Rules.Ability.BLOCK) > 0.0)
-	_world.set_station_active(&"F", rules.active_left(_local_id, Level01Rules.Ability.SILENCE) > 0.0)
-	_world.set_station_active(&"D", rules.active_left(_local_id, Level01Rules.Ability.REFUGE) > 0.0)
+	_world.set_station_active(&"block", rules.active_left(_local_id, Level01Rules.Ability.BLOCK) > 0.0)
+	_world.set_station_active(&"silence", rules.active_left(_local_id, Level01Rules.Ability.SILENCE) > 0.0)
+	_world.set_station_active(&"refuge", rules.active_left(_local_id, Level01Rules.Ability.REFUGE) > 0.0)
 	_hud.set_ability(&"block", _ability_text(Level01Rules.Ability.BLOCK), rules.cooldown_left(_local_id, Level01Rules.Ability.BLOCK) <= 0.0)
 	_hud.set_ability(&"silence", _ability_text(Level01Rules.Ability.SILENCE), rules.cooldown_left(_local_id, Level01Rules.Ability.SILENCE) <= 0.0)
 	_hud.set_ability(&"pause", _ability_text(Level01Rules.Ability.REFUGE), rules.cooldown_left(_local_id, Level01Rules.Ability.REFUGE) <= 0.0)
@@ -278,70 +414,77 @@ func _local_state() -> Level01Rules.PlayerState:
 
 
 func _on_interact() -> void:
-	if phase == Phase.RUNNING and not paused:
+	if phase == Phase.RUNNING and not paused and _local_state().is_racing():
 		_try_interact()
 
 
-func _near(id: StringName) -> bool:
-	return _flat_distance(_any_player().global_position, _world.station_positions[id]) <= settings.station_radius
+func _near(station: StringName) -> bool:
+	return _flat_distance(_any_player().global_position, _world.station_positions[station]) <= settings.station_radius
 
 
 func _try_interact() -> void:
-	if _near(&"E"):
-		_use(Level01Rules.Ability.BLOCK, "Bloquear", "Bloquear: poner límites cierra el paso a quien te molesta")
-	elif _near(&"F"):
-		_use(Level01Rules.Ability.SILENCE, "Silenciar", "Silenciar: tú decides qué notificaciones te alcanzan")
-	elif _near(&"D"):
-		_use(Level01Rules.Ability.REFUGE, "La pausa digital", "Pausa digital: parar un momento también es avanzar")
+	if _near(&"block"):
+		_use(Level01Rules.Ability.BLOCK, "Bloquear", "Puente bloqueado para los bots")
+	elif _near(&"silence"):
+		_use(Level01Rules.Ability.SILENCE, "Silenciar", "Los bots te ven menos")
+	elif _near(&"refuge"):
+		_use(Level01Rules.Ability.REFUGE, "Pausa digital", "Nadie te empuja")
 
 
-func _use(ability: int, name: String, done: String) -> void:
+func _use(ability: int, shown_name: String, done: String) -> void:
 	if rules.use_ability(_local_id, ability) == Level01Rules.Use.COOLDOWN:
-		_hud.toast("%s se está recargando: %d s" % [name, ceili(rules.cooldown_left(_local_id, ability))])
+		_hud.toast("%s: recarga %d s" % [shown_name, ceili(rules.cooldown_left(_local_id, ability))])
 	else:
 		_hud.toast(done)
 
 
 func _update_prompt() -> void:
-	var text := ""
-	if _near(&"E"):
-		text = "Pulsa %s · Bloquear" % InputHints.key_markup(&"interact")
-	elif _near(&"F"):
-		text = "Pulsa %s · Silenciar" % InputHints.key_markup(&"interact")
-	elif _near(&"D"):
-		text = "Pulsa %s · Pausa digital" % InputHints.key_markup(&"interact")
-	if text == "":
+	var action := ""
+	if not _local_state().is_racing():
+		_hud.hide_prompt()
+		return
+	if _near(&"block"):
+		action = "BLOQUEAR"
+	elif _near(&"silence"):
+		action = "SILENCIAR"
+	elif _near(&"refuge"):
+		action = "PAUSA DIGITAL"
+	if action == "":
 		_hud.hide_prompt()
 	else:
-		_hud.show_prompt(text)
+		_hud.show_prompt(InputHints.key_label(&"interact"), action)
 
 
 func _on_place_changed(player_id: int) -> void:
-	if phase != Phase.RUNNING or player_id != _local_id:
+	if phase != Phase.RUNNING or not _players.has(player_id):
 		return
-	var locator := local_locator()
+	var locator := _locators[player_id] as PlayerLocator
 	if locator.on_bridge:
 		return
 	var vertex := locator.vertex
 	if vertex == Level01Layout.GOAL:
 		rules.reach_goal(player_id)
-	elif vertex == &"H" and rules.reach_checkpoint(player_id, vertex):
-		_world.set_checkpoint_active(true)
-		_hud.toast("Checkpoint: guardar tu progreso es descansar sin perderlo")
-	else:
+	elif vertex == Level01Layout.CHECKPOINT and rules.reach_checkpoint(player_id, vertex):
+		if player_id == _local_id:
+			_world.set_checkpoint_active(true)
+			_hud.toast("Checkpoint guardado")
+	elif player_id == _local_id:
 		_station_hint(vertex)
 
 
 #Each station explains itself the first time the player reaches its island
 func _station_hint(vertex: StringName) -> void:
 	var text := ""
-	match vertex:
-		&"E":
-			text = "Isla E: pulsa %s junto al letrero para bloquear el puente E-H a los bots" % InputHints.key_label(&"interact")
-		&"F":
-			text = "Isla F: pulsa %s junto a la campana y los bots te ven menos %d s" % [InputHints.key_label(&"interact"), int(settings.silence_duration)]
-		&"D":
-			text = "Isla D: entra a la burbuja y pulsa %s: nadie te empuja un momento" % InputHints.key_label(&"interact")
+	var stations: Dictionary = Level01Layout.STATIONS
+	if vertex == stations[&"block"]:
+		text = "%s junto al letrero cierra el puente %s-%s a los bots" % [
+			InputHints.key_label(&"interact"), Level01Layout.BLOCK_EDGE[0], Level01Layout.BLOCK_EDGE[1]]
+	elif vertex == stations[&"silence"]:
+		text = "%s junto a la campana: los bots te ven menos %d s" % [InputHints.key_label(&"interact"), int(settings.silence_duration)]
+	elif vertex == stations[&"refuge"]:
+		text = "Entra a la burbuja y pulsa %s: nadie te empuja" % InputHints.key_label(&"interact")
+	elif Level01Layout.SPINNERS.has(vertex):
+		text = "Una barra gira: salta sobre ella o rodéala"
 	if text != "":
 		_hint_once(vertex, text)
 
@@ -357,16 +500,85 @@ func _on_player_fell(player_id: int, attempts_left: int) -> void:
 	if player_id == _local_id:
 		_hud.set_attempts(attempts_left, settings.attempts)
 	if attempts_left <= 0:
+		if player_id != _local_id:
+			_retire(player_id)
 		return
 	var vertex := rules.state_of(player_id).checkpoint
 	var player := _players[player_id] as Player
-	player.global_position = _spawn_position(vertex)
+	player.global_position = _spawn_position(vertex) + Vector3(_rng.randf_range(-1.5, 1.5), 0.0, _rng.randf_range(-1.5, 1.5))
 	player.clear_motion()
 	(player.get_node("CameraRig") as PlayerCamera).rotation.y = 0.0
 	(player.get_node("ModelPivot") as Node3D).rotation.y = PI
 	(_locators[player_id] as PlayerLocator).force_vertex(vertex)
 	if player_id == _local_id:
-		_hud.toast("Caíste. Te quedan %d intentos: respira y retoma" % attempts_left)
+		_hud.toast("Caíste · te quedan %d" % attempts_left)
+		_hud.flash(Palette.CORAL, 0.4, 0.5)
+
+
+#A racer out of attempts leaves the course
+func _retire(player_id: int) -> void:
+	_hud.toast("%s se quedó sin intentos" % _names.get(player_id, "Un jugador"))
+	var target := _context.target_of(player_id)
+	if target != null:
+		_context.targets.erase(target)
+	var player := _players[player_id] as Player
+	_players.erase(player_id)
+	_locators[player_id].queue_free()
+	_locators.erase(player_id)
+	player.queue_free()
+
+
+func _on_racer_finished(player_id: int, place: int) -> void:
+	_cheering[player_id] = Level01Layout.POSITIONS[Level01Layout.GOAL] + Vector3(_rng.randf_range(-2.5, 2.5), 0.0, _rng.randf_range(-2.5, 2.5))
+	var total := rules.racers_in_race()
+	if player_id == _local_id:
+		var player := _players[player_id] as Player
+		player.set_input_enabled(false)
+		_hud.warn("¡META!" if total == 1 else "¡%s!" % _ordinal(place))
+	else:
+		_hud.toast("%s llegó %s" % [_names.get(player_id, "Alguien"), _ordinal(place)])
+	_update_standings()
+
+
+func _on_window_opened(_seconds: float) -> void:
+	if _local_state().is_racing():
+		_hud.warn("¡Se cierra la meta!")
+
+
+#The feed announces the bridge that is about to fall: it flashes
+func _on_feed_warned(a: StringName, b: StringName, seconds: float) -> void:
+	_world.flash_bridge(a, b, true)
+	_hud.toast("El puente %s-%s cae en %d s" % [a, b, int(seconds)])
+
+
+func _on_feed_closed(a: StringName, b: StringName) -> void:
+	graph.set_edge_enabled(a, b, false)
+	_world.flash_bridge(a, b, false)
+	_world.set_bridge_open(a, b, false)
+	_hint_once(&"feed", "Puente %s-%s caído: busca otro camino" % [a, b])
+
+
+func _on_feed_reopened(a: StringName, b: StringName) -> void:
+	graph.set_edge_enabled(a, b, true)
+	_world.set_bridge_open(a, b, true)
+
+
+#A bridge may fall only if every racer that is still running keeps a way to the goal
+func _can_close(a: StringName, b: StringName) -> bool:
+	if not graph.is_edge_enabled(a, b):
+		return false
+	graph.set_edge_enabled(a, b, false)
+	var fine := true
+	for id: int in _players:
+		if not rules.state_of(id).is_racing():
+			continue
+		var reaches := false
+		for vertex in (_locators[id] as PlayerLocator).chase_candidates():
+			if graph.shortest_path(vertex, Level01Layout.GOAL).found:
+				reaches = true
+		fine = fine and reaches
+	graph.set_edge_enabled(a, b, true)
+	return fine
 
 
 func _on_push_announced(bot: ChaserBot) -> void:
@@ -375,49 +587,78 @@ func _on_push_announced(bot: ChaserBot) -> void:
 		_hint_once(bot.appearance.id, bot.appearance.tip)
 
 
-func _on_push_landed(bot: ChaserBot, direction: Vector3, player_id: int) -> void:
-	if not rules.register_hit(player_id):
+func _on_push_landed(_bot: ChaserBot, direction: Vector3, player_id: int) -> void:
+	if not _players.has(player_id) or not rules.register_hit(player_id):
 		return
 	(_players[player_id] as Player).apply_push(direction * settings.push_speed + Vector3.UP * settings.push_lift)
 	if player_id == _local_id:
-		_hud.toast("¡Empujón de %s! Cuidado con el borde" % bot.appearance.display_name)
+		_hud.flash(Palette.CORAL, 0.35, 0.4)
 
 
 func _on_outcome(outcome: int) -> void:
+	var state := _local_state()
+	var total := rules.racers_in_race()
 	match outcome:
 		Level01Rules.Outcome.WON:
-			_finish(true, "¡Te desconectaste a tiempo!",
-				"Llegaste a la zona de desconexión con %d s de sobra. Cuidar tu atención también es ganar." % ceili(rules.time_left))
+			match state.place:
+				0:
+					_finish("Se cerró la meta", "Alguien llegó primero y no alcanzaste a tiempo. Busca la ruta de menor costo e inténtalo de nuevo.")
+				1:
+					_finish("¡Primero en desconectarte!", "Llegaste antes que todos. Cuidar tu atención también es ganar.")
+				_:
+					_finish("¡Llegaste %s!" % _ordinal(state.place), "Cada puesto cuenta: respirar y retomar también es avanzar. De %d corredores, llegaste en el puesto %d." % [total, state.place])
 		Level01Rules.Outcome.LOST_TIME:
-			_finish(false, "Se acabó el tiempo",
-				"Ir sin pausa agota. Respirar y retomar también cuenta: inténtalo de nuevo.")
+			if rules.window_left == 0.0:
+				_finish("Se cerró la meta", "Alguien llegó primero y no alcanzaste a tiempo. Busca la ruta de menor costo e inténtalo de nuevo.")
+			else:
+				_finish("Se acabó el tiempo", "Ir sin pausa agota. Respirar y retomar también cuenta: inténtalo de nuevo.")
 		Level01Rules.Outcome.LOST_ATTEMPTS:
-			_finish(false, "Sin intentos",
-				"Caer no es fracasar. Prueba otra ruta y usa Bloquear para frenar a los bots.")
+			_finish("Sin intentos", "Caer no es fracasar. Prueba otra ruta y usa Bloquear para frenar a los bots.")
 
 
-func _finish(victory: bool, title: String, message: String) -> void:
+func _finish(title: String, message: String) -> void:
 	if phase == Phase.ENDED:
 		return
 	phase = Phase.ENDED
+	var state := _local_state()
+	var victory := state.reached_goal()
 	_hud.set_time(rules.time_left)
+	_hud.hide_window()
+	_update_standings()
 	_debug.end_demo()
 	for id: int in _players:
 		var player := _players[id] as Player
 		player.set_input_enabled(false)
 		player.clear_motion()
+		player.external_velocity = Vector3.ZERO
 	for bot in bots:
 		bot.deactivate()
 	#A late Esc press must not open the pause menu over the final panel
 	_pause_menu.set_process_unhandled_input(false)
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_hud.hide_prompt()
+	_hud.hide_mission()
+	var arrived := 0
+	for other: Level01Rules.PlayerState in rules.players.values():
+		if other.reached_goal():
+			arrived += 1
 	var lines: Array[Array] = [
-		["Tiempo restante", "%d s" % ceili(rules.time_left)],
-		["Intentos", "%d de %d" % [_local_state().attempts_left, settings.attempts]],
+		["Puesto", ("%s de %d" % [_ordinal(state.place), rules.racers_in_race()]) if victory else "sin llegar"],
+		["Tiempo", ("%d s" % ceili(state.finish_time)) if victory else "%d s" % ceili(rules.elapsed)],
+		["Intentos", "%d de %d" % [state.attempts_left, settings.attempts]],
+		["Llegaron", "%d de %d" % [arrived, rules.racers_in_race()]],
 	]
-	if not finish_round(RoundResult.make(SCREEN_ID, victory, title, message, lines)):
-		_hud.show_end(title, message, victory)
+	#One line and one fact on the screen for a moment, then the results
+	var banner := title.to_upper()
+	if victory:
+		banner = "¡META!" if rules.racers_in_race() == 1 else "¡%s!" % ("PRIMERO" if state.place == 1 else "LLEGASTE %s" % _ordinal(state.place))
+	_hud.show_banner(banner, "%d s" % ceili(state.finish_time) if victory else "", Palette.PAPER if victory else Palette.GOLD)
+	get_tree().create_timer(1.8).timeout.connect(_report.bind(RoundResult.make(SCREEN_ID, victory, title, message, lines), victory))
+
+
+func _report(result: RoundResult, victory: bool) -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if not finish_round(result):
+		_hud.show_end(result.headline, result.detail, victory)
 
 
 func _retry() -> void:
@@ -425,6 +666,10 @@ func _retry() -> void:
 		GameSession.restart_round()
 	else:
 		ScreenFlow.reload_current()
+
+
+func _ordinal(place: int) -> String:
+	return "%d.º" % place
 
 
 func _flat_distance(a: Vector3, b: Vector3) -> float:

@@ -2,6 +2,8 @@ class_name TextButton
 extends Button
 
 @export var accent := Palette.CORAL
+#For a dark background (the pause): paper letters and a pale pill
+@export var light := false
 
 var _tween: Tween
 var _pill := StyleBoxFlat.new()
@@ -20,9 +22,9 @@ func _ready() -> void:
 	_set_pill(0.0)
 	for box in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
 		add_theme_stylebox_override(box, _pill)
-	add_theme_color_override("font_color", Color(Palette.INK, 0.72))
+	add_theme_color_override("font_color", Color(Palette.PAPER if light else Palette.INK, 0.8))
 	for state in ["font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
-		add_theme_color_override(state, Palette.INK)
+		add_theme_color_override(state, Palette.PAPER if light else Palette.INK)
 	pivot_offset = size / 2.0
 	mouse_entered.connect(_on_enter)
 	mouse_exited.connect(_on_exit)
@@ -54,8 +56,8 @@ func _on_resized() -> void:
 
 
 func _set_pill(amount: float) -> void:
-	_pill.bg_color = Color(Palette.PAPER, 0.55 * amount)
-	_pill.border_color = Color(Palette.PAPER, 0.95 * amount)
+	_pill.bg_color = Color(Palette.PAPER, (0.16 if light else 0.55) * amount)
+	_pill.border_color = Color(Palette.PAPER, (0.5 if light else 0.95) * amount)
 
 
 func _on_enter() -> void:
@@ -73,6 +75,6 @@ func _animate(amount: float, scale_to: float) -> void:
 	if _tween and _tween.is_valid():
 		_tween.kill()
 	_tween = create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_tween.tween_method(_set_pill, _pill.border_color.a / 0.95, amount, 0.2)
+	_tween.tween_method(_set_pill, _pill.border_color.a / (0.5 if light else 0.95), amount, 0.2)
 	_tween.tween_property(_dot, "modulate:a", amount, 0.2)
 	_tween.tween_property(self, "scale", Vector2.ONE * scale_to, 0.2)

@@ -1,34 +1,29 @@
 class_name SocialDropWorld
 extends Node3D
 
-#The SocialDrop stage: a platform of social media tiles (6 across, 5 deep) floating in the
-#sky, the giant screen in front of the player where the spin is shown, and a sea of clouds
-#drifting below
+#The SocialDrop stage: a platform of app icon tiles (6 across, 5 deep) floating in the sky, a giant screen on each side
+#where the spin is shown, and a sea of clouds drifting below
 
 const COLUMNS := 6
 const ROWS := 5
-const TILE_SIZE := 2.75
-const TILE_GAP := 0.22
+const TILE_SIZE := 2.5
+const TILE_GAP := 0.2
 const TILE_THICKNESS := 0.4
 const TILE_SHADER := preload("res://assets/ui/shaders/icon_tile.gdshader")
 #How far a tile falls before it hides; it comes back from half of it
 const DROP_DEPTH := 14.0
 const DROP_TIME := 0.9
 const RISE_TIME := 0.7
-#Free meters between the front edge of the platform and the screen
-const SCREEN_DISTANCE := 3.0
-const SCREEN_SIZE := Vector2(11.5, 6.6)
-const SCREEN_HEIGHT := 3.6
-#The screen leans back toward the camera above, so it does not look squashed from there
-const SCREEN_TILT_DEGREES := 35.0
-#Fixed camera high above the back of the platform: the whole board and the screen fit in it
-const CAMERA_POSITION := Vector3(0.0, 22.2, 12.4)
-const CAMERA_TARGET := Vector3(0.0, 0.0, -4.1)
-const CAMERA_FOV := 60.0
+#Free meters between the edge of the platform and each screen, and the size and height of a screen
+const SCREEN_DISTANCE := 4.5
+const SCREEN_SIZE := Vector2(9.0, 5.0)
+const SCREEN_HEIGHT := 4.8
+#The screens lean back a little, so they face the players that look up at them
+const SCREEN_TILT_DEGREES := 12.0
 const SCREEN_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 const SCREEN_FONT_SIZE := 220
 const TEXT_PIXEL_SIZE := 0.012
-const SIDE_COLOR := Color("9d88e0")
+const SIDE_COLOR := Color("a48ae8")
 const FRAME_COLOR := Color("372c58")
 const PANEL_COLOR := Color("1d1638")
 const CYAN := Color("4fd6e8")
@@ -43,10 +38,6 @@ const CLOUD_SPEED_RANGE := Vector2(0.8, 2.2)
 const CLOUD_COLORS: Array[Color] = [Color("ffffff"), Color("f3ecff"), Color("fde8f1")]
 #Icon cards floating far around the platform, turning slowly
 const CARD_COUNT := 10
-#Round shadow under the player, on the floor even while it jumps
-const SHADOW_DIAMETER := 2.1
-#How much the gold marker over the player bobs up and down
-const MARKER_BOB := 0.12
 #Rockets fly along a row this high; they start and end this far past the sides of the board
 const ROCKET_HEIGHT := 0.85
 const ROCKET_RUN_OUT := 20.0
@@ -81,46 +72,35 @@ class Rocket:
 	var hit := false
 
 
-var camera: Camera3D
-
 var _icons: Array[Texture2D] = []
 var _tiles: Array[Tile] = []
 var _clouds: Array[Cloud] = []
 var _cards: Array[Node3D] = []
 var _rockets: Array[Rocket] = []
 var _decor_time := 0.0
-var _marker: MeshInstance3D
-var _shadow: MeshInstance3D
-var _screen_label: Label3D
-var _screen_icon: Sprite3D
+var _screen_labels: Array[Label3D] = []
+var _screen_icons: Array[Sprite3D] = []
 var _punch_tween: Tween
+var _view_yaw := 0.0
 
 
 func build(icons: Array[Texture2D], rng: RandomNumberGenerator) -> void:
 	_icons = icons
 	_build_sky()
-	_build_camera()
 	_build_tiles()
-	_build_screen()
+	_build_screens()
 	_build_clouds()
 	_build_cards()
-	_build_player_marks()
 	shuffle(rng)
 
 
-#The gold triangle floats "marker_height" over the player and its shadow stays on the floor,
-#smaller the higher the player jumps; the shadow goes away once the player falls
-func follow_player(at: Vector3, marker_height: float) -> void:
-	_marker.position = at + Vector3(0.0, marker_height + sin(_decor_time * 4.0) * MARKER_BOB, 0.0)
-	_shadow.visible = at.y > -0.3
-	_shadow.position = Vector3(at.x, 0.03, at.z)
-	_shadow.scale = Vector3.ONE * clampf(1.0 - at.y * 0.3, 0.5, 1.0)
-
-
-#With an even count the centre of the platform is a gap: start on a tile next to it
-func spawn_point() -> Vector3:
+#Four free places along the middle row, one per player
+func spawn_points() -> Array[Vector3]:
 	var half_step := (TILE_SIZE + TILE_GAP) / 2.0
-	return Vector3(half_step if COLUMNS % 2 == 0 else 0.0, 0.05, half_step if ROWS % 2 == 0 else 0.0)
+	var points: Array[Vector3] = []
+	for index in [-3, -1, 1, 3]:
+		points.append(Vector3(index * half_step, 0.05, 0.0))
+	return points
 
 
 #Every icon is on at least one tile; the rest of the tiles get any icon at random
@@ -176,24 +156,36 @@ func restore(rng: RandomNumberGenerator) -> void:
 		tween.tween_callback(tile.collider.set_deferred.bind("disabled", false))
 
 
+#The icons of the tiles turn to the way the camera looks, so they always read upright
+func set_view_yaw(yaw: float) -> void:
+	if absf(yaw - _view_yaw) < 0.02:
+		return
+	_view_yaw = yaw
+	for tile in _tiles:
+		tile.top.set_shader_parameter("turn", yaw)
+
+
 func screen_text(text: String, color: Color) -> void:
-	_screen_icon.hide()
-	_screen_label.text = text
-	_screen_label.modulate = color
-	_screen_label.show()
-	#Long words shrink to fit the screen
 	var width := SCREEN_FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, SCREEN_FONT_SIZE).x * TEXT_PIXEL_SIZE
-	_punch(_screen_label, minf(1.0, SCREEN_SIZE.x * 0.86 / maxf(width, 0.01)), 1.3)
+	#Long words shrink to fit the screen
+	var fit := minf(1.0, SCREEN_SIZE.x * 0.86 / maxf(width, 0.01))
+	for index in _screen_labels.size():
+		_screen_icons[index].hide()
+		_screen_labels[index].text = text
+		_screen_labels[index].modulate = color
+		_screen_labels[index].show()
+	_punch(_screen_labels, fit, 1.3)
 
 
 #"settle" is the final image of a spin: it lands with a bigger bounce
 func screen_icon(index: int, settle: bool) -> void:
-	_screen_label.hide()
 	var texture := _icons[index]
-	_screen_icon.texture = texture
-	_screen_icon.pixel_size = SCREEN_SIZE.y * 0.82 / maxf(texture.get_height(), 1.0)
-	_screen_icon.show()
-	_punch(_screen_icon, 1.0, 1.3 if settle else 1.06)
+	for screen_index in _screen_icons.size():
+		_screen_labels[screen_index].hide()
+		_screen_icons[screen_index].texture = texture
+		_screen_icons[screen_index].pixel_size = SCREEN_SIZE.y * 0.8 / maxf(texture.get_height(), 1.0)
+		_screen_icons[screen_index].show()
+	_punch(_screen_icons, 1.0, 1.3 if settle else 1.06)
 
 
 #A rocket along "row" (0 is the row next to the screen); "direction" +1 flies to the right
@@ -348,19 +340,13 @@ func _tint(amount: float, tiles: Array[Tile]) -> void:
 		tile.top.set_shader_parameter("tint", color)
 
 
-func _punch(node: Node3D, base: float, from: float) -> void:
+func _punch(nodes: Array, base: float, from: float) -> void:
 	if _punch_tween and _punch_tween.is_valid():
 		_punch_tween.kill()
-	node.scale = Vector3.ONE * base * from
-	_punch_tween = create_tween()
-	_punch_tween.tween_property(node, "scale", Vector3.ONE * base, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-
-func _build_camera() -> void:
-	camera = Camera3D.new()
-	camera.fov = CAMERA_FOV
-	add_child(camera)
-	camera.look_at_from_position(CAMERA_POSITION, CAMERA_TARGET)
+	_punch_tween = create_tween().set_parallel(true)
+	for node: Node3D in nodes:
+		node.scale = Vector3.ONE * base * from
+		_punch_tween.tween_property(node, "scale", Vector3.ONE * base, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _build_tiles() -> void:
@@ -398,14 +384,29 @@ func _build_tiles() -> void:
 			_tiles.append(tile)
 
 
-func _build_screen() -> void:
-	var half := ROWS * (TILE_SIZE + TILE_GAP) / 2.0
+#A screen on each side of the platform, facing the middle: wherever the camera turns there is one to see
+func _build_screens() -> void:
+	var half_columns := COLUMNS * (TILE_SIZE + TILE_GAP) / 2.0
+	var half_rows := ROWS * (TILE_SIZE + TILE_GAP) / 2.0
+	for entry in [
+		[Vector3(0.0, SCREEN_HEIGHT, -(half_rows + SCREEN_DISTANCE)), 0.0],
+		[Vector3(0.0, SCREEN_HEIGHT, half_rows + SCREEN_DISTANCE), PI],
+		[Vector3(-(half_columns + SCREEN_DISTANCE), SCREEN_HEIGHT, 0.0), PI / 2.0],
+		[Vector3(half_columns + SCREEN_DISTANCE, SCREEN_HEIGHT, 0.0), -PI / 2.0],
+	]:
+		_build_screen(entry[0], entry[1])
+
+
+func _build_screen(at: Vector3, yaw: float) -> void:
+	var mount := Node3D.new()
+	mount.position = at
+	mount.rotation.y = yaw
+	add_child(mount)
 	var screen := Node3D.new()
-	screen.position = Vector3(0.0, SCREEN_HEIGHT, -(half + SCREEN_DISTANCE))
 	screen.rotation.x = -deg_to_rad(SCREEN_TILT_DEGREES)
-	add_child(screen)
-	_box(screen, Vector3(SCREEN_SIZE.x + 1.3, SCREEN_SIZE.y + 1.3, 0.3), Vector3(0.0, 0.0, -0.2), _material(MAGENTA, 1.2))
-	_box(screen, Vector3(SCREEN_SIZE.x + 0.8, SCREEN_SIZE.y + 0.8, 0.6), Vector3.ZERO, _material(FRAME_COLOR))
+	mount.add_child(screen)
+	_box(screen, Vector3(SCREEN_SIZE.x + 1.2, SCREEN_SIZE.y + 1.2, 0.3), Vector3(0.0, 0.0, -0.2), _material(MAGENTA, 1.2))
+	_box(screen, Vector3(SCREEN_SIZE.x + 0.7, SCREEN_SIZE.y + 0.7, 0.6), Vector3.ZERO, _material(FRAME_COLOR))
 	var panel := MeshInstance3D.new()
 	var quad := QuadMesh.new()
 	quad.size = SCREEN_SIZE
@@ -413,21 +414,25 @@ func _build_screen() -> void:
 	panel.material_override = _material(PANEL_COLOR, 0.4)
 	panel.position.z = 0.31
 	screen.add_child(panel)
+	#A post that holds it, so it does not float
+	_box(mount, Vector3(0.9, SCREEN_HEIGHT + 3.0, 0.9), Vector3(0.0, -(SCREEN_HEIGHT + 3.0) / 2.0 + 0.2, -0.6), _material(FRAME_COLOR))
 
-	_screen_icon = Sprite3D.new()
-	_screen_icon.position.z = 0.34
-	_screen_icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	_screen_icon.hide()
-	screen.add_child(_screen_icon)
+	var icon := Sprite3D.new()
+	icon.position.z = 0.34
+	icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.hide()
+	screen.add_child(icon)
+	_screen_icons.append(icon)
 
-	_screen_label = Label3D.new()
-	_screen_label.font = SCREEN_FONT
-	_screen_label.font_size = SCREEN_FONT_SIZE
-	_screen_label.pixel_size = TEXT_PIXEL_SIZE
-	_screen_label.outline_size = 36
-	_screen_label.outline_modulate = Palette.EDGE
-	_screen_label.position.z = 0.36
-	screen.add_child(_screen_label)
+	var label := Label3D.new()
+	label.font = SCREEN_FONT
+	label.font_size = SCREEN_FONT_SIZE
+	label.pixel_size = TEXT_PIXEL_SIZE
+	label.outline_size = 36
+	label.outline_modulate = Palette.EDGE
+	label.position.z = 0.36
+	screen.add_child(label)
+	_screen_labels.append(label)
 
 
 func _box(parent: Node3D, size: Vector3, at: Vector3, material: Material) -> void:
@@ -491,62 +496,6 @@ func _build_cards() -> void:
 		card.rotation = Vector3(rng.randf_range(-0.3, 0.3), rng.randf() * TAU, rng.randf_range(-0.3, 0.3))
 		add_child(card)
 		_cards.append(card)
-
-
-func _build_player_marks() -> void:
-	#A flat triangle pointing down that always faces the camera, drawn over everything, with a
-	#dark border so it stands out on any tile
-	_marker = _billboard_triangle(0.5, Palette.EDGE, 0)
-	_marker.add_child(_billboard_triangle(0.38, Palette.GOLD, 1))
-	add_child(_marker)
-
-	var gradient := Gradient.new()
-	gradient.set_color(0, Color(0.0, 0.0, 0.0, 0.65))
-	#Solid in the middle, soft only near the edge
-	gradient.set_offset(0, 0.45)
-	gradient.set_color(1, Color(0.0, 0.0, 0.0, 0.0))
-	var texture := GradientTexture2D.new()
-	texture.gradient = gradient
-	texture.fill = GradientTexture2D.FILL_RADIAL
-	texture.fill_from = Vector2(0.5, 0.5)
-	texture.fill_to = Vector2(1.0, 0.5)
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.disable_fog = true
-	material.albedo_texture = texture
-	var disc := PlaneMesh.new()
-	disc.size = Vector2.ONE * SHADOW_DIAMETER
-	_shadow = MeshInstance3D.new()
-	_shadow.mesh = disc
-	_shadow.material_override = material
-	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_shadow)
-
-
-#"size" is half its width; "priority" orders the triangles drawn at the same spot
-func _billboard_triangle(size: float, color: Color, priority: int) -> MeshInstance3D:
-	var vertices := PackedVector3Array([
-		Vector3(-size, size * 0.8, 0.0), Vector3(size, size * 0.8, 0.0), Vector3(0.0, -size * 0.95, 0.0)])
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	material.no_depth_test = true
-	material.disable_fog = true
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.render_priority = priority
-	var triangle := MeshInstance3D.new()
-	triangle.mesh = mesh
-	triangle.material_override = material
-	triangle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return triangle
 
 
 func _build_sky() -> void:

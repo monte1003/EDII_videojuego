@@ -77,23 +77,33 @@ func _check_chase() -> void:
 func _check_ambush() -> void:
 	var bot := _bot(BotRole.Kind.AMBUSH, &"D")
 	_player_at(&"S")
-	_expect(bot.role.pick_target(bot, _context, _target) == &"E", "el emboscador espera dos plataformas por delante del jugador")
-	_player_at(&"H")
-	var near := _bot(BotRole.Kind.AMBUSH, &"E")
-	_expect(near.role.pick_target(near, _context, _target) == &"H", "si ya está cerca, deja la emboscada y persigue")
-	_player_at(&"J")
-	_expect(bot.role.pick_target(bot, _context, _target) == &"J", "ante la meta no espera dentro de ella: persigue")
+	_expect(bot.role.pick_target(bot, _context, _target) == &"F", "el emboscador espera dos plataformas por delante del jugador")
+	var near := _bot(BotRole.Kind.AMBUSH, &"B")
+	_expect(near.role.pick_target(near, _context, _target) == &"S", "si ya está cerca, deja la emboscada y persigue")
+	_player_at(&"L")
+	_expect(bot.role.pick_target(bot, _context, _target) == &"L", "ante la meta no espera dentro de ella: persigue")
+	var rival := ChaseTarget.new()
+	rival.node = _player
+	rival.locator = PlayerLocator.new()
+	_nodes.append(rival.locator)
+	rival.locator.vertex = &"I"
+	rival.progress = 1.0
+	_target.progress = 9.0
+	_context.targets.append(rival)
+	_expect(bot.role.pick_target(bot, _context, _target) == &"K", "el emboscador espera al que va primero, no al que lo está mirando")
+	_context.targets.erase(rival)
 
 
 func _check_guard() -> void:
-	var guard := _bot(BotRole.Kind.GUARD, &"J")
+	var guard := _bot(BotRole.Kind.GUARD, &"K")
 	_expect(not guard.role.needs_sight(), "el guardián no necesita ver al jugador")
 	_player_at(&"S")
-	_expect(guard.role.pick_target(guard, _context, _target) == &"J", "el guardián espera en la puerta por donde irá el jugador")
-	_player_at(&"I")
-	_expect(guard.role.pick_target(guard, _context, _target) == &"I", "si el jugador llega a una puerta, el guardián va por él")
+	var post: StringName = guard.role.pick_target(guard, _context, _target)
+	_expect(post == &"K" or post == &"L", "el guardián espera en una puerta de la meta: %s" % post)
+	_player_at(&"L")
+	_expect(guard.role.pick_target(guard, _context, _target) == &"L", "si el jugador llega a una puerta, el guardián va por él")
 	var free: Array[StringName] = [&"A"]
-	_expect(guard.role.spawn_vertex(free, _context) == &"J", "el guardián empieza en una puerta de la meta")
+	_expect(guard.role.spawn_vertex(free, _context) == &"K", "el guardián empieza en una puerta de la meta")
 	_expect(guard.role.release_delay(5.0) == 0.0 and _bot(BotRole.Kind.CHASE, &"A").role.release_delay(5.0) == 5.0,
 		"el guardián sale al empezar y el perseguidor tras la ventaja")
 
@@ -104,7 +114,8 @@ func _check_flank() -> void:
 	_context.bots.assign([lead, flanker])
 	_player_at(&"E")
 	var pick := flanker.role.pick_target(flanker, _context, _target)
-	_expect(pick == &"D" or pick == &"F", "el que rodea va al lado del jugador más lejano del perseguidor: %s" % pick)
+	_expect(_context.graph.neighbors(&"E").has(pick) and _context.cost(&"B", pick) > _context.cost(&"B", &"E"),
+		"el que rodea va a una vecina del jugador más lejos del perseguidor que el jugador: %s" % pick)
 	_context.bots.clear()
 
 
@@ -125,11 +136,11 @@ func _check_traffic() -> void:
 
 func _check_penalties() -> void:
 	var graph := Level01Layout.build_graph()
-	var plain := graph.shortest_path(&"B", &"J")
-	_expect(plain.path == [&"B", &"E", &"H", &"J"] and plain.cost == 6.0 and plain.penalty == 0.0, "sin penalizaciones B a J sigue siendo B-E-H-J por 6")
-	var avoided := graph.shortest_path(&"B", &"J", [], {&"H": 10.0})
-	_expect(avoided.found and not avoided.path.has(&"H"), "una plataforma muy cargada se rodea: %s" % [avoided.path])
-	_expect(avoided.cost == 11.0 and avoided.penalty == 0.0, "el costo informado son los puentes: 11 y sin penalización")
-	var forced := graph.shortest_path(&"B", &"J", [], {&"H": 1.0})
-	_expect(forced.path == [&"B", &"E", &"H", &"J"] and forced.cost == 6.0 and is_equal_approx(forced.penalty, 1.0),
+	var plain := graph.shortest_path(&"B", &"L")
+	_expect(plain.path == [&"B", &"F", &"J", &"L"] and plain.cost == 8.5 and plain.penalty == 0.0, "sin penalizaciones B a L sigue siendo B-F-J-L por 8,5")
+	var avoided := graph.shortest_path(&"B", &"L", [], {&"J": 10.0})
+	_expect(avoided.found and not avoided.path.has(&"J"), "una plataforma muy cargada se rodea: %s" % [avoided.path])
+	_expect(avoided.cost == 9.5 and avoided.penalty == 0.0, "el costo informado son los puentes: 9,5 y sin penalización")
+	var forced := graph.shortest_path(&"B", &"L", [], {&"J": 0.5})
+	_expect(forced.path == [&"B", &"F", &"J", &"L"] and forced.cost == 8.5 and is_equal_approx(forced.penalty, 0.5),
 		"una penalización pequeña no cambia la ruta y se informa aparte")
