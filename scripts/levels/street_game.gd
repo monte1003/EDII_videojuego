@@ -6,16 +6,23 @@ extends RoundScene
 enum Phase { COUNTDOWN, RUNNING, ENDED }
 
 const SCREEN_ID := &"street_game"
-#1.5 m wide: half of the sidewalk, so the sidewalk is not a safe place
-const PEDESTRIAN_RADIUS := 0.75
+const RUNNER_SCENE: PackedScene = preload("res://scenes/characters/street_runner.tscn")
+#Warm and saturated on a cool street: the hazards are the first thing the eye finds
 const CAR_COLORS: Array[Color] = [
-	Color("e14b6a"), Color("2f9fb8"), Color("e08a22"), Color("7b6cf6"), Color("3fb27f"), Color("fd567f"),
+	Color("ff6f7d"), Color("ffb347"), Color("ff8fc0"), Color("ffd95a"), Color("ff9a6b"),
 ]
-#The four bot models that level 1 does not use walk the sidewalks
-const PEDESTRIAN_MODELS: Array[PackedScene] = [
-	preload("res://scenes/bots/models/ping.tscn"), preload("res://scenes/bots/models/bubble.tscn"),
-	preload("res://scenes/bots/models/like.tscn"), preload("res://scenes/bots/models/loop.tscn"),
+#The toy hatchback and the minibus are the most common; the micro car is a little shorter
+const CAR_MODELS: Array[StringName] = [&"car_hatch", &"car_hatch", &"van", &"micro_car", &"micro_car"]
+const MICRO_CAR_SHARE := 0.9
+#Pedestrians that look at their phone while they walk; the last one is the wide one
+const WALKERS: Array[PackedScene] = [
+	preload("res://assets/obstacles/pedestrian/pedestrian_walk.glb"),
+	preload("res://assets/obstacles/pedestrian/pedestrian_woman_walk.glb"),
+	preload("res://assets/obstacles/pedestrian/pedestrian_heavy_walk.glb"),
 ]
+const DUST_COLOR := Color("f1e6ff")
+#Meters from the end line where the edge of the screen starts to glow
+const DANGER_RANGE := 6.0
 
 #A row where obstacles appear: a car lane or a sidewalk
 class Lane:
@@ -45,22 +52,27 @@ class Lane:
 #The runner starts at start_x and loses when a hit throws it past end_x
 @export var start_x := -7.0
 @export var end_x := 11.0
+#How far back the runner may walk
+@export var back_limit := 6.0
 #Where obstacles appear (off screen) and where they are removed
 @export var spawn_x := -36.0
 @export var despawn_x := 26.0
+#Pedestrians are heavy models: they only exist near the play area, so they appear closer and leave sooner
+@export var walker_spawn_x := -24.0
+@export var walker_despawn_x := 16.0
 
 @export_group("Obstacles")
 @export var car_speed := 7.0
 @export var car_length := 4.0
 @export var car_width := 2.4
-@export var pedestrian_speed := 2.6
+@export var pedestrian_speed := 2.4
 #Speed multiplier of the whole flow at the start and at the end of the round
 @export var start_speed_scale := 1.0
 @export var end_speed_scale := 2.2
 @export var car_interval_min := 1.6
 @export var car_interval_max := 3.4
-@export var pedestrian_interval_min := 1.0
-@export var pedestrian_interval_max := 2.4
+@export var pedestrian_interval_min := 1.4
+@export var pedestrian_interval_max := 3.2
 #A lane waits if every other lane spawned this recently, so the street is never a full wall
 @export var wall_window := 0.6
 #Cars that may run side by side; with 3 lanes, 2 always leaves one lane to escape through
@@ -74,8 +86,20 @@ class Lane:
 @export_range(0.0, 1.0) var tank_chance := 0.01
 @export var tank_length := 6.0
 @export var tank_knockback := 15.0
+@export var cyclist_knockback := 10.5
+@export var cone_knockback := 6.0
+#Chances, when a car lane has room, that a rider or a row of cones comes instead of a car
+@export_range(0.0, 1.0) var cyclist_chance := 0.14
+@export_range(0.0, 1.0) var cone_chance := 0.12
+@export var cyclist_length := 2.4
 #Speed of the shove up or down the screen that takes the runner out of the obstacle's way
 @export var side_shove := 8.0
+
+@export_group("Belt")
+#The whole street is a conveyor that drags the runner toward the end line, in m/s at the start
+@export var belt_speed := 3.4
+#How much of the flow's speed-up the belt follows (0 keeps it constant)
+@export_range(0.0, 1.0) var belt_ramp := 0.5
 
 @export_group("Victory")
 @export var win_zoom_time := 1.4
@@ -100,7 +124,6 @@ var _tank_pending := false
 var _next_speed_notice := 1
 var _hud_timer := 0.0
 
-@onready var _camera: Camera3D = $Camera3D
 @onready var _world: StreetWorld = $World
 @onready var _obstacle_root: Node3D = $Obstacles
 @onready var _hud: StreetHud = $Hud
@@ -116,14 +139,16 @@ func _ready() -> void:
 	_build_lanes(half_width)
 	_spawn_runner(half_width)
 
-	_help.setup(HelpPages.street({"time_limit": time_limit}))
+	_help.setup(HelpPages.street({"time_limit": time_limit, "jump_cooldown": _runner.jump_cooldown}))
 	_hud.retry_requested.connect(_retry)
 	_hud.menu_requested.connect(GameSession.abandon)
-	_hud.set_hint("%s / %s para moverte · %s salta · Esquiva autos y peatones · Aguanta %d s" % [
-		InputHints.key_markup(&"move_forward"), InputHints.key_markup(&"move_back"),
-		InputHints.key_markup(&"jump"), int(time_limit)])
+	_runner.hit_taken.connect(_on_runner_hit)
+	_runner.landed.connect(_on_runner_landed)
+	_runner.jump_cooldown_changed.connect(_hud.set_jump_cooldown)
 	_hud.set_time(time_limit)
-	_hud.set_speed(start_speed_scale)
+	var move_keys := " ".join([InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
+		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
+	_hud.show_mission("Aguanta %d s: la cinta te lleva al FIN" % int(time_limit), [move_keys, InputHints.key_label(&"jump")])
 
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_phase_timer = countdown_seconds
@@ -147,16 +172,17 @@ func _build_lanes(half_width: float) -> void:
 
 func _spawn_runner(half_width: float) -> void:
 	var slot := participants[0]
-	_runner = StreetRunner.new()
+	_runner = RUNNER_SCENE.instantiate() as StreetRunner
 	_runner.player_id = slot.player_id
-	_runner.street_half_width = half_width
-	_runner.sidewalk_height = StreetWorld.SIDEWALK_HEIGHT
 	var edge := half_width + sidewalk_width - _runner.radius
 	_runner.min_z = -edge
 	_runner.max_z = edge
+	_runner.min_x = start_x - back_limit
+	_runner.max_x = end_x + 10.0
 	_actors.add_child(_runner)
 	_runner.position = Vector3(start_x, 0.0, 0.0)
 	_runner.set_character(slot.character)
+	_runner.set_input_enabled(false)
 
 
 func _physics_process(delta: float) -> void:
@@ -185,11 +211,11 @@ func _begin_round() -> void:
 	elapsed = 0.0
 	_hud.hide_countdown()
 	_runner.set_input_enabled(true)
-	_hud.toast("¡Aguanta! Cada choque te empuja hacia el FIN")
 
 
 func _update_running(delta: float) -> void:
 	elapsed += delta
+	_run_belt()
 	if elapsed >= time_limit:
 		_hud.set_time(0.0)
 		_finish(true, "¡Aguantaste!",
@@ -202,16 +228,30 @@ func _update_running(delta: float) -> void:
 			"Aguantaste %d s. Cada choque te hace retroceder: anticipa el camino e inténtalo de nuevo." % floori(elapsed))
 		return
 
+	#The edge of the screen glows when the end line is close
+	_hud.set_danger((1.0 - (end_x - _runner.position.x) / DANGER_RANGE) * 0.9)
+
 	#Tells the player every third of the round that the flow got faster
 	if _next_speed_notice < 3 and elapsed >= time_limit * _next_speed_notice / 3.0:
 		_next_speed_notice += 1
-		_hud.toast("¡Todo va más rápido!")
+		_hud.warn("¡Más rápido!")
 
 	_hud_timer += delta
 	if _hud_timer >= 0.1:
 		_hud_timer = 0.0
 		_hud.set_time(time_limit - elapsed)
-		_hud.set_speed(_speed_scale())
+
+
+#The belt drags the runner while it is on the ground and the ground markings slide with it
+func _run_belt() -> void:
+	var speed := belt_speed * (1.0 + (_speed_scale() - 1.0) * belt_ramp)
+	_world.set_belt_speed(speed)
+	_runner.external_velocity = Vector3(speed, 0.0, 0.0) if _runner.is_on_floor() else Vector3.ZERO
+
+
+func _stop_belt() -> void:
+	_world.set_belt_speed(0.0)
+	_runner.external_velocity = Vector3.ZERO
 
 
 func _speed_scale() -> float:
@@ -222,14 +262,17 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	if phase == Phase.ENDED:
 		return
 	phase = Phase.ENDED
+	_stop_belt()
 	_runner.set_input_enabled(false)
 	#A late Esc press must not open the pause menu over the final panel
 	_pause_menu.set_process_unhandled_input(false)
+	_hud.set_danger(0.0)
 	if not victory:
-		_end_round(victory, title, message)
+		_hud.show_banner("TE ARRASTRÓ LA CINTA", "Aguantaste %d s" % floori(elapsed), Palette.GOLD)
+		get_tree().create_timer(1.5).timeout.connect(_end_round.bind(victory, title, message))
 		return
 
-	#Victory: the street stops, the camera moves in front of the runner and then the panel shows
+	#Victory: the street stops, a camera leaves the runner's view for the front of the runner and then the panel shows
 	_frozen = true
 	_hud.hide_play_ui()
 	#Aimed above the head: the jump goes about 1.3 m up
@@ -237,11 +280,18 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	var target := Transform3D(Basis(), _runner.position + win_camera_offset).looking_at(focus, Vector3.UP)
 	_runner.celebrate(target.origin)
 	_clear_view(target.origin)
+	var view := _runner.view_camera()
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_transform = view.global_transform
+	camera.fov = view.fov
+	camera.make_current()
 	var tween := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	tween.tween_property(_camera, "global_transform", target, win_zoom_time)
-	tween.tween_property(_camera, "fov", win_fov, win_zoom_time)
+	tween.tween_property(camera, "global_transform", target, win_zoom_time)
+	tween.tween_property(camera, "fov", win_fov, win_zoom_time)
 	tween.chain().tween_callback(_runner.jump)
-	tween.chain().tween_interval(0.8)
+	tween.tween_callback(_hud.show_banner.bind("¡AGUANTASTE!", "%d s contra la cinta" % int(time_limit)))
+	tween.chain().tween_interval(1.2)
 	tween.chain().tween_callback(_end_round.bind(victory, title, message))
 
 
@@ -281,8 +331,9 @@ func _update_obstacles(delta: float) -> void:
 	var multiplier := _speed_scale()
 	for index in range(_obstacles.size() - 1, -1, -1):
 		var obstacle := _obstacles[index]
-		obstacle.position.x += obstacle.base_speed * multiplier * delta
-		if obstacle.position.x - obstacle.half_extents.x > despawn_x:
+		obstacle.advance(delta, multiplier)
+		var leaves_at := walker_despawn_x if obstacle.kind == StreetObstacle.Kind.PEDESTRIAN else despawn_x
+		if obstacle.position.x - obstacle.half_extents.x > leaves_at:
 			obstacle.queue_free()
 			_obstacles.remove_at(index)
 
@@ -309,18 +360,51 @@ func _try_spawn(lane: Lane) -> void:
 	if _side_by_side(car_length, single) >= max_cars_side_by_side:
 		lane.timer = 0.25
 		return
-	_mark_spawned(lane, car_length)
+	var roll := _rng.randf()
+	if roll < cone_chance:
+		_spawn_cones(lane)
+	elif roll < cone_chance + cyclist_chance:
+		_spawn_cyclist(lane)
+	else:
+		_spawn_car(lane)
+
+
+func _spawn_car(lane: Lane) -> void:
+	var model: StringName = CAR_MODELS[_rng.randi() % CAR_MODELS.size()]
+	var length := car_length * (MICRO_CAR_SHARE if model == &"micro_car" else 1.0)
+	_mark_spawned(lane, length)
 	var car := StreetObstacle.new()
-	car.build_car(CAR_COLORS[_rng.randi() % CAR_COLORS.size()], car_length, car_width)
+	car.build_car(model, CAR_COLORS[_rng.randi() % CAR_COLORS.size()], length)
 	car.base_speed = car_speed
 	car.knockback = car_knockback
 	_place(car, lane.z, 0.0)
 
 
+func _spawn_cyclist(lane: Lane) -> void:
+	_mark_spawned(lane, cyclist_length)
+	var rider := StreetObstacle.new()
+	rider.build_cyclist(cyclist_length)
+	rider.base_speed = car_speed
+	rider.knockback = cyclist_knockback
+	_place(rider, lane.z, 0.0)
+
+
+#Three cones across the lane: they ride the belt with the traffic and a jump clears them
+func _spawn_cones(lane: Lane) -> void:
+	_mark_spawned(lane, 1.0)
+	for offset in [-0.9, 0.0, 0.9]:
+		var cone := StreetObstacle.new()
+		cone.build_cone()
+		cone.base_speed = car_speed
+		cone.knockback = cone_knockback
+		_place(cone, lane.z + offset, 0.0)
+
+
 func _spawn_pedestrian(lane: Lane) -> void:
 	_mark_spawned(lane, 0.0)
+	var index := _rng.randi() % WALKERS.size()
 	var pedestrian := StreetObstacle.new()
-	pedestrian.build_pedestrian(PEDESTRIAN_MODELS[_rng.randi() % PEDESTRIAN_MODELS.size()], PEDESTRIAN_RADIUS)
+	pedestrian.build_pedestrian(WALKERS[index], index == WALKERS.size() - 1)
 	pedestrian.base_speed = pedestrian_speed
 	pedestrian.knockback = pedestrian_knockback
 	var slot := lane.slot_offset if _rng.randf() < 0.5 else -lane.slot_offset
@@ -354,7 +438,7 @@ func _try_spawn_tank(lane: Lane) -> bool:
 		tank.base_speed = car_speed
 		tank.knockback = tank_knockback
 		_place(tank, (lane.z + partner.z) / 2.0, 0.0)
-		_hud.toast("¡Cuidado, viene un tanque!")
+		_hud.warn("¡TANQUE!")
 		return true
 	return false
 
@@ -381,7 +465,8 @@ func _mark_spawned(lane: Lane, length: float) -> void:
 
 
 func _place(obstacle: StreetObstacle, z: float, height: float) -> void:
-	obstacle.position = Vector3(spawn_x, height, z)
+	var from_x := walker_spawn_x if obstacle.kind == StreetObstacle.Kind.PEDESTRIAN else spawn_x
+	obstacle.position = Vector3(from_x, height, z)
 	_obstacle_root.add_child(obstacle)
 	_obstacles.append(obstacle)
 
@@ -390,20 +475,43 @@ func _place(obstacle: StreetObstacle, z: float, height: float) -> void:
 func _check_hits() -> void:
 	var hit_by: StreetObstacle = null
 	for obstacle in _obstacles:
-		if obstacle.overlaps(_runner.position, _runner.radius):
+		if obstacle.contact(_runner.position, _runner.hurt_radius, _runner.hurt_height):
 			hit_by = obstacle
 			break
 	_runner.touching = hit_by != null
 	if hit_by == null or not _runner.can_be_hit():
 		return
-	_runner.take_hit(hit_by.knockback, _shove_side(hit_by), side_shove)
-	match hit_by.kind:
-		StreetObstacle.Kind.CAR:
-			_hud.warn("¡Choque!")
-		StreetObstacle.Kind.TANK:
-			_hud.warn("¡TANQUE!")
-		_:
-			_hud.warn("¡Ups!")
+	var hit := StreetRunner.Hit.new()
+	hit.back_speed = hit_by.knockback
+	hit.side = _shove_side(hit_by)
+	hit.side_speed = side_shove
+	hit.stun = hit_by.stun
+	hit.flips = hit_by.flips
+	hit.strength = hit_by.strength
+	_runner.take_hit(hit)
+	hit_by.react()
+	if hit_by.kind in [StreetObstacle.Kind.CAR, StreetObstacle.Kind.TANK] and _rng.randf() < 0.5:
+		SynthSound.play(self, SynthSound.honk(), -8.0, _rng.randf_range(0.9, 1.1))
+
+
+#The blow is felt: dust and stars where it landed, the edge of the screen flashes and the game stops for a breath
+func _on_runner_hit(hit: StreetRunner.Hit) -> void:
+	var chest := _runner.position + Vector3(0.0, 0.8, 0.0)
+	StreetFx.stars(self, chest, 5 + roundi(hit.strength * 5.0))
+	StreetFx.dust(self, _runner.position + Vector3(0.0, 0.1, 0.0), DUST_COLOR, 8 + roundi(hit.strength * 10.0))
+	_hud.flash(Palette.CORAL, 0.3 + 0.3 * hit.strength, 0.45)
+	SynthSound.play(self, SynthSound.crash() if hit.strength > 0.5 else SynthSound.thump(),
+		-4.0 + hit.strength * 3.0, _rng.randf_range(0.92, 1.08))
+	if hit.strength >= 0.5:
+		StreetFx.hit_stop(get_tree(), 0.05 + 0.04 * hit.strength)
+
+
+func _on_runner_landed(at: Vector3, hard: bool) -> void:
+	StreetFx.dust(self, at + Vector3(0.0, 0.05, 0.0), DUST_COLOR, 12 if hard else 5)
+	SynthSound.play(self, SynthSound.thump(0.2) if hard else SynthSound.land(), -6.0 if hard else -10.0,
+		_rng.randf_range(0.95, 1.1))
+	if hard:
+		_runner.shake_camera(0.25)
 
 
 #Up or down the screen, away from the obstacle's centre; toward the open side near an edge

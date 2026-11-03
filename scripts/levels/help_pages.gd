@@ -7,46 +7,64 @@ extends RefCounted
 static func level_one(settings: Level01Settings, bots: Array[BotAppearance]) -> Array[Dictionary]:
 	var key := InputHints.markup
 	var interact := InputHints.key_label(&"interact")
+	var stations: Dictionary = Level01Layout.STATIONS
 	var minutes := "%d:%02d" % [floori(settings.time_limit / 60.0), int(settings.time_limit) % 60]
-	var keys := "%s %s %s %s" % [
-		InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
-		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")]
+	var keys := InputHints.move_markup()
 	var roster := PackedStringArray()
 	for bot in bots:
 		roster.append("%s: %s" % [key.call(bot.display_name), bot.behavior])
 	return [
 		{
 			"title": "Tu misión",
-			"body": "Cruza las islas flotantes y llega a la isla %s, la del arco dorado, antes de que el reloj se acabe (%s).\n\nSi caes al vacío pierdes 1 de tus %d intentos y vuelves a la salida, o al checkpoint si ya pasaste por él. El reloj no se detiene." % [
-				key.call("M"), minutes, settings.attempts],
+			"body": "Cruza las islas flotantes hasta la isla %s, la del arco. Si juegan varios, gana quien llega primero.
+
+Cuando alguien llega, la meta se cierra en %d segundos. El tiempo máximo es %s. Si caes al vacío pierdes 1 de tus %d intentos y vuelves a la salida, o al checkpoint si ya pasaste por él." % [
+				key.call(Level01Layout.GOAL), int(settings.finish_window), minutes, settings.attempts],
+		},
+		{
+			"title": "El feed cambia",
+			"body": "Los puentes color coral son frágiles: cada cierto tiempo uno parpadea y %d segundos después cae por unos %d. Si estás encima, caes con él.
+
+Hay siete caminos casi igual de buenos: cuando uno se cierra, los bots calculan otro, y tú también." % [
+				int(settings.feed_warning), int(settings.feed_duration)],
+		},
+		{
+			"title": "Cintas y barras",
+			"body": "Las cintas de flechas te arrastran: a favor van rápido y en contra cuestan el doble. El costo de cada puente que ves en F3 lo cuenta.
+
+En las islas con el borde rosado gira una barra por todo el piso. Salta sobre ella cuando se acerque o rodéala por el borde, sin caerte.",
 		},
 		{
 			"title": "Los bots molestos",
-			"body": "Son lo que molesta en internet y cada uno te busca a su manera:\n%s\n\nSalen en momentos distintos. Cuando uno se acerca, le sale un %s: ¡te va a empujar! Corre en sentido contrario y no pasa nada." % [
-				"\n".join(roster), key.call("❗")],
+			"body": "Son lo que molesta en internet y cada uno te busca a su manera:
+%s
+
+Salen en momentos distintos. Cuando uno se acerca, le sale un %s: ¡te va a empujar! Corre en sentido contrario y no pasa nada." % [
+				"
+".join(roster), key.call("❗")],
 		},
 		{
-			"title": "Bloquear (isla E)",
-			"body": "Bloquear es poner un límite: %s un puente para los bots durante %d segundos. Ellos buscan otro camino, pero tú sí puedes cruzarlo.\n\nSe recarga en %d segundos.\n\nVe a la isla %s, junto al letrero de prohibido, y pulsa %s." % [
-				key.call("cierra"), int(settings.block_duration), int(settings.block_cooldown), key.call("E"), key.call(interact)],
-		},
-		{
-			"title": "Silenciar (isla F)",
-			"body": "Silenciar es apagar las notificaciones: durante %d segundos los bots solo te notan si están a menos de %d metros (normalmente te ven desde %d). El Bulo no se deja silenciar.\n\nNo los detiene, solo hace que te pierdan de vista. Se recarga en %d segundos.\n\nVe a la isla %s, junto a la campana con la raya, y pulsa %s." % [
-				int(settings.silence_duration), int(settings.silenced_detection_radius), int(settings.detection_radius),
-				int(settings.silence_cooldown), key.call("F"), key.call(interact)],
-		},
-		{
-			"title": "Pausa digital (isla D)",
-			"body": "Es tomarte un descanso del celular: dentro de la burbuja de la isla %s nadie puede empujarte durante %d segundos. El reloj sigue corriendo.\n\nSe recarga en %d segundos. También estás protegido %d segundos al reaparecer tras una caída.\n\nEntra a la burbuja y pulsa %s." % [
-				key.call("D"), int(settings.refuge_duration), int(settings.refuge_cooldown),
-				int(settings.respawn_protection), key.call(interact)],
+			"title": "Las estaciones",
+			"body": "Bloquear (isla %s): %s junto al letrero y por %d segundos los bots no pueden usar el puente %s-%s. Recarga %d s.
+
+Silenciar (isla %s): por %d segundos los bots solo te notan a menos de %d metros (normalmente te ven desde %d). El Bulo no se deja silenciar.
+
+Pausa digital (isla %s): dentro de la burbuja nadie te empuja %d segundos." % [
+				stations[&"block"], key.call(interact), int(settings.block_duration), Level01Layout.BLOCK_EDGE[0], Level01Layout.BLOCK_EDGE[1],
+				int(settings.block_cooldown), stations[&"silence"], int(settings.silence_duration),
+				int(settings.silenced_detection_radius), int(settings.detection_radius), stations[&"refuge"], int(settings.refuge_duration)],
 		},
 		{
 			"title": "Cómo se maneja",
-			"body": "Moverte: %s\nSaltar: %s\nMirar: %s\nUsar una estación: %s\nPausa: %s · Esta ayuda: %s\n\nSobre cada lugar importante flota su nombre. Al pasar por el %s se guarda tu progreso." % [
-				key.call(keys), InputHints.key_markup(&"jump"), key.call("MOUSE"), key.call(interact),
-				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help"), key.call("CHECKPOINT")],
+			"body": "Moverte: %s
+Saltar: %s
+Mirar: %s
+Usar una estación: %s
+Pausa: %s · Esta ayuda: %s
+
+Sobre cada lugar importante flota su nombre. Al pasar por la isla %s (%s) se guarda tu progreso. A la derecha ves quién va primero." % [
+				keys, InputHints.key_markup(&"jump"), key.call("MOUSE"), key.call(interact),
+				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help"), key.call(Level01Layout.CHECKPOINT), key.call("CHECKPOINT")],
 		},
 	]
 
@@ -56,17 +74,62 @@ static func street(config: Dictionary) -> Array[Dictionary]:
 	return [
 		{
 			"title": "Tu misión",
-			"body": "Estás en una calle muy transitada. Autos y peatones te empujan hacia la línea %s: si un golpe te lanza más allá de ella, la corriente te arrastró.\n\nAguanta %d segundos para ganar. Cada tercio del tiempo todo va más rápido." % [
+			"body": "La calle es una cinta transportadora: te arrastra sin parar hacia la línea %s. Si te quedas quieto, o un golpe te lanza más allá de ella, la corriente te arrastró.
+
+Corre contra la cinta y aguanta %d segundos para ganar. Cada tercio del tiempo todo va más rápido." % [
 				key.call("FIN"), int(config["time_limit"])],
 		},
 		{
 			"title": "Cómo esquivar",
-			"body": "Mira cómo vienen los autos antes de moverte: nunca hay un muro completo, siempre queda un hueco por donde pasar.\n\nLas aceras no son un refugio: también hay peatones. Cada choque te empuja hacia atrás, y los más grandes te empujan más lejos.",
+			"body": "Mira cómo vienen los autos antes de moverte: nunca hay un muro completo, siempre queda un hueco por donde pasar. Los ciclistas se meten por el carril y se bambolean.
+
+Los conos bajitos se saltan. Las aceras también están en la cinta y tienen peatones que caminan mirando el celular. Cada choque te lanza hacia atrás, te tumba un momento y te protege muy poco al levantarte: no te quedes cerca del siguiente.",
 		},
 		{
 			"title": "Cómo se maneja",
-			"body": "Subir y bajar por la calle: %s / %s\nSaltar: %s\nPausa: %s · Esta ayuda: %s" % [
-				InputHints.key_markup(&"move_forward"), InputHints.key_markup(&"move_back"),
-				InputHints.key_markup(&"jump"), InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
+			"body": "Moverte por la calle: %s
+Mirar: %s
+Saltar: %s (sale al instante; en el aire la cinta no te arrastra, pero al aterrizar descansa %s s)
+Pausa: %s · Esta ayuda: %s" % [
+				InputHints.move_markup(), key.call("MOUSE"),
+				InputHints.key_markup(&"jump"), str(config["jump_cooldown"]), InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
+		},
+	]
+
+
+static func social_drop(config: Dictionary) -> Array[Dictionary]:
+	var key := InputHints.markup
+	return [
+		{
+			"title": "Tu misión",
+			"body": "Estás sobre una plataforma de %dx%d casillas, cada una con el ícono de una app. A cada lado hay una pantalla gigante.
+
+Aguanta %d segundos sin caerte para ganar." % [
+				config["columns"], config["rows"], int(config["time_limit"])],
+		},
+		{
+			"title": "Las pantallas",
+			"body": "Las pantallas cambian de ícono muy rápido. Cuando el sonido se vuelve más agudo están por detenerse.
+
+El ícono en el que se detienen aparece arriba, junto al reloj. Corre a una casilla con ese ícono, %s. Las que van a caer parpadean en rojo justo antes.
+
+%d segundos después vuelven todas en otro orden y se repite. Cada vez tienes menos tiempo para moverte." % [
+				key.call("las demás desaparecen"), int(config["rest_seconds"])],
+		},
+		{
+			"title": "Cohetes",
+			"body": "Cuando quedan %d segundos empiezan a pasar cohetes de lado a lado, cada uno por una de las %d filas.
+
+Antes de que salga, su fila %s. Si el cohete te alcanza, te derriba de la plataforma: cámbiate de fila o salta justo cuando pase." % [
+				int(config["rocket_seconds_left"]), config["rows"], key.call("parpadea en rojo")],
+		},
+		{
+			"title": "Cómo se maneja",
+			"body": "Moverte: %s
+Mirar: %s
+Saltar: %s
+Pausa: %s · Esta ayuda: %s" % [
+				InputHints.move_markup(), key.call("MOUSE"), InputHints.key_markup(&"jump"),
+				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
 		},
 	]

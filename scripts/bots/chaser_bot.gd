@@ -50,6 +50,8 @@ var route: Array[StringName] = []
 var route_cost := INF
 var route_found := false
 var route_message := ""
+#Constant drift of the bridge the bot is on (a conveyor belt); the level sets it every frame
+var external_velocity := Vector3.ZERO
 #Set by the level for scripted demos: ignores perception and keeps the given target
 var manual_target := false
 #Keeps the bot standing still (used to show a route before the bot starts to walk it)
@@ -156,6 +158,15 @@ func is_crossing() -> bool:
 	return _committed
 
 
+#The two ends of the bridge the bot is crossing; empty when it is on a platform
+func crossing_pair() -> Array[StringName]:
+	var pair: Array[StringName] = []
+	if _committed:
+		pair.append(current_vertex)
+		pair.append(_leg_vertex)
+	return pair
+
+
 func debug_info() -> Dictionary:
 	return {
 		"name": appearance.display_name if appearance else "Bot",
@@ -190,8 +201,8 @@ func _physics_process(delta: float) -> void:
 			wanted = _walk(delta)
 
 	wanted = _stay_on_platform(_with_separation(wanted))
-	velocity.x = wanted.x
-	velocity.z = wanted.z
+	velocity.x = wanted.x + external_velocity.x
+	velocity.z = wanted.z + external_velocity.z
 	move_and_slide()
 	if _visual != null:
 		_look().set_moving(wanted.length() > 0.1)
