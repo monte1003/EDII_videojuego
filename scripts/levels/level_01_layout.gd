@@ -92,9 +92,9 @@ const BOT_FORBIDDEN: Array[StringName] = [&"M"]
 #Islands with a bar that sweeps the whole island: "arm" is the half length, "speed" the turn in radians per second
 #(the sign is the direction) and "phase" the angle at the start
 const SPINNERS := {
-	&"E": {"arm": 4.4, "speed": 1.3, "phase": 0.0},
-	&"G": {"arm": 4.4, "speed": -1.5, "phase": 1.2},
-	&"L": {"arm": 4.2, "speed": 1.8, "phase": 2.4},
+	&"E": {"arm": 4.4, "speed": 1.9, "phase": 0.0},
+	&"G": {"arm": 4.4, "speed": -2.2, "phase": 1.2},
+	&"L": {"arm": 4.2, "speed": 2.5, "phase": 2.4},
 }
 
 

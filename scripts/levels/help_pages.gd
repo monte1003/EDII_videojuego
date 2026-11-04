@@ -23,10 +23,10 @@ Cuando alguien llega, la meta se cierra en %d segundos. El tiempo máximo es %s.
 		},
 		{
 			"title": "El feed cambia",
-			"body": "Los puentes color coral son frágiles: cada cierto tiempo uno parpadea y %d segundos después cae por unos %d. Si estás encima, caes con él.
+			"body": "Los puentes color coral son frágiles: cada cierto tiempo uno parpadea y %d segundos después cae por unos %d. Pasados %d segundos del inicio puede haber dos caídos a la vez. Si estás encima, caes con él.
 
 Hay siete caminos casi igual de buenos: cuando uno se cierra, los bots calculan otro, y tú también." % [
-				int(settings.feed_warning), int(settings.feed_duration)],
+				int(settings.feed_warning), int(settings.feed_duration), int(settings.feed_first + settings.feed_extra_delay)],
 		},
 		{
 			"title": "Cintas y barras",
@@ -102,19 +102,23 @@ static func social_drop(config: Dictionary) -> Array[Dictionary]:
 	return [
 		{
 			"title": "Tu misión",
-			"body": "Estás sobre una plataforma de %dx%d casillas, cada una con el ícono de una app. A cada lado hay una pantalla gigante.
+			"body": "Estás sobre una plataforma de %dx%d cartas, cada una con el ícono de una app. A cada lado hay una pantalla gigante.
 
 Aguanta %d segundos sin caerte para ganar." % [
 				config["columns"], config["rows"], int(config["time_limit"])],
 		},
 		{
-			"title": "Las pantallas",
-			"body": "Las pantallas cambian de ícono muy rápido. Cuando el sonido se vuelve más agudo están por detenerse.
+			"title": "Memoriza",
+			"body": "Al empezar cada ronda las cartas muestran su ícono y las pantallas cuentan hacia atrás desde %d.
 
-El ícono en el que se detienen aparece arriba, junto al reloj. Corre a una casilla con ese ícono, %s. Las que van a caer parpadean en rojo justo antes.
+Cuando llegan a cero las cartas se voltean y quedan tapadas con un %s. La pantalla muestra el ícono que tienes que pisar: corre a la carta que lo tenía, %s." % [
+				int(config["memorize_seconds"]), key.call("?"), key.call("las demás caen")],
+		},
+		{
+			"title": "Cae el resto",
+			"body": "Las cartas que van a caer parpadean en rojo justo antes. La tuya se voltea y muestra su ícono.
 
-%d segundos después vuelven todas en otro orden y se repite. Cada vez tienes menos tiempo para moverte." % [
-				key.call("las demás desaparecen"), int(config["rest_seconds"])],
+%d segundos después vuelven todas, en otro orden, y se repite. Cada vez tienes menos tiempo para memorizar y para correr." % int(config["rest_seconds"]),
 		},
 		{
 			"title": "Cohetes",

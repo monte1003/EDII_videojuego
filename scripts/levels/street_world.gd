@@ -4,6 +4,7 @@ extends Node3D
 #Scenery of the street minigame: a toy-town boulevard along X, end line and giant arch at +X; the runner walks on its ground
 
 const SIDEWALK_HEIGHT := 0.12
+const CURB_WIDTH := 0.24
 const HEADING_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 const GRASS_TEXTURE: Texture2D = preload("res://assets/textures/grass_checker.png")
 const SIDEWALK_TEXTURE: Texture2D = preload("res://assets/textures/sidewalk_tiles.png")
@@ -16,11 +17,17 @@ const WALL_TINTS: Array[Color] = [
 ]
 const BUILDING_IDS: Array[StringName] = [&"building_shop", &"building_flats"]
 const CLOUD_COUNT := 16
-#Meters after which the lane dashes and the zebra crossings repeat, so the belt can slide them without end
-const DASH_PERIOD := 4.0
-const ZEBRA_PERIOD := 24.0
+#Meters after which the markings repeat, so the belt can slide them without end: each period holds one zebra crossing,
+#five lane dashes and three arrows, and none of them touches another
+const MARKS_PERIOD := 24.0
+const ZEBRA_DEPTH := 2.4
+const ZEBRA_STRIPE := 0.55
+const ZEBRA_PITCH := 1.1
+const DASH_LENGTH := 2.0
+const DASH_COUNT := 5
+const DASH_WIDTH := 0.15
 #The arrows painted on every lane that show where the belt takes you: toward +X, away from the traffic
-const CHEVRON_PERIOD := 7.0
+const CHEVRON_COUNT := 3
 const CHEVRON_COLOR := Color("8e96f2")
 const CHEVRON_ANGLE := deg_to_rad(38.0)
 const CHEVRON_ARM := 1.1
@@ -32,9 +39,7 @@ var _materials: Dictionary = {}
 #The ground is a conveyor: the markings and the textures slide toward +X at this speed
 var _belt_speed := 0.0
 var _belt_offset := 0.0
-var _dash_row: Node3D
-var _zebra_row: Node3D
-var _chevron_row: Node3D
+var _marks_row: Node3D
 var _clouds: Array[Dictionary] = []
 var _stops: Array[Vector2] = []
 var _clock := 0.0
@@ -47,7 +52,7 @@ func build(street_half_width: float, sidewalk_width: float, lane_count: int,
 	var outer := street_half_width + sidewalk_width
 	_build_ground(street_half_width, sidewalk_width, from_x, to_x)
 	_build_road_marks(street_half_width, lane_count, from_x, to_x)
-	_build_end(end_x, outer)
+	_build_end(end_x, street_half_width, outer)
 	_build_skyline(from_x, to_x, outer)
 	_build_bus_stops(outer)
 	_build_greenery(from_x, to_x, outer, end_x)
@@ -69,9 +74,7 @@ func _process(delta: float) -> void:
 
 func _slide_ground(delta: float) -> void:
 	_belt_offset += _belt_speed * delta
-	_dash_row.position.x = fposmod(_belt_offset, DASH_PERIOD)
-	_zebra_row.position.x = fposmod(_belt_offset, ZEBRA_PERIOD)
-	_chevron_row.position.x = fposmod(_belt_offset, CHEVRON_PERIOD)
+	_marks_row.position.x = fposmod(_belt_offset, MARKS_PERIOD)
 	_textured(SIDEWALK_TEXTURE, 4.0).uv1_offset.x = -_belt_offset / 4.0
 	_curb_material().uv1_offset.x = -_belt_offset / 4.0
 
@@ -94,11 +97,12 @@ func _build_ground(half: float, sidewalk_width: float, from_x: float, to_x: floa
 	add_child(ground)
 
 	for side: float in [-1.0, 1.0]:
-		var middle := side * (half + sidewalk_width / 2.0)
-		_box(Vector3(center_x, SIDEWALK_HEIGHT / 2.0, middle), Vector3(length, SIDEWALK_HEIGHT, sidewalk_width),
-			_textured(SIDEWALK_TEXTURE, 4.0))
-		_box(Vector3(center_x, (SIDEWALK_HEIGHT + 0.02) / 2.0, side * (half + 0.12)),
-			Vector3(length, SIDEWALK_HEIGHT + 0.02, 0.24), _curb_material())
+		#The paving starts where the curb ends, so the two never share a face
+		var paving := sidewalk_width - CURB_WIDTH
+		_box(Vector3(center_x, SIDEWALK_HEIGHT / 2.0, side * (half + CURB_WIDTH + paving / 2.0)),
+			Vector3(length, SIDEWALK_HEIGHT, paving), _textured(SIDEWALK_TEXTURE, 4.0))
+		_box(Vector3(center_x, (SIDEWALK_HEIGHT + 0.02) / 2.0, side * (half + CURB_WIDTH / 2.0)),
+			Vector3(length, SIDEWALK_HEIGHT + 0.02, CURB_WIDTH), _curb_material())
 		_sidewalk_collider(center_x, length, side, half, outer)
 
 
@@ -122,46 +126,72 @@ func _sidewalk_collider(center_x: float, length: float, side: float, half: float
 
 
 func _build_road_marks(half: float, lane_count: int, from_x: float, to_x: float) -> void:
-	_dash_row = Node3D.new()
-	add_child(_dash_row)
-	_zebra_row = Node3D.new()
-	add_child(_zebra_row)
-	_chevron_row = Node3D.new()
-	add_child(_chevron_row)
+	_marks_row = Node3D.new()
+	add_child(_marks_row)
 	var lane_width := half * 2.0 / lane_count
-	for lane in lane_count:
-		var chevron_z := -half + (lane + 0.5) * lane_width
-		var chevron_x := from_x - CHEVRON_PERIOD
-		while chevron_x < to_x + CHEVRON_PERIOD:
-			_add_chevron(Vector3(chevron_x, 0.007, chevron_z))
-			chevron_x += CHEVRON_PERIOD
-	for lane in range(1, lane_count):
-		var z := -half + lane * lane_width
-		var x := from_x - DASH_PERIOD
-		while x < to_x + DASH_PERIOD:
-			_box(Vector3(x + 1.0, 0.005, z), Vector3(2.0, 0.01, 0.15), _flat(LINE_COLOR), _dash_row)
-			x += DASH_PERIOD
-	#Zebra crossings; the first one is where the runner starts
-	var stripes := int(floorf((half * 2.0 - 1.0) / 1.1)) + 1
-	var crossing_x := -7.0 - ZEBRA_PERIOD * ceilf((-7.0 - from_x) / ZEBRA_PERIOD)
-	while crossing_x < to_x + ZEBRA_PERIOD:
+	var stripes := int(floorf((half * 2.0 - 1.0) / ZEBRA_PITCH)) + 1
+	#Equal gaps between the lane dashes and between the last dash and the zebra stripes
+	var dash_gap := (MARKS_PERIOD - ZEBRA_DEPTH - DASH_COUNT * DASH_LENGTH) / (DASH_COUNT + 1.0)
+	var chevron_step := MARKS_PERIOD / CHEVRON_COUNT
+	var white: Array[Transform3D] = []
+	var arrows: Array[Transform3D] = []
+	#Zebra crossings; the first one is where the runner starts. The row slides up to one period, so it starts one period early
+	var crossing_x := -7.0 - MARKS_PERIOD * ceilf((-7.0 - (from_x - MARKS_PERIOD)) / MARKS_PERIOD)
+	while crossing_x < to_x + MARKS_PERIOD:
 		for index in stripes:
-			var z := -half + 0.5 + 0.3 + index * 1.1
-			_box(Vector3(crossing_x, 0.006, z), Vector3(2.4, 0.01, 0.55), _flat(LINE_COLOR), _zebra_row)
-		crossing_x += ZEBRA_PERIOD
+			var z := (index - (stripes - 1) / 2.0) * ZEBRA_PITCH
+			white.append(_mark(Vector3(crossing_x, 0.006, z), Vector3(ZEBRA_DEPTH, 0.01, ZEBRA_STRIPE)))
+		for lane in range(1, lane_count):
+			for index in DASH_COUNT:
+				var dash_x := crossing_x + ZEBRA_DEPTH / 2.0 + dash_gap + (index + 0.5) * DASH_LENGTH + index * dash_gap
+				white.append(_mark(Vector3(dash_x, 0.005, -half + lane * lane_width), Vector3(DASH_LENGTH, 0.01, DASH_WIDTH)))
+		for lane in lane_count:
+			for index in CHEVRON_COUNT:
+				var tip_x := crossing_x + chevron_step / 2.0 + index * chevron_step
+				_add_chevron(arrows, Vector3(tip_x + 0.48, 0.007, -half + (lane + 0.5) * lane_width))
+		crossing_x += MARKS_PERIOD
+	_scatter(white, _flat(LINE_COLOR))
+	_scatter(arrows, _flat(CHEVRON_COLOR))
 
 
 #A "V" whose point goes to +X: two bars that meet at "tip"
-func _add_chevron(tip: Vector3) -> void:
+func _add_chevron(into: Array[Transform3D], tip: Vector3) -> void:
 	for side: float in [-1.0, 1.0]:
 		var direction := Vector3(-cos(CHEVRON_ANGLE), 0.0, side * sin(CHEVRON_ANGLE))
-		_box(tip + direction * CHEVRON_ARM / 2.0, Vector3(CHEVRON_ARM, 0.01, 0.2), _flat(CHEVRON_COLOR), _chevron_row)
-		_chevron_row.get_child(_chevron_row.get_child_count() - 1).rotation.y = side * CHEVRON_ANGLE
+		var mark := _mark(tip + direction * CHEVRON_ARM / 2.0, Vector3(CHEVRON_ARM, 0.01, 0.2))
+		mark.basis = Basis(Vector3.UP, side * CHEVRON_ANGLE) * mark.basis
+		into.append(mark)
+
+
+#A flat box of the unit mesh of _scatter, at "center" with the given size
+func _mark(center: Vector3, size: Vector3) -> Transform3D:
+	return Transform3D(Basis.from_scale(size), center)
+
+
+#All the boxes of one colour in a single draw call
+func _scatter(boxes: Array[Transform3D], material: Material) -> void:
+	var mesh := BoxMesh.new()
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = mesh
+	multi.instance_count = boxes.size()
+	for index in boxes.size():
+		multi.set_instance_transform(index, boxes[index])
+	var instance := MultiMeshInstance3D.new()
+	instance.multimesh = multi
+	instance.material_override = material
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_marks_row.add_child(instance)
 
 
 #A coral band on the ground marks the line; the inflatable arch over it is what shows from far away
-func _build_end(end_x: float, outer: float) -> void:
-	_box(Vector3(end_x, SIDEWALK_HEIGHT + 0.02, 0.0), Vector3(0.6, 0.04, outer * 2.0), _flat(Palette.CORAL))
+func _build_end(end_x: float, half: float, outer: float) -> void:
+	#Painted flat: over the road and over each paving, never across the curb
+	var coral := _flat(Palette.CORAL)
+	_box(Vector3(end_x, 0.012, 0.0), Vector3(0.6, 0.024, half * 2.0), coral)
+	var paving := outer - half - CURB_WIDTH
+	for side: float in [-1.0, 1.0]:
+		_box(Vector3(end_x, SIDEWALK_HEIGHT + 0.006, side * (half + CURB_WIDTH + paving / 2.0)), Vector3(0.6, 0.012, paving), coral)
 	var arch := PropKit.make(&"arch", Vector3((outer + 0.5) * 2.0, 0.0, 0.0))
 	arch.position = Vector3(end_x, 0.0, 0.0)
 	arch.rotation.y = PI / 2.0

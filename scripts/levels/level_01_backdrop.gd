@@ -12,10 +12,9 @@ const KINDS: Array[Dictionary] = [
 	{"id": &"island", "count": 6, "size": Vector2(9.0, 15.0), "tall": false},
 	{"id": &"cloud", "count": 10, "size": Vector2(14.0, 26.0), "tall": false},
 ]
-#The cloud sea under the course
-const SEA_COUNT := 14
-#A lilac shade so the clouds below read darker than the ones around the course
-const SEA_TINT := Color(0.88, 0.82, 1.0)
+#The cloud sea under the course: big white clouds in one draw call
+const SEA_COUNT := 90
+const SEA_COLORS: Array[Color] = [Color("ffffff"), Color("f4f0ff"), Color("eaf3ff")]
 
 var _items: Array[Dictionary] = []
 var _clock := 0.0
@@ -36,13 +35,19 @@ func build() -> void:
 			else:
 				item = PropKit.make_long(kind["id"], size, Color.WHITE, false)
 			#Big pieces keep further out so they never swallow the course
-			var gap := 62.0 + size * 0.6
+			var gap := 84.0 + size * 0.6
 			var at := Vector3(side * (gap + rng.randf_range(0.0, 50.0)), rng.randf_range(-6.0, 26.0), rng.randf_range(-175.0, 40.0))
 			_add(item, at, atan2(-side, 0.8), rng)
-	for _step in SEA_COUNT:
-		var cloud := PropKit.make_long(&"cloud", rng.randf_range(22.0, 38.0), SEA_TINT, false)
-		var at := Vector3(rng.randf_range(-150.0, 150.0), rng.randf_range(-36.0, -28.0), rng.randf_range(-200.0, 60.0))
-		_add(cloud, at, rng.randf() * TAU, rng)
+	var sea := CloudField.new()
+	sea.setup(Vector2(-170.0, 170.0))
+	for cloud in SEA_COUNT:
+		sea.add_cloud(Vector3(rng.randf_range(-170.0, 170.0), rng.randf_range(-38.0, -26.0), rng.randf_range(-230.0, 70.0)),
+			rng.randf_range(4.0, 9.0), SEA_COLORS[cloud % SEA_COLORS.size()], rng.randf_range(0.5, 1.6), rng)
+	add_child(sea)
+	sea.commit()
+	var sparks := PartyKit.sparkles(Vector3(70.0, 9.0, 75.0), 90)
+	sparks.position = Vector3(0.0, 6.0, -58.0)
+	add_child(sparks)
 
 
 func _process(delta: float) -> void:
