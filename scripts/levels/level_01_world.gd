@@ -3,22 +3,34 @@ extends Node3D
 
 #Builds level 1 from Level01Layout: a round platform per vertex, a bridge per edge (plain, conveyor belt or fragile) and a spinner on some islands
 
-const LILAC := Color("b79cf8")
-const LILAC_DARK := Color("7a5fdc")
 #Start and goal stand out from the lilac course: cool mint to leave, warm sun to arrive
 const MINT := Color("86e8c6")
 const MINT_DARK := Color("4cb797")
 const SUN := Color("ffd27a")
 const SUN_DARK := Color("e0a23d")
 const CORAL := Color("ff7a85")
+const SKY := Color("62b7ff")
+const VIOLET := Color("a584ff")
+const ROSE := Color("ff7fb2")
+const TANGERINE := Color("ffa84f")
 const CYAN := Color("4fd6e8")
 const MAGENTA := Color("ee4fb8")
 const AMBER := Color("ffc857")
+#The colour of each island follows its stretch of the course: mint to leave, then blue, violet, pink and orange, and gold at the goal
+const TIERS := {
+	&"S": MINT, &"A": SKY, &"B": SKY, &"C": SKY, &"D": VIOLET, &"E": VIOLET, &"F": VIOLET, &"G": VIOLET,
+	&"H": ROSE, &"I": ROSE, &"J": ROSE, &"K": TANGERINE, &"L": TANGERINE, &"M": SUN,
+}
+#Bridges are pale so the coloured islands stand out
+const BRIDGE_COLOR := Color("fff2f7")
 const BOARD_TEXTURE: Texture2D = preload("res://assets/textures/board_checker.png")
 const BELT_TEXTURE: Texture2D = preload("res://assets/textures/belt_chevrons.png")
 
 const BRIDGE_WIDTH := 4.2
 const THICKNESS := 0.6
+#The lights along the sides of a bridge: they say where its edge is, and flash when the bridge is about to fall
+const EDGE_WIDTH := 0.2
+const EDGE_HEIGHT := 0.07
 const FALL_Y := -12.0
 #Meters of bridge that one chevron of the belt covers
 const BELT_TILE := 3.0
@@ -29,6 +41,12 @@ const DROP_DEPTH := 9.0
 const NAME_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 #Distance up to which the explanation under a title is shown
 const SUBTITLE_RANGE := 14.0
+#The candy bumper around each island and the lights on it
+const RIM_TUBE := 0.22
+const RIM_HEIGHT := 0.4
+const RIM_STRIPE := 1.5
+const BULB_SPACING := 1.6
+const BULB_HEIGHT := 0.44
 
 var station_positions: Dictionary = {}
 var refuge_center := Vector3.ZERO
@@ -43,6 +61,10 @@ var _bridges: Dictionary = {}
 var _belts: Array[StandardMaterial3D] = []
 var _flashing: Dictionary = {}
 var _spinners: Dictionary = {}
+var _set: Level01Set
+var _bulb_spots: Array[Transform3D] = []
+var _bulb_colors: Array[Color] = []
+var _bulb_phases: Array[float] = []
 
 
 #Every racer has its own locator; the sensors tell each of them where it is
@@ -62,6 +84,23 @@ func build(locators: Array[PlayerLocator], refuge_radius: float, belt_speed: flo
 	_build_barrier()
 	_build_name_labels()
 	_scatter_decor()
+	_set = Level01Set.new()
+	add_child(_set)
+	_set.build()
+	add_child(PartyKit.bulbs(_bulb_spots, _bulb_colors, _bulb_phases))
+
+
+#The three lights of the gantry over the start follow the countdown, and the crowd roars when somebody arrives
+func set_start_lights(count: int, go: bool) -> void:
+	_set.set_start_lights(count, go)
+
+
+func celebrate_finish() -> void:
+	_set.celebrate()
+
+
+func cheer(power: float) -> void:
+	_set.cheer(power)
 
 
 func set_block_visual(active: bool) -> void:
@@ -94,6 +133,7 @@ func flash_bridge(a: StringName, b: StringName, on: bool) -> void:
 	var record: Dictionary = _bridges.get(key, {})
 	if record.has("material"):
 		(record["material"] as StandardMaterial3D).emission_energy_multiplier = 0.2
+		(record["edge_material"] as StandardMaterial3D).emission_energy_multiplier = 1.0
 
 
 #A fragile bridge drops out of sight (no floor) or comes back
@@ -121,6 +161,7 @@ func _process(delta: float) -> void:
 	for key: String in _flashing:
 		var record: Dictionary = _bridges[key]
 		(record["material"] as StandardMaterial3D).emission_energy_multiplier = 0.3 + 1.6 * absf(sin(_clock * 9.0))
+		(record["edge_material"] as StandardMaterial3D).emission_energy_multiplier = 1.0 + 3.0 * absf(sin(_clock * 9.0))
 
 
 func _material(color: Color, emission := 0.0, alpha := 1.0) -> StandardMaterial3D:
@@ -214,10 +255,17 @@ func _build_platform(id: StringName, locators: Array[PlayerLocator]) -> void:
 
 	var is_start := id == Level01Layout.START
 	var is_goal := id == Level01Layout.GOAL
-	var top_color := MINT if is_start else (SUN if is_goal else LILAC)
-	var skirt_color := MINT_DARK if is_start else (SUN_DARK if is_goal else LILAC_DARK)
-	#The rim warns: white to leave, gold to arrive, hot pink where a bar sweeps the island
-	var rim_color := Color("fdfbff") if is_start else (AMBER if is_goal else (MAGENTA if Level01Layout.SPINNERS.has(id) else CYAN))
+	var top_color: Color = TIERS[id]
+	var skirt_color := top_color.darkened(0.35)
+	#The rim warns: white to leave, gold to arrive, hot pink where a bar sweeps the island, white and the colour of the island elsewhere
+	var rim_a := Color("fdfbff")
+	var rim_b := top_color.darkened(0.12)
+	if is_goal:
+		rim_b = AMBER
+	elif Level01Layout.SPINNERS.has(id):
+		rim_b = MAGENTA
+	elif is_start:
+		rim_b = MINT_DARK
 	var top := CylinderMesh.new()
 	top.top_radius = radius
 	top.bottom_radius = radius
@@ -234,12 +282,22 @@ func _build_platform(id: StringName, locators: Array[PlayerLocator]) -> void:
 	skirt.rings = 1
 	_mesh(body, skirt, _material(skirt_color), Vector3(0, -THICKNESS / 2.0 - 0.8, 0))
 
+	#A thick candy bumper around the edge, in the colour of what the island is for
 	var rim := TorusMesh.new()
-	rim.outer_radius = radius
-	rim.inner_radius = radius - 0.14
-	rim.rings = 40
-	rim.ring_segments = 6
-	_mesh(body, rim, _material(rim_color, 0.9), Vector3(0, THICKNESS / 2.0, 0))
+	rim.outer_radius = radius + RIM_TUBE - 0.12
+	rim.inner_radius = radius - RIM_TUBE - 0.12
+	rim.rings = 48
+	rim.ring_segments = 10
+	_mesh(body, rim, PartyKit.candy(rim_a, rim_b, roundf(TAU * radius / RIM_STRIPE), 0.0, 0.25), Vector3(0, RIM_HEIGHT, 0))
+	_rim_lights(id, centre, radius)
+
+	#A ring of light under the skirt, so the island hovers
+	var underglow := TorusMesh.new()
+	underglow.outer_radius = radius * 0.52
+	underglow.inner_radius = radius * 0.52 - 0.22
+	underglow.rings = 32
+	underglow.ring_segments = 6
+	_mesh(body, underglow, _material(rim_b.lightened(0.2), 1.6), Vector3(0, -THICKNESS / 2.0 - 1.55, 0))
 
 	var sensor_shape := CylinderShape3D.new()
 	sensor_shape.radius = radius - 0.1
@@ -269,6 +327,11 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 	var body := _body(shape, Transform3D(basis, centre))
 	var material := _bridge_material(kind, end - start)
 	var visual := _mesh(body, _box(shape.size), material, Vector3.ZERO, true)
+	var edge_material := _edge_material(kind)
+	for side in [-1.0, 1.0]:
+		var edge := _mesh(visual, _box(Vector3(EDGE_WIDTH, EDGE_HEIGHT, shape.size.z)), edge_material,
+			Vector3(side * (BRIDGE_WIDTH / 2.0 - EDGE_WIDTH / 2.0), THICKNESS / 2.0, 0.0))
+		edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	#Strips mark where the bridge starts, one at each platform edge
 	var strips: Array[Node3D] = []
@@ -279,7 +342,8 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 		strip.basis = basis
 		strips.append(strip)
 	_bridges[_key(a, b)] = {
-		"visual": visual, "collider": body.get_child(0), "strips": strips, "material": material, "kind": kind}
+		"visual": visual, "collider": body.get_child(0), "strips": strips, "material": material, "kind": kind,
+		"edge_material": edge_material}
 
 	#The sensor covers only the part of the bridge outside both platforms
 	var sensor_shape := BoxShape3D.new()
@@ -288,6 +352,22 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 	var area := _sensor(sensor_shape, Transform3D(basis, sensor_centre))
 	for locator in locators:
 		locator.watch_bridge(a, b, area)
+
+
+#One light colour per kind of bridge: cool for a plain one, mint for a belt and coral for a fragile one
+func _edge_material(kind: StringName) -> StandardMaterial3D:
+	var color := Color("7ae6ff")
+	if kind == Level01Layout.BELT:
+		color = Color("4cf2b0")
+	elif kind == Level01Layout.FRAGILE:
+		color = Color("ff6f7d")
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 1.0
+	material.roughness = 0.4
+	return material
 
 
 #A belt flows from its first vertex to its second: the chevrons run that way
@@ -305,7 +385,31 @@ func _bridge_material(kind: StringName, length: float) -> StandardMaterial3D:
 		fragile.emission = Color("ff6f7d")
 		fragile.emission_energy_multiplier = 0.2
 		return fragile
-	return _board(LILAC)
+	return _board(BRIDGE_COLOR)
+
+
+#Little lights along the rim of an island, left out where a bridge comes in
+func _rim_lights(id: StringName, centre: Vector3, radius: float) -> void:
+	var mouths: Array[float] = []
+	for edge in Level01Layout.EDGES:
+		if edge[0] == id or edge[1] == id:
+			var other: StringName = edge[1] if edge[0] == id else edge[0]
+			var to: Vector3 = Level01Layout.POSITIONS[other] - centre
+			mouths.append(atan2(to.z, to.x))
+	var half_mouth := asin(minf((BRIDGE_WIDTH / 2.0 + 0.5) / radius, 1.0))
+	var count := roundi(TAU * radius / BULB_SPACING)
+	for step in count:
+		var angle := TAU * step / count
+		var blocked := false
+		for mouth in mouths:
+			if absf(angle_difference(angle, mouth)) < half_mouth:
+				blocked = true
+		if blocked:
+			continue
+		var ring := radius - 0.12
+		_bulb_spots.append(Transform3D(Basis.IDENTITY, centre + Vector3(cos(angle) * ring, BULB_HEIGHT - 0.3 + 0.28, sin(angle) * ring)))
+		_bulb_colors.append(PartyKit.PALETTE[(step + int(absf(centre.z))) % PartyKit.PALETTE.size()])
+		_bulb_phases.append(angle * 3.0)
 
 
 func _build_start_marks() -> void:
@@ -350,10 +454,8 @@ func _scatter_decor() -> void:
 
 #Names float over the stations so the player knows what each place is for: title, explanation, colour, place, height and reach
 func _build_name_labels() -> void:
-	var start: Vector3 = Level01Layout.POSITIONS[Level01Layout.START]
 	var goal: Vector3 = Level01Layout.POSITIONS[Level01Layout.GOAL]
 	var entries := [
-		["SALIDA", "Aquí empiezas", Color("fdfbff"), start, 4.0, 30.0],
 		["META", "Zona de desconexión", AMBER, goal, 8.0, 140.0],
 		["BLOQUEAR", "Cierra un puente a los bots", MAGENTA, station_positions[&"block"], 3.7, 30.0],
 		["SILENCIAR", "Los bots te ven menos", CYAN, station_positions[&"silence"], 3.7, 30.0],
