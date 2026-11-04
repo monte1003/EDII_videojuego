@@ -4,13 +4,10 @@ extends RefCounted
 #The decorative models of the game: each one is fitted to a size in meters, centred and with its base at y = 0
 
 const FOLDER := "res://assets/props/%s/%s.glb"
-#The vehicle models that come from assets/obstacles instead of assets/props
-const OBSTACLE_PATHS := {
-	&"micro_car": "res://assets/obstacles/car/car.glb",
-	&"cyclist": "res://assets/obstacles/cyclist/cyclist.glb",
-}
+#Where the windows of each car start, as a share of its height (the headlights sit just below them)
+const GLASS_LOW := {&"car_hatch": 0.53, &"van": 0.5}
 
-const DRESSED_SHADER: Shader = preload("res://assets/shaders/dressed.gdshader")
+const GLASS_SHADER: Shader = preload("res://assets/shaders/car_glass.gdshader")
 
 static var _scenes: Dictionary = {}
 static var _bounds: Dictionary = {}
@@ -54,22 +51,17 @@ static func make_long(id: StringName, length: float, tint := Color.WHITE, casts_
 	return make(id, Vector3(length, 0.0, 0.0), tint, casts_shadow)
 
 
-#Paints every mesh of a plain white model in three bands by height (legs, body, head) with its own material
-static func dress(model: Node3D, lower: Color, body: Color, head: Color, lower_end := 0.47, head_start := 0.84) -> void:
-	for node in model.find_children("*", "MeshInstance3D", true, false):
+#A car with open glass: the dark window pixels of its texture let the people inside show through; "tint" colours the body
+static func make_car(id: StringName, length: float, tint: Color, roof_tint := Color.TRANSPARENT) -> Node3D:
+	var root := make(id, Vector3(length, 0.0, 0.0))
+	var box := _bounds[id] as AABB
+	for node in root.find_children("*", "MeshInstance3D", true, false):
 		var mesh := node as MeshInstance3D
-		var box := mesh.get_aabb()
-		var factor := _skeleton_scale(mesh, model)
-		var material := ShaderMaterial.new()
-		material.shader = DRESSED_SHADER
-		material.set_shader_parameter("lower_color", lower)
-		material.set_shader_parameter("body_color", body)
-		material.set_shader_parameter("head_color", head)
-		material.set_shader_parameter("feet_y", box.position.y / factor)
-		material.set_shader_parameter("body_height", box.size.y / factor)
-		material.set_shader_parameter("lower_end", lower_end)
-		material.set_shader_parameter("head_start", head_start)
-		mesh.material_override = material
+		for surface in mesh.mesh.get_surface_count():
+			var base := mesh.mesh.surface_get_material(surface) as StandardMaterial3D
+			if base != null and base.albedo_texture != null:
+				mesh.set_surface_override_material(surface, _glass(base.albedo_texture, tint, roof_tint, box, GLASS_LOW.get(id, 0.5)))
+	return root
 
 
 #Box of a model already made by make, in the space of the root it returned: its real size on screen, for hit boxes
@@ -101,16 +93,21 @@ static func own_materials(model: Node3D) -> Array[StandardMaterial3D]:
 	return owned
 
 
-#A skinned mesh is deformed in the units of its skeleton (centimetres in some models): the scale of the skeleton and its parents
-static func _skeleton_scale(mesh: MeshInstance3D, model: Node3D) -> float:
-	var step := mesh.get_parent()
-	if not step is Skeleton3D:
-		return 1.0
-	var factor := 1.0
-	while step != null and step != model:
-		factor *= (step as Node3D).scale.y
-		step = step.get_parent()
-	return maxf(factor, 0.0001)
+static func _glass(texture: Texture2D, tint: Color, roof_tint: Color, box: AABB, glass_low: float) -> ShaderMaterial:
+	if roof_tint.a == 0.0:
+		roof_tint = tint
+	var key := "glass_%d_%s_%s" % [texture.get_instance_id(), tint.to_html(), roof_tint.to_html()]
+	if not _tints.has(key):
+		var material := ShaderMaterial.new()
+		material.shader = GLASS_SHADER
+		material.set_shader_parameter("albedo_tex", texture)
+		material.set_shader_parameter("tint", tint)
+		material.set_shader_parameter("roof_tint", roof_tint)
+		material.set_shader_parameter("glass_low", glass_low)
+		material.set_shader_parameter("feet_y", box.position.y)
+		material.set_shader_parameter("body_height", box.size.y)
+		_tints[key] = material
+	return _tints[key]
 
 
 static func _factor(wanted: float, current: float) -> float:
@@ -121,7 +118,7 @@ static func _factor(wanted: float, current: float) -> float:
 
 static func _scene(id: StringName) -> PackedScene:
 	if not _scenes.has(id):
-		_scenes[id] = load(OBSTACLE_PATHS[id] if OBSTACLE_PATHS.has(id) else FOLDER % [id, id])
+		_scenes[id] = load(FOLDER % [id, id])
 	return _scenes[id]
 
 

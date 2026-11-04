@@ -11,16 +11,11 @@ const RUNNER_SCENE: PackedScene = preload("res://scenes/characters/street_runner
 const CAR_COLORS: Array[Color] = [
 	Color("ff6f7d"), Color("ffb347"), Color("ff8fc0"), Color("ffd95a"), Color("ff9a6b"),
 ]
-#The toy hatchback and the minibus are the most common; the micro car is a little shorter
-const CAR_MODELS: Array[StringName] = [&"car_hatch", &"car_hatch", &"van", &"micro_car", &"micro_car"]
-const MICRO_CAR_SHARE := 0.9
-#Pedestrians that look at their phone while they walk; the last one is the wide one
-const WALKERS: Array[PackedScene] = [
-	preload("res://assets/obstacles/pedestrian/pedestrian_walk.glb"),
-	preload("res://assets/obstacles/pedestrian/pedestrian_woman_walk.glb"),
-	preload("res://assets/obstacles/pedestrian/pedestrian_heavy_walk.glb"),
-]
-const DUST_COLOR := Color("f1e6ff")
+#The toy hatchback is twice as common as the minibus
+const CAR_MODELS: Array[StringName] = [&"car_hatch", &"car_hatch", &"van"]
+#Most cars have a roof of another colour
+const ROOF_COLORS: Array[Color] = [Color("fff6e6"), Color("fdfbff"), Color("3a3358")]
+const TWO_TONE_CHANCE := 0.65
 #Meters from the end line where the edge of the screen starts to glow
 const DANGER_RANGE := 6.0
 
@@ -68,36 +63,36 @@ class Lane:
 @export var pedestrian_speed := 2.4
 #Speed multiplier of the whole flow at the start and at the end of the round
 @export var start_speed_scale := 1.0
-@export var end_speed_scale := 2.2
+@export var end_speed_scale := 3.5
 @export var car_interval_min := 1.6
 @export var car_interval_max := 3.4
-@export var pedestrian_interval_min := 1.4
-@export var pedestrian_interval_max := 3.2
+@export var pedestrian_interval_min := 0.6
+@export var pedestrian_interval_max := 1.4
 #A lane waits if every other lane spawned this recently, so the street is never a full wall
 @export var wall_window := 0.6
 #Cars that may run side by side; with 3 lanes, 2 always leaves one lane to escape through
 @export var max_cars_side_by_side := 2
 #Extra meters between cars of different lanes for them not to count as side by side
 @export var car_side_gap := 2.5
-#Throw-back speed of each kind of hit (about 4.5 m for a car and 2.5 m for a pedestrian)
-@export var car_knockback := 12.0
-@export var pedestrian_knockback := 9.0
+#Throw-back speed of each kind of hit (about 6 m for a car or a pedestrian: the push fades at 16 m/s per second)
+@export var car_knockback := 14.0
+@export var pedestrian_knockback := 14.0
 #Chance that a car is replaced by a tank as wide as two lanes
-@export_range(0.0, 1.0) var tank_chance := 0.01
+@export_range(0.0, 1.0) var tank_chance := 0.02
 @export var tank_length := 6.0
-@export var tank_knockback := 15.0
-@export var cyclist_knockback := 10.5
-@export var cone_knockback := 6.0
+@export var tank_knockback := 16.0
+@export var cyclist_knockback := 14.0
+@export var cone_knockback := 12.0
 #Chances, when a car lane has room, that a rider or a row of cones comes instead of a car
 @export_range(0.0, 1.0) var cyclist_chance := 0.14
 @export_range(0.0, 1.0) var cone_chance := 0.12
-@export var cyclist_length := 2.4
+@export var cyclist_length := 2.1
 #Speed of the shove up or down the screen that takes the runner out of the obstacle's way
 @export var side_shove := 8.0
 
 @export_group("Belt")
 #The whole street is a conveyor that drags the runner toward the end line, in m/s at the start
-@export var belt_speed := 3.4
+@export var belt_speed := 4.0
 #How much of the flow's speed-up the belt follows (0 keeps it constant)
 @export_range(0.0, 1.0) var belt_ramp := 0.5
 
@@ -371,10 +366,11 @@ func _try_spawn(lane: Lane) -> void:
 
 func _spawn_car(lane: Lane) -> void:
 	var model: StringName = CAR_MODELS[_rng.randi() % CAR_MODELS.size()]
-	var length := car_length * (MICRO_CAR_SHARE if model == &"micro_car" else 1.0)
-	_mark_spawned(lane, length)
+	_mark_spawned(lane, car_length)
 	var car := StreetObstacle.new()
-	car.build_car(model, CAR_COLORS[_rng.randi() % CAR_COLORS.size()], length)
+	var body := CAR_COLORS[_rng.randi() % CAR_COLORS.size()]
+	var roof := ROOF_COLORS[_rng.randi() % ROOF_COLORS.size()] if _rng.randf() < TWO_TONE_CHANCE else body
+	car.build_car(model, body, car_length, _rng, roof)
 	car.base_speed = car_speed
 	car.knockback = car_knockback
 	_place(car, lane.z, 0.0)
@@ -383,7 +379,7 @@ func _spawn_car(lane: Lane) -> void:
 func _spawn_cyclist(lane: Lane) -> void:
 	_mark_spawned(lane, cyclist_length)
 	var rider := StreetObstacle.new()
-	rider.build_cyclist(cyclist_length)
+	rider.build_cyclist(_rng)
 	rider.base_speed = car_speed
 	rider.knockback = cyclist_knockback
 	_place(rider, lane.z, 0.0)
@@ -402,9 +398,8 @@ func _spawn_cones(lane: Lane) -> void:
 
 func _spawn_pedestrian(lane: Lane) -> void:
 	_mark_spawned(lane, 0.0)
-	var index := _rng.randi() % WALKERS.size()
 	var pedestrian := StreetObstacle.new()
-	pedestrian.build_pedestrian(WALKERS[index], index == WALKERS.size() - 1)
+	pedestrian.build_pedestrian(_rng)
 	pedestrian.base_speed = pedestrian_speed
 	pedestrian.knockback = pedestrian_knockback
 	var slot := lane.slot_offset if _rng.randf() < 0.5 else -lane.slot_offset
@@ -481,10 +476,8 @@ func _check_hits() -> void:
 	_runner.touching = hit_by != null
 	if hit_by == null or not _runner.can_be_hit():
 		return
-	var hit := StreetRunner.Hit.new()
-	hit.back_speed = hit_by.knockback
-	hit.side = _shove_side(hit_by)
-	hit.side_speed = side_shove
+	var hit := Player.Hit.new()
+	hit.push = Vector3(hit_by.knockback, 0.0, _shove_side(hit_by) * side_shove)
 	hit.stun = hit_by.stun
 	hit.flips = hit_by.flips
 	hit.strength = hit_by.strength
@@ -495,23 +488,13 @@ func _check_hits() -> void:
 
 
 #The blow is felt: dust and stars where it landed, the edge of the screen flashes and the game stops for a breath
-func _on_runner_hit(hit: StreetRunner.Hit) -> void:
-	var chest := _runner.position + Vector3(0.0, 0.8, 0.0)
-	StreetFx.stars(self, chest, 5 + roundi(hit.strength * 5.0))
-	StreetFx.dust(self, _runner.position + Vector3(0.0, 0.1, 0.0), DUST_COLOR, 8 + roundi(hit.strength * 10.0))
+func _on_runner_hit(hit: Player.Hit) -> void:
+	ImpactFx.blow(self, _runner, hit, _rng, true)
 	_hud.flash(Palette.CORAL, 0.3 + 0.3 * hit.strength, 0.45)
-	SynthSound.play(self, SynthSound.crash() if hit.strength > 0.5 else SynthSound.thump(),
-		-4.0 + hit.strength * 3.0, _rng.randf_range(0.92, 1.08))
-	if hit.strength >= 0.5:
-		StreetFx.hit_stop(get_tree(), 0.05 + 0.04 * hit.strength)
 
 
-func _on_runner_landed(at: Vector3, hard: bool) -> void:
-	StreetFx.dust(self, at + Vector3(0.0, 0.05, 0.0), DUST_COLOR, 12 if hard else 5)
-	SynthSound.play(self, SynthSound.thump(0.2) if hard else SynthSound.land(), -6.0 if hard else -10.0,
-		_rng.randf_range(0.95, 1.1))
-	if hard:
-		_runner.shake_camera(0.25)
+func _on_runner_landed(_at: Vector3, hard: bool) -> void:
+	ImpactFx.landing(self, _runner, hard, _rng)
 
 
 #Up or down the screen, away from the obstacle's centre; toward the open side near an edge

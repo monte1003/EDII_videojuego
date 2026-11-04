@@ -1,10 +1,11 @@
-class_name StreetFx
+class_name ImpactFx
 extends RefCounted
 
-#Cheap one-shot effects for the hits of the street: a puff of dust, a few stars and the freeze of an impact
+#Cheap one-shot effects for the hits of every round: a puff of dust, a few stars, the sound and the freeze of an impact
 
 const STAR_SIZE := 64
 const STAR_POINTS := 5
+const DUST_COLOR := Color("f1e6ff")
 
 static var _star: ImageTexture
 static var _fade: Curve
@@ -17,6 +18,25 @@ static func hit_stop(tree: SceneTree, seconds: float) -> void:
 	Engine.time_scale = 0.06
 	await tree.create_timer(seconds, true, false, true).timeout
 	Engine.time_scale = 1.0
+
+
+#What a blow looks and sounds like on "player"; only the player of this screen freezes the game for a breath
+static func blow(host: Node3D, player: Player, hit: Player.Hit, rng: RandomNumberGenerator, local: bool) -> void:
+	stars(host, player.global_position + Vector3(0.0, 0.8, 0.0), 5 + roundi(hit.strength * 5.0))
+	dust(host, player.global_position + Vector3(0.0, 0.1, 0.0), DUST_COLOR, 8 + roundi(hit.strength * 10.0))
+	SynthSound.play(host, SynthSound.crash() if hit.strength > 0.5 else SynthSound.thump(),
+		-4.0 + hit.strength * 3.0, rng.randf_range(0.92, 1.08))
+	if local and hit.strength >= 0.5:
+		hit_stop(host.get_tree(), 0.05 + 0.04 * hit.strength)
+
+
+#Landing after a jump or a flight; a hard one (after a blow) also shakes the camera of that player
+static func landing(host: Node3D, player: Player, hard: bool, rng: RandomNumberGenerator) -> void:
+	dust(host, player.global_position + Vector3(0.0, 0.05, 0.0), DUST_COLOR, 12 if hard else 5)
+	SynthSound.play(host, SynthSound.thump(0.2) if hard else SynthSound.land(), -6.0 if hard else -10.0,
+		rng.randf_range(0.95, 1.1))
+	if hard:
+		player.shake_camera(0.25)
 
 
 #A round puff on the ground that grows and fades
@@ -77,6 +97,47 @@ static func stars(parent: Node3D, at: Vector3, amount := 7) -> void:
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	material.vertex_color_use_as_albedo = true
 	material.albedo_texture = star_texture()
+	mesh.material = material
+	burst.mesh = mesh
+	burst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_release(parent, burst, at, burst.lifetime)
+
+
+#Paper confetti shot up from a cannon: it spins while it falls
+static func confetti(parent: Node3D, at: Vector3, amount := 90, spread := 50.0, speed := 9.0) -> void:
+	var burst := CPUParticles3D.new()
+	burst.one_shot = true
+	burst.emitting = false
+	burst.amount = amount
+	burst.lifetime = 3.2
+	burst.explosiveness = 0.95
+	burst.direction = Vector3.UP
+	burst.spread = spread
+	burst.initial_velocity_min = speed * 0.55
+	burst.initial_velocity_max = speed
+	burst.gravity = Vector3(0.0, -5.5, 0.0)
+	burst.damping_min = 0.8
+	burst.damping_max = 1.8
+	burst.angle_min = -180.0
+	burst.angle_max = 180.0
+	burst.angular_velocity_min = -360.0
+	burst.angular_velocity_max = 360.0
+	var tones := Gradient.new()
+	var colors := PackedColorArray()
+	var offsets := PackedFloat32Array()
+	for index in PartyKit.PALETTE.size():
+		colors.append(PartyKit.PALETTE[index])
+		offsets.append(float(index) / (PartyKit.PALETTE.size() - 1))
+	tones.offsets = offsets
+	tones.colors = colors
+	tones.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
+	burst.color_initial_ramp = tones
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(0.2, 0.32)
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.vertex_color_use_as_albedo = true
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mesh.material = material
 	burst.mesh = mesh
 	burst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

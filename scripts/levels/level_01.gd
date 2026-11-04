@@ -11,6 +11,11 @@ const SCREEN_ID := &"level_01"
 const FALL_Y := -12.0
 #Meters between the starting places of the racers
 const START_SPREAD := 2.2
+#How hard a blow feels and how long it leaves the racer lying: a bar hits harder than a bot
+const SPINNER_STRENGTH := 0.9
+const SPINNER_STUN := 0.6
+const BOT_STRENGTH := 0.65
+const BOT_STUN := 0.5
 
 #Tuning numbers of the round; leave empty to use the defaults
 @export var settings: Level01Settings
@@ -21,6 +26,8 @@ var phase := Phase.COUNTDOWN
 var graph: WeightedGraph
 var rules: Level01Rules
 var events: Level01Events
+#The second feed, when the settings ask for one
+var extra_events: Level01Events
 var bots: Array[ChaserBot] = []
 
 var _context := ChaseContext.new()
@@ -80,6 +87,12 @@ func _ready() -> void:
 	events.warned.connect(_on_feed_warned)
 	events.closed.connect(_on_feed_closed)
 	events.reopened.connect(_on_feed_reopened)
+	if settings.feed_extra_delay > 0.0:
+		extra_events = Level01Events.new(settings, _rng, Level01Layout.fragile_edges())
+		extra_events.delay_by(settings.feed_extra_delay)
+		extra_events.warned.connect(_on_feed_warned)
+		extra_events.closed.connect(_on_feed_closed)
+		extra_events.reopened.connect(_on_feed_reopened)
 
 	_debug = Level01Debug.new()
 	add_child(_debug)
@@ -136,6 +149,7 @@ func _physics_process(delta: float) -> void:
 				if shown != _countdown_shown:
 					_countdown_shown = shown
 					_hud.show_countdown(str(shown))
+					_world.set_start_lights(shown, false)
 		Phase.RUNNING:
 			_update_running(delta)
 
@@ -181,6 +195,8 @@ func _register_racer(player: Player, shown_name: String, id: int) -> void:
 	add_child(locator)
 	_locators[id] = locator
 	locator.force_vertex(Level01Layout.START)
+	player.hit_taken.connect(_on_racer_hit.bind(player))
+	player.landed.connect(_on_racer_landed.bind(player))
 
 
 func _locator_list() -> Array[PlayerLocator]:
@@ -240,6 +256,7 @@ func _begin_countdown() -> void:
 	_phase_timer = settings.countdown_seconds
 	_countdown_shown = ceili(_phase_timer)
 	_hud.show_countdown(str(_countdown_shown))
+	_world.set_start_lights(_countdown_shown, false)
 	var move_keys := " ".join([InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
 		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
 	_hud.show_mission("Llega a la isla %s" % Level01Layout.GOAL, [
@@ -253,6 +270,8 @@ func _begin_round() -> void:
 		(_players[id] as Player).set_input_enabled(id == _local_id)
 	_hud.hide_countdown()
 	_hud.warn("¡CORRE!")
+	_world.set_start_lights(3, true)
+	_world.cheer(2.4)
 
 
 #Each bot leaves when its role says, like the ghosts leaving their house one after the other
@@ -270,7 +289,9 @@ func _update_running(delta: float) -> void:
 	rules.tick(delta)
 	if phase != Phase.RUNNING:
 		return
-	events.tick(delta, _can_close)
+	events.tick(delta, _can_close, _edge_threat)
+	if extra_events != null:
+		extra_events.tick(delta, _can_close, _edge_threat)
 	_release_due_bots()
 	for id: int in _players.keys():
 		if not _players.has(id):
@@ -342,7 +363,7 @@ func _apply_hazards() -> void:
 		if not rules.register_hit(id):
 			continue
 		var direction := Level01Hazards.push_direction(centre, spinner, player.global_position)
-		player.apply_push(direction * settings.spinner_push + Vector3.UP * settings.push_lift)
+		_hit_racer(player, direction * settings.spinner_push, SPINNER_STRENGTH, SPINNER_STUN)
 		if id == _local_id:
 			_hud.warn("¡Barra!")
 			_hud.flash(Palette.CORAL, 0.35, 0.4)
@@ -531,6 +552,7 @@ func _retire(player_id: int) -> void:
 func _on_racer_finished(player_id: int, place: int) -> void:
 	_cheering[player_id] = Level01Layout.POSITIONS[Level01Layout.GOAL] + Vector3(_rng.randf_range(-2.5, 2.5), 0.0, _rng.randf_range(-2.5, 2.5))
 	var total := rules.racers_in_race()
+	_world.celebrate_finish()
 	if player_id == _local_id:
 		var player := _players[player_id] as Player
 		player.set_input_enabled(false)
@@ -538,6 +560,26 @@ func _on_racer_finished(player_id: int, place: int) -> void:
 	else:
 		_hud.toast("%s llegó %s" % [_names.get(player_id, "Alguien"), _ordinal(place)])
 	_update_standings()
+
+
+#Every blow of the level is the same hit as in the street: it throws the racer, flips it, leaves it lying and gets it up
+func _hit_racer(player: Player, push: Vector3, strength: float, stun: float) -> void:
+	var hit := Player.Hit.new()
+	hit.push = push
+	hit.stun = stun
+	hit.flips = true
+	hit.strength = strength
+	player.take_hit(hit)
+
+
+func _on_racer_hit(hit: Player.Hit, player: Player) -> void:
+	ImpactFx.blow(self, player, hit, _rng, player.player_id == _local_id)
+
+
+#Every landing of the racer of this screen and the hard ones of the rest
+func _on_racer_landed(_at: Vector3, hard: bool, player: Player) -> void:
+	if hard or player.player_id == _local_id:
+		ImpactFx.landing(self, player, hard, _rng)
 
 
 func _on_window_opened(_seconds: float) -> void:
@@ -555,6 +597,7 @@ func _on_feed_closed(a: StringName, b: StringName) -> void:
 	graph.set_edge_enabled(a, b, false)
 	_world.flash_bridge(a, b, false)
 	_world.set_bridge_open(a, b, false)
+	_world.cheer(1.8)
 	_hint_once(&"feed", "Puente %s-%s caído: busca otro camino" % [a, b])
 
 
@@ -563,10 +606,27 @@ func _on_feed_reopened(a: StringName, b: StringName) -> void:
 	_world.set_bridge_open(a, b, true)
 
 
-#A bridge may fall only if every racer that is still running keeps a way to the goal
+#Meters from the middle of a bridge to the nearest racer still running
+func _edge_threat(a: StringName, b: StringName) -> float:
+	var middle: Vector3 = (Level01Layout.POSITIONS[a] + Level01Layout.POSITIONS[b]) / 2.0
+	var nearest := INF
+	for id: int in _players:
+		if rules.state_of(id).is_racing():
+			nearest = minf(nearest, _flat_distance((_players[id] as Player).global_position, middle))
+	return nearest
+
+
+#A bridge may fall only if every racer that is still running keeps a way to the goal, counting the bridges the feed is
+#about to drop as down too
 func _can_close(a: StringName, b: StringName) -> bool:
-	if not graph.is_edge_enabled(a, b):
+	if not graph.is_edge_enabled(a, b) or _feed_holds(a, b):
 		return false
+	var flashing: Array[Array] = []
+	for feed in [events, extra_events]:
+		if feed != null and feed.phase == Level01Events.Phase.WARNING:
+			flashing.append([feed.edge[0], feed.edge[1]])
+	for edge in flashing:
+		graph.set_edge_enabled(edge[0], edge[1], false)
 	graph.set_edge_enabled(a, b, false)
 	var fine := true
 	for id: int in _players:
@@ -578,7 +638,17 @@ func _can_close(a: StringName, b: StringName) -> bool:
 				reaches = true
 		fine = fine and reaches
 	graph.set_edge_enabled(a, b, true)
+	for edge in flashing:
+		graph.set_edge_enabled(edge[0], edge[1], true)
 	return fine
+
+
+#Whether one of the feeds is already flashing or holding down the bridge between a and b
+func _feed_holds(a: StringName, b: StringName) -> bool:
+	for feed in [events, extra_events]:
+		if feed != null and not feed.edge.is_empty() and ((feed.edge[0] == a and feed.edge[1] == b) or (feed.edge[0] == b and feed.edge[1] == a)):
+			return true
+	return false
 
 
 func _on_push_announced(bot: ChaserBot) -> void:
@@ -590,7 +660,7 @@ func _on_push_announced(bot: ChaserBot) -> void:
 func _on_push_landed(_bot: ChaserBot, direction: Vector3, player_id: int) -> void:
 	if not _players.has(player_id) or not rules.register_hit(player_id):
 		return
-	(_players[player_id] as Player).apply_push(direction * settings.push_speed + Vector3.UP * settings.push_lift)
+	_hit_racer(_players[player_id] as Player, direction * settings.push_speed, BOT_STRENGTH, BOT_STUN)
 	if player_id == _local_id:
 		_hud.flash(Palette.CORAL, 0.35, 0.4)
 
