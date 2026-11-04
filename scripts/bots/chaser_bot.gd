@@ -35,10 +35,10 @@ enum State { INACTIVE, CHASE, SEARCH }
 
 @export_group("Push")
 @export var push_enabled := true
-@export var push_trigger_range := 2.3
-@export var push_hit_range := 2.9
-@export var push_windup := 0.7
-@export var push_cooldown := 2.5
+@export var push_trigger_range := 2.8
+@export var push_hit_range := 3.2
+@export var push_windup := 0.55
+@export var push_cooldown := 1.8
 
 var appearance: BotAppearance
 var role: BotRole = ChaseRole.new()
