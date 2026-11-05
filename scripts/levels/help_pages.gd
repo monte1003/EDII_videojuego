@@ -16,7 +16,7 @@ static func level_one(settings: Level01Settings, bots: Array[BotAppearance]) -> 
 	return [
 		{
 			"title": "Tu misión",
-			"body": "Cruza las islas flotantes hasta la isla %s, la del arco. Si juegan varios, gana quien llega primero.
+			"body": "Sube por las islas flotantes y cruza todo el recorrido hasta la isla %s, la del arco. Si juegan varios, gana quien llega primero.
 
 Cuando alguien llega, la meta se cierra en %d segundos. El tiempo máximo es %s. Si caes al vacío pierdes 1 de tus %d intentos y vuelves a la salida, o al checkpoint si ya pasaste por él." % [
 				key.call(Level01Layout.GOAL), int(settings.finish_window), minutes, settings.attempts],
@@ -25,7 +25,7 @@ Cuando alguien llega, la meta se cierra en %d segundos. El tiempo máximo es %s.
 			"title": "El feed cambia",
 			"body": "Los puentes color coral son frágiles: cada cierto tiempo uno parpadea y %d segundos después cae por unos %d. Pasados %d segundos del inicio puede haber dos caídos a la vez. Si estás encima, caes con él.
 
-Hay siete caminos casi igual de buenos: cuando uno se cierra, los bots calculan otro, y tú también." % [
+Casi siempre hay varios caminos parecidos: cuando uno se cierra, los bots calculan otro, y tú también." % [
 				int(settings.feed_warning), int(settings.feed_duration), int(settings.feed_first + settings.feed_extra_delay)],
 		},
 		{
@@ -33,6 +33,20 @@ Hay siete caminos casi igual de buenos: cuando uno se cierra, los bots calculan 
 			"body": "Las cintas de flechas te arrastran: a favor van rápido y en contra cuestan el doble. El costo de cada puente que ves en F3 lo cuenta.
 
 En las islas con el borde rosado gira una barra por todo el piso. Salta sobre ella cuando se acerque o rodéala por el borde, sin caerte.",
+		},
+		{
+			"title": "Atajos y bloques",
+			"body": "Los puentes angostos son atajos: acortan mucho el camino, pero casi no dejan espacio para un empujón.
+
+En algunos puentes anchos va y viene un bloque de rayas. Si te toca, te lanza al vacío: pasa cuando se aleje o salta sobre él.",
+		},
+		{
+			"title": "Todo se mueve",
+			"body": "Las cintas cambian de sentido cada cierto tiempo y las flechas parpadean un instante antes: el costo de ese puente cambia con ellas.
+
+En algunas islas rueda una bola de caramelo por una franja rosada que se enciende antes de que salga; salta cuando llegue. Algunas barras aceleran y frenan.
+
+Los trampolines de colores, en la parte quieta del borde de algunas islas, te lanzan al aire: sirven para ver el camino o para esquivar.",
 		},
 		{
 			"title": "Los bots molestos",
@@ -62,9 +76,9 @@ Mirar: %s
 Usar una estación: %s
 Pausa: %s · Esta ayuda: %s
 
-Sobre cada lugar importante flota su nombre. Al pasar por la isla %s (%s) se guarda tu progreso. A la derecha ves quién va primero." % [
+Sobre cada lugar importante flota su nombre. Al pasar por las islas %s (%s) se guarda tu progreso. A la derecha ves quién va primero." % [
 				keys, InputHints.key_markup(&"jump"), key.call("MOUSE"), key.call(interact),
-				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help"), key.call(Level01Layout.CHECKPOINT), key.call("CHECKPOINT")],
+				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help"), " y ".join(Level01Layout.CHECKPOINTS), key.call("CHECKPOINT")],
 		},
 	]
 
@@ -116,16 +130,16 @@ Cuando llegan a cero las cartas se voltean y quedan tapadas con un %s. La pantal
 		},
 		{
 			"title": "Cae el resto",
-			"body": "Las cartas que van a caer parpadean en rojo justo antes. La tuya se voltea y muestra su ícono.
+			"body": "Las cartas que van a caer parpadean en rojo justo antes. Las que tienen el ícono que sale se voltean y lo muestran: pisa cualquiera de ellas.
 
-%d segundos después vuelven todas, en otro orden, y se repite. Cada vez tienes menos tiempo para memorizar y para correr." % int(config["rest_seconds"]),
+%d segundos después vuelven todas, con los íconos en otro lugar, y se repite. Cada vez tienes menos tiempo para memorizar y para correr." % int(config["rest_seconds"]),
 		},
 		{
-			"title": "Cohetes",
-			"body": "Cuando quedan %d segundos empiezan a pasar cohetes de lado a lado, cada uno por una de las %d filas.
+			"title": "Cada ronda cuesta más",
+			"body": "Al principio el tablero solo tiene dos o tres íconos distintos y casi la mitad de las cartas (%d de %d) llevan el que sale.
 
-Antes de que salga, su fila %s. Si el cohete te alcanza, te derriba de la plataforma: cámbiate de fila o salta justo cuando pase." % [
-				int(config["rocket_seconds_left"]), config["rows"], key.call("parpadea en rojo")],
+Con el tiempo aparecen más íconos distintos y menos cartas buenas, hasta que en la última ronda hay %d íconos y solo una carta se salva. Mira bien dónde está cada uno." % [
+				config["first_copies"], config["columns"] * config["rows"], config["icons"]],
 		},
 		{
 			"title": "Cómo se maneja",

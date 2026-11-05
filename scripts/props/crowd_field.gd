@@ -1,13 +1,13 @@
 class_name CrowdField
 extends Node3D
 
-#A crowd of cheering beans in a single draw call: add every place, then commit once
+#A crowd of cheering fans, each a flat avatar tile like the picture of an account with no photo: add every place, then commit once.
+#The fans are split in stretches of the course with one draw call each, so the engine skips the stretches that are out of view
 
 const SHADER: Shader = preload("res://assets/shaders/crowd_bob.gdshader")
-const BODY_RADIUS := 0.3
-const BODY_HEIGHT := 1.0
+const CARD_SIZE := 1.1
 const FAN_COLORS: Array[Color] = [
-	Color("ff6b8b"), Color("ffcf4a"), Color("4fd6e8"), Color("8e6bff"), Color("6ee7a5"), Color("ff9a5c"), Color("fdfbff"),
+	Color("ff6b8b"), Color("ffcf4a"), Color("4fd6e8"), Color("8e6bff"), Color("6ee7a5"), Color("ff9a5c"), Color("a3a9d9"),
 ]
 
 var _spots: Array[Transform3D] = []
@@ -27,55 +27,41 @@ func set_excitement(amount: float) -> void:
 		_material.set_shader_parameter("excitement", amount)
 
 
+#A wave of standing fans whose crest is at "front" along Z; "lift" is how high they rise (0 puts it away)
+func set_wave(front: float, lift: float) -> void:
+	if _material != null:
+		_material.set_shader_parameter("wave_front", front)
+		_material.set_shader_parameter("wave_lift", lift)
+
+
 func commit() -> void:
 	_material = ShaderMaterial.new()
 	_material.shader = SHADER
-	var multi := MultiMesh.new()
-	multi.transform_format = MultiMesh.TRANSFORM_3D
-	multi.use_colors = true
-	multi.mesh = _fan_mesh(_material)
-	multi.instance_count = _spots.size()
-	for index in _spots.size():
-		multi.set_instance_transform(index, _spots[index])
-		multi.set_instance_color(index, _colors[index])
-	var instance := MultiMeshInstance3D.new()
-	instance.multimesh = multi
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(instance)
+	var card := _fan_mesh(_material)
+	var places: Array[Vector3] = []
+	for spot in _spots:
+		places.append(spot.origin)
+	var groups := MeshMerger.cells(places)
+	for cell: int in groups:
+		var members: Array[int] = groups[cell]
+		var multi := MultiMesh.new()
+		multi.transform_format = MultiMesh.TRANSFORM_3D
+		multi.use_colors = true
+		multi.mesh = card
+		multi.instance_count = members.size()
+		for slot in members.size():
+			multi.set_instance_transform(slot, _spots[members[slot]])
+			multi.set_instance_color(slot, _colors[members[slot]])
+		var instance := MultiMeshInstance3D.new()
+		instance.multimesh = multi
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(instance)
 
 
-#A bean with its arms up and two dark eyes: the body and the arms take the colour of each fan, the eyes stay dark
-func _fan_mesh(body_material: Material) -> ArrayMesh:
-	var capsule := CapsuleMesh.new()
-	capsule.radius = BODY_RADIUS
-	capsule.height = BODY_HEIGHT
-	capsule.radial_segments = 8
-	capsule.rings = 2
-	var arm := CapsuleMesh.new()
-	arm.radius = 0.075
-	arm.height = 0.5
-	arm.radial_segments = 4
-	arm.rings = 1
-	var body := SurfaceTool.new()
-	body.begin(Mesh.PRIMITIVE_TRIANGLES)
-	body.append_from(capsule, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, BODY_HEIGHT / 2.0, 0.0)))
-	for side: float in [-1.0, 1.0]:
-		body.append_from(arm, 0, Transform3D(Basis(Vector3.BACK, side * deg_to_rad(28.0)), Vector3(side * 0.37, 0.95, 0.0)))
-	var eye := SphereMesh.new()
-	eye.radius = 0.055
-	eye.height = 0.11
-	eye.radial_segments = 4
-	eye.rings = 2
-	var eyes := SurfaceTool.new()
-	eyes.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for side: float in [-1.0, 1.0]:
-		eyes.append_from(eye, 0, Transform3D(Basis.IDENTITY, Vector3(side * 0.11, 0.72, BODY_RADIUS - 0.03)))
-	var mesh := ArrayMesh.new()
-	body.commit(mesh)
-	eyes.commit(mesh)
-	mesh.surface_set_material(0, body_material)
-	var dark := StandardMaterial3D.new()
-	dark.albedo_color = Color("2a2145")
-	dark.roughness = 0.5
-	mesh.surface_set_material(1, dark)
-	return mesh
+#A flat card standing on its feet, with the same look from both sides
+func _fan_mesh(material: Material) -> QuadMesh:
+	var card := QuadMesh.new()
+	card.size = Vector2(CARD_SIZE, CARD_SIZE)
+	card.center_offset = Vector3(0.0, CARD_SIZE / 2.0, 0.0)
+	card.material = material
+	return card

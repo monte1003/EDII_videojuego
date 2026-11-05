@@ -1,18 +1,18 @@
 class_name SocialDrop
 extends RoundScene
 
-#SocialDrop, a memory game: six cards show their app icons while the giant screens count down; then the cards turn into "?"
-#and the screens show the icon to find. Only the card that had it stays, the rest drop. Near the end rockets cross the rows too
+#SocialDrop, a memory game: nine cards show their app icons while the giant screens count down; then the cards turn into "?" and
+#the screens show the icon to find. Only the cards that had it stay, the rest drop. Round after round the board shows more
+#different icons and fewer cards with the one to find, until only a single card keeps it
 
 #FINAL: the last drop is over and there is no time for another round
 enum Phase { READY, GO, MEMORIZE, REACT, REST, FINAL, ENDED }
 
 const MINIGAME_ID := &"social_drop"
-#How hard a rocket feels and how long it leaves the player lying
-const ROCKET_STRENGTH := 1.0
-const ROCKET_STUN := 0.7
-#Seconds in which a fall still counts as the work of a rocket
-const ROCKET_BLAME_TIME := 3.0
+#Each stage of the round: how many different icons the board shows (x) and on how many of the nine cards the icon to find is (y)
+const STAGES: Array[Vector2i] = [
+	Vector2i(2, 4), Vector2i(3, 4), Vector2i(3, 3), Vector2i(4, 3), Vector2i(4, 2), Vector2i(5, 2), Vector2i(6, 1),
+]
 
 #One per kind of card; the name shown to the player comes from the file (assets/social_icons/<name>.png)
 @export var icons: Array[Texture2D] = []
@@ -48,17 +48,6 @@ const ROCKET_BLAME_TIME := 3.0
 @export var rest_seconds := 3.0
 @export var drop_hold := 1.6
 
-@export_group("Rockets")
-#Rockets start flying across random rows once this many seconds are left
-@export var rocket_seconds_left := 40.0
-@export var rocket_interval_min := 2.2
-@export var rocket_interval_max := 4.0
-#The row blinks this long before the rocket comes out (it still needs a moment to arrive)
-@export var rocket_warning := 1.0
-@export var rocket_speed := 18.0
-#Speed of the blow of a rocket that hits: far enough to throw the player off the platform
-@export var rocket_knockback := 28.0
-
 @export_group("Victory")
 #Time between the end and the results, to see the jump or the fall
 @export var end_delay := 1.5
@@ -79,13 +68,7 @@ var _warned := false
 var _restored := false
 var _drops_survived := 0
 var _hud_timer := 0.0
-var _rockets_on := false
-var _rocket_timer := 0.5
-var _last_rocket_row := -1
-var _rocket_hit_at := -100.0
 var _tick_sound: AudioStreamPlayer
-var _rocket_sound: AudioStreamPlayer
-var _boom_sound: AudioStreamPlayer
 var _stop_sound: AudioStreamPlayer
 var _drop_sound: AudioStreamPlayer
 
@@ -103,13 +86,11 @@ func _ready() -> void:
 	_tick_sound = _make_sound(SynthSound.tone(1046.0, 0.08), -8.0)
 	_stop_sound = _make_sound(SynthSound.tone(1568.0, 0.55), -4.0)
 	_drop_sound = _make_sound(SynthSound.tone(220.0, 0.7, -140.0), -2.0)
-	_rocket_sound = _make_sound(SynthSound.tone(330.0, 0.9, 500.0), -6.0)
-	_boom_sound = _make_sound(SynthSound.crash(), 0.0)
 
 	_help.setup(HelpPages.social_drop({
 		"time_limit": time_limit, "rest_seconds": rest_seconds, "columns": SocialDropWorld.COLUMNS,
-		"rows": SocialDropWorld.ROWS, "rocket_seconds_left": rocket_seconds_left,
-		"memorize_seconds": memorize_start,
+		"rows": SocialDropWorld.ROWS, "memorize_seconds": memorize_start,
+		"first_copies": STAGES[0].y, "icons": icons.size(),
 	}))
 	_hud.retry_requested.connect(_retry)
 	_hud.menu_requested.connect(GameSession.abandon)
@@ -135,7 +116,6 @@ func _spawn_players() -> void:
 	for player in _players:
 		player.set_input_enabled(false)
 		player.frame_camera(camera_distance, camera_pitch)
-		player.hit_taken.connect(_on_player_hit.bind(player))
 		player.landed.connect(_on_player_landed.bind(player))
 	_local.view_camera().make_current()
 
@@ -171,7 +151,6 @@ func _physics_process(delta: float) -> void:
 			_update_react()
 		Phase.REST:
 			_update_rest()
-	_update_rockets(delta)
 
 	_hud_timer += delta
 	if _hud_timer >= 0.1:
@@ -186,12 +165,8 @@ func _check_falls() -> void:
 			continue
 		_fallen[player.player_id] = elapsed
 		if player == _local:
-			if elapsed - _rocket_hit_at < ROCKET_BLAME_TIME:
-				_finish(false, "¡Te derribó un cohete!",
-					"Aguantaste %d s. Cuando una fila parpadea en rojo, sal de ella o salta justo cuando pase el cohete." % floori(elapsed))
-			else:
-				_finish(false, "¡Te caíste!",
-					"Aguantaste %d s. Memoriza dónde está cada ícono: cuando las cartas se tapan ya no hay segunda mirada." % floori(elapsed))
+			_finish(false, "¡Te caíste!",
+				"Aguantaste %d s. Memoriza dónde está cada ícono: cuando las cartas se tapan ya no hay segunda mirada." % floori(elapsed))
 			return
 		player.set_physics_process(false)
 		player.hide()
@@ -204,15 +179,33 @@ func _go() -> void:
 	_local.set_input_enabled(true)
 
 
-#The cards turn face up and the screens count down while everybody looks for a good place to stand
+#The board is dealt for the stage of the round, the cards turn face up and the screens count down while everybody looks for a good place
 func _start_memorize() -> void:
 	phase = Phase.MEMORIZE
 	_memory_total = _memorize_time(elapsed)
 	_phase_timer = _memory_total
 	_countdown_shown = 0
 	_chosen = _other_icon(_chosen)
+	var stage := _stage_at(elapsed)
+	_world.deal(_rng, _chosen, stage.x, stage.y)
+	_world.set_stage(STAGES.find(stage))
+	_hud.show_stage(STAGES.find(stage) + 1, STAGES.size())
 	_hud.hide_target()
 	_world.show_icons(true)
+
+
+#The stage of the round that starts at "start": it moves on with the clock, and the very last round is always the hardest
+func _stage_at(start: float) -> Vector2i:
+	if _is_last_round(start):
+		return STAGES[STAGES.size() - 1]
+	var progress := clampf(start / time_limit, 0.0, 1.0)
+	return STAGES[mini(int(progress * STAGES.size()), STAGES.size() - 1)]
+
+
+#Whether no other round fits after the one that starts at "start"
+func _is_last_round(start: float) -> bool:
+	var memorize := _memorize_time(start)
+	return not _round_fits(start + memorize + _reaction_time(start + memorize) + rest_seconds)
 
 
 #One number per second on the screens, each tick a little higher; at zero the cards hide their icons
@@ -257,7 +250,7 @@ func _update_rest() -> void:
 	if not _restored and _phase_timer <= rest_seconds - drop_hold:
 		_restored = true
 		_drops_survived += 1
-		_world.restore(_rng)
+		_world.restore()
 		if _round_fits(elapsed + _phase_timer):
 			_world.screen_text("¡Otra vez!", Palette.GOLD)
 		else:
@@ -285,49 +278,9 @@ func _reaction_time(at: float) -> float:
 	return lerpf(reaction_start, reaction_end, progress)
 
 
-#In the last rocket_seconds_left seconds a rocket crosses a random row every few seconds; one
-#that runs into a player throws it off the platform
-func _update_rockets(delta: float) -> void:
-	for player in _players:
-		if _fallen.has(player.player_id):
-			continue
-		var direction := _world.rocket_hit(player.global_position, 0.35)
-		if direction == 0.0:
-			continue
-		var hit := Player.Hit.new()
-		hit.push = Vector3(rocket_knockback * direction, 0.0, 0.0)
-		hit.stun = ROCKET_STUN
-		hit.flips = true
-		hit.strength = ROCKET_STRENGTH
-		if player == _local:
-			_rocket_hit_at = elapsed
-			_hud.flash(Palette.CORAL, 0.4, 0.5)
-		player.take_hit(hit)
-		_boom_sound.play()
-	if time_limit - elapsed > rocket_seconds_left:
-		return
-	if not _rockets_on:
-		_rockets_on = true
-		_hud.warn("¡COHETES!")
-	_rocket_timer -= delta
-	#The last rocket must cross before the time is up
-	if _rocket_timer > 0.0 or time_limit - elapsed < rocket_warning + 1.0:
-		return
-	_rocket_timer = _rng.randf_range(rocket_interval_min, rocket_interval_max)
-	var row := _rng.randi() % SocialDropWorld.ROWS
-	if row == _last_rocket_row:
-		row = (row + 1 + _rng.randi() % (SocialDropWorld.ROWS - 1)) % SocialDropWorld.ROWS
-	_last_rocket_row = row
-	_world.launch_rocket(row, 1.0 if _rng.randf() < 0.5 else -1.0, rocket_warning, rocket_speed)
-	_rocket_sound.play()
-
-
-func _on_player_hit(hit: Player.Hit, player: Player) -> void:
-	ImpactFx.blow(self, player, hit, _rng, player == _local)
-
-
 #Every landing of the player of this screen and the hard ones of the rest
-func _on_player_landed(_at: Vector3, hard: bool, player: Player) -> void:
+func _on_player_landed(at: Vector3, hard: bool, player: Player) -> void:
+	_world.press_tile(at)
 	if hard or player == _local:
 		ImpactFx.landing(self, player, hard, _rng)
 
@@ -344,7 +297,7 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	if victory:
 		_world.screen_text("¡Ganaste!", Palette.TEAL)
 		_world.celebrate()
-		_local.jump_requested = true
+		_local.victory_hop()
 		_hud.show_banner("¡SOBREVIVISTE!", "%d s" % int(time_limit))
 	else:
 		_world.screen_text("¡Te caíste!", Palette.CORAL)
