@@ -32,25 +32,27 @@ func _check_heap() -> void:
 
 
 func _check_shortest_path() -> void:
-	var graph := Level01Layout.build_graph(false)
+	var graph := Level01Layout.build_graph(false, false)
 	_expect(graph.vertices().size() == Level01Layout.POSITIONS.size() and graph.vertices().size() == 26, "26 vértices")
-	_expect(Level01Layout.build_graph().undirected_edges().size() == Level01Layout.EDGES.size(), "una conexión por puente")
+	_expect(Level01Layout.build_graph(true, false).undirected_edges().size() == Level01Layout.EDGES.size(), "una conexión por puente")
+	_expect(Level01Layout.build_graph().undirected_edges().size() == Level01Layout.EDGES.size() + Level01Layout.LAUNCHES.size(),
+		"cada cañón suma una conexión que solo va en un sentido")
 	var route := graph.shortest_path(&"B", &"L")
-	_expect(route.found and route.cost == 8.5 and route.path == [&"B", &"F", &"J", &"L"],
-		"B a L cuesta 8,5 por B-F-J-L: %s %s" % [route.path, route.cost])
+	_expect(route.found and route.cost == 10.5 and route.path == [&"B", &"F", &"J", &"L"],
+		"B a L cuesta 10,5 por B-F-J-L: %s %s" % [route.path, route.cost])
 	var to_goal := graph.shortest_path(&"S", &"M")
-	_expect(to_goal.found and to_goal.cost == 14.0 and to_goal.path.size() == 6 and to_goal.path[0] == &"S" and to_goal.path[5] == &"M",
-		"S a M cuesta 14 con 5 puentes: %s" % [to_goal.path])
+	_expect(to_goal.found and to_goal.cost == 15.0 and to_goal.path.size() == 6 and to_goal.path[0] == &"S" and to_goal.path[5] == &"M",
+		"S a M cuesta 15 con 5 puentes: %s" % [to_goal.path])
 	var same := graph.shortest_path(&"E", &"E")
 	_expect(same.found and same.cost == 0.0 and same.path == [&"E"], "origen igual al destino")
-	_expect(graph.weight_of(&"J", &"L") == 2.5 and graph.weight_of(&"L", &"J") == 5.5,
-		"la cinta J-L cuesta 2,5 a favor y 5,5 en contra: el grafo es dirigido")
-	_expect(graph.shortest_path(&"L", &"J").cost <= 5.5, "volver de L a J nunca cuesta más que la cinta en contra")
+	_expect(graph.weight_of(&"I", &"E") == 2.5 and graph.weight_of(&"E", &"I") == 5.5,
+		"la cinta I-E cuesta 2,5 a favor y 5,5 en contra: el grafo es dirigido")
+	_expect(graph.shortest_path(&"E", &"I").cost <= 5.5, "volver de E a I nunca cuesta más que la cinta en contra")
 	#Without the narrow bridges the course is the long way; with them there are shortcuts
-	var shortcut_graph := Level01Layout.build_graph()
+	var shortcut_graph := Level01Layout.build_graph(true, false)
 	var shortcut := shortcut_graph.shortest_path(&"B", &"L")
-	_expect(shortcut.found and shortcut.cost == 7.0 and shortcut.path == [&"B", &"I", &"L"],
-		"con los atajos B a L baja a 7 por B-I-L: %s %s" % [shortcut.path, shortcut.cost])
+	_expect(shortcut.found and shortcut.cost == 8.0 and shortcut.path == [&"B", &"I", &"L"],
+		"con los atajos B a L baja a 8 por B-I-L: %s %s" % [shortcut.path, shortcut.cost])
 	var whole := shortcut_graph.shortest_path(Level01Layout.START, Level01Layout.GOAL)
 	var long_way := graph.shortest_path(Level01Layout.START, Level01Layout.GOAL)
 	_expect(whole.found and long_way.found and whole.cost < long_way.cost, "los atajos acortan la carrera entera: %s contra %s" % [whole.cost, long_way.cost])
@@ -65,7 +67,7 @@ func _check_shortest_path() -> void:
 
 
 func _check_block_and_reactivate() -> void:
-	var graph := Level01Layout.build_graph(false)
+	var graph := Level01Layout.build_graph(false, false)
 	var version := graph.version
 	graph.set_edge_enabled(&"F", &"J", false)
 	_expect(graph.version > version, "bloquear incrementa la versión del grafo")
@@ -74,16 +76,16 @@ func _check_block_and_reactivate() -> void:
 	_expect(not graph.neighbors(&"F").has(&"J") and graph.neighbors(&"F", true).has(&"J"),
 		"neighbors omite la conexión bloqueada salvo que se pida")
 	var detour := graph.shortest_path(&"B", &"L")
-	_expect(detour.found and detour.cost == 9.5 and detour.path == [&"B", &"F", &"I", &"L"],
-		"con F-J bloqueada, B a L cuesta 9,5 por B-F-I-L: %s %s" % [detour.path, detour.cost])
+	_expect(detour.found and detour.cost == 11.0 and detour.path == [&"B", &"F", &"I", &"L"],
+		"con F-J bloqueada, B a L cuesta 11 por B-F-I-L: %s %s" % [detour.path, detour.cost])
 	graph.set_edge_enabled(&"F", &"J", true)
 	var back := graph.shortest_path(&"B", &"L")
-	_expect(back.found and back.cost == 8.5 and back.path == [&"B", &"F", &"J", &"L"],
-		"al reactivar F-J vuelve el costo 8,5")
+	_expect(back.found and back.cost == 10.5 and back.path == [&"B", &"F", &"J", &"L"],
+		"al reactivar F-J vuelve el costo 10,5")
 
 
 func _check_no_path() -> void:
-	var graph := Level01Layout.build_graph(false)
+	var graph := Level01Layout.build_graph(false, false)
 	var closed := graph.shortest_path(&"S", &"M", Level01Layout.BOT_FORBIDDEN)
 	_expect(not closed.found and closed.cost == INF and closed.reason != "",
 		"los bots no pueden llegar a M: %s" % closed.reason)

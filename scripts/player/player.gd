@@ -43,6 +43,11 @@ const BUMP_PUSH := 3.4
 const BUMP_REST := 0.4
 const BUMP_HOP := 1.6
 const DUST_EVERY := 0.26
+#A cannon shot: how much of its own speed the player can steer with in the air, the seconds before landing can end it, and how much of the
+#speed of the flight it keeps as a skid when it lands
+const FLIGHT_CONTROL := 0.3
+const FLIGHT_GRACE := 0.2
+const FLIGHT_SKID := 0.3
 
 var player_id := 0
 var move_input := Vector2.ZERO
@@ -74,6 +79,10 @@ var _peak_fall := 0.0
 var _bump_rest_left := 0.0
 var _dust_left := 0.0
 var _celebrating := false
+#The speed along the ground of a cannon shot while it lasts
+var _flight := Vector3.ZERO
+var _flying := false
+var _flight_age := 0.0
 var _tumble_axis := Vector3.RIGHT
 var _tumble_angle := 0.0: set = _set_tumble_angle
 var _tumble_tween: Tween
@@ -130,6 +139,20 @@ func apply_push(impulse: Vector3) -> void:
 		_squash_speed += 3.0 + impulse.y * 0.4
 
 
+#A cannon shot: the player flies along an arc that only it can bend a little, and lands wherever the arc ends
+func launch(impulse: Vector3) -> void:
+	_flight = Vector3(impulse.x, 0.0, impulse.z)
+	_flying = true
+	_flight_age = 0.0
+	push_velocity = Vector3.ZERO
+	velocity.y = impulse.y
+	_squash_speed += 6.0
+
+
+func is_flying() -> bool:
+	return _flying
+
+
 #A jump for joy: it hops, spins once in the air and lands with a little squash; the rounds call it when somebody wins
 func victory_hop() -> void:
 	if _celebrating or _stun_left > 0.0:
@@ -150,6 +173,7 @@ func squash(amount: float) -> void:
 
 #A blow: it throws the player, then it flips or staggers and gets up
 func take_hit(hit: Hit) -> void:
+	_end_flight(false)
 	push_velocity = hit.push
 	velocity.y = maxf(velocity.y, 1.6 + 2.2 * hit.strength)
 	_hit_flight = true
@@ -165,6 +189,7 @@ func take_hit(hit: Hit) -> void:
 
 #Stops every kind of motion, used when the player is put back somewhere
 func clear_motion() -> void:
+	_end_flight(false)
 	velocity = Vector3.ZERO
 	push_velocity = Vector3.ZERO
 	move_input = Vector2.ZERO
@@ -198,10 +223,16 @@ func _physics_process(delta: float) -> void:
 		_squash_speed += 5.0
 	jump_requested = false
 
+	if _flying:
+		_flight_age += delta
+		if _flight_age > FLIGHT_GRACE and is_on_floor():
+			_end_flight(true)
+
 	#Movement follows the camera direction
 	var direction := _camera_rig.get_yaw_basis() * Vector3(move_input.x, 0.0, move_input.y)
-	velocity.x = direction.x * move_speed + push_velocity.x + external_velocity.x
-	velocity.z = direction.z * move_speed + push_velocity.z + external_velocity.z
+	var control := FLIGHT_CONTROL if _flying else 1.0
+	velocity.x = direction.x * move_speed * control + push_velocity.x + external_velocity.x + _flight.x
+	velocity.z = direction.z * move_speed * control + push_velocity.z + external_velocity.z + _flight.z
 	_intended = Vector3(velocity.x, 0.0, velocity.z)
 	if not is_on_floor():
 		_peak_fall = maxf(_peak_fall, -velocity.y)
@@ -212,15 +243,24 @@ func _physics_process(delta: float) -> void:
 	_track_landing()
 	_check_bumps()
 
-	var moving := direction.length() > 0.1
+	var facing := _flight if _flying else direction
+	var moving := facing.length() > 0.1
 	if moving:
-		var target_yaw := atan2(direction.x, direction.z)
+		var target_yaw := atan2(facing.x, facing.z)
 		_model_pivot.rotation.y = lerp_angle(_model_pivot.rotation.y, target_yaw, turn_speed * delta)
 	if _model:
 		_model.set_state(moving, not is_on_floor())
 	_tick_grace(delta)
 	_animate_body(delta)
 	_kick_dust(delta)
+
+
+#The shot is over: when the player lands it keeps a little of the speed as a skid
+func _end_flight(landed_on_floor: bool) -> void:
+	if landed_on_floor:
+		push_velocity = _flight * FLIGHT_SKID
+	_flying = false
+	_flight = Vector3.ZERO
 
 
 func _apply_input() -> void:

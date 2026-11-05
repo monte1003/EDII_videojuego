@@ -5,7 +5,7 @@ extends BotRole
 
 const LOOKAHEAD := 2
 #Within this cost of the player the ambush is over and it chases directly
-const ENGAGE_COST := 2.0
+const ENGAGE_COST := 2.5
 
 
 func release_delay(_head_start: float) -> float:

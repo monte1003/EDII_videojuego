@@ -25,6 +25,10 @@ const PAD_FEET := 0.4
 const PAD_LIFT := 8.8
 const PAD_PUSH := 5.0
 
+#A cannon throws whoever stands within LAUNCH_REACH of its pad with the feet no higher than LAUNCH_FEET
+const LAUNCH_REACH := 1.3
+const LAUNCH_FEET := 0.5
+
 static var _pads: Dictionary = {}
 
 
@@ -212,6 +216,28 @@ static func pad_launch(island: StringName, point: Vector3) -> Vector3:
 		away = spot - (Level01Layout.POSITIONS[island] as Vector3)
 		away.y = 0.0
 	return away.normalized() * PAD_PUSH + Vector3(0.0, PAD_LIFT, 0.0)
+
+
+#True when a racer at "point" stands on the pad of a cannon
+static func launch_hits(launch: Dictionary, point: Vector3) -> bool:
+	var spot := Level01Layout.launch_pad(launch)
+	if point.y - spot.y > LAUNCH_FEET:
+		return false
+	return Vector2(point.x - spot.x, point.z - spot.z).length() <= LAUNCH_REACH
+
+
+#The velocity a cannon gives: along the arc that goes from its pad to the middle of the island it lands on in "time" seconds under "gravity"
+static func launch_velocity(launch: Dictionary, gravity: float) -> Vector3:
+	var from := Level01Layout.launch_pad(launch)
+	var to := Level01Layout.launch_landing(launch)
+	var time: float = launch["time"]
+	return Vector3((to.x - from.x) / time, (to.y - from.y) / time + 0.5 * gravity * time, (to.z - from.z) / time)
+
+
+#Where a racer thrown by the cannon is after "seconds" of flight
+static func launch_point(launch: Dictionary, seconds: float, gravity: float) -> Vector3:
+	var velocity := launch_velocity(launch, gravity)
+	return Level01Layout.launch_pad(launch) + velocity * seconds - Vector3(0.0, 0.5 * gravity * seconds * seconds, 0.0)
 
 
 static func _bridge_frame(pusher: Dictionary) -> Dictionary:

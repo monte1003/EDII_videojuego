@@ -18,6 +18,10 @@ var enabled := false
 var lane_width := 0.0
 #The bridge that is about to fall: the racer waits at its gate instead of crossing it
 var danger_edge: Array[StringName] = []
+#Whether it may stop to scroll its phone on an island (off to time the course)
+var distractible := true
+#The islands to go through, in order, instead of the cheapest route (to time one way of the course); empty plays the cheapest route
+var forced_route: Array[StringName] = []
 
 var _player: Player
 var _vertex: StringName = Level01Layout.START
@@ -30,6 +34,9 @@ var _seen_version := -1
 var _last_plan := -100.0
 var _time := 0.0
 var _distracted_left := 0.0
+#The island a cannon shot is flying to, and for how long it has been in the air
+var _flying_to: StringName = &""
+var _flight_time := 0.0
 
 
 func _init() -> void:
@@ -45,6 +52,7 @@ func setup(player: Player, skill: float) -> void:
 #After a fall the racer starts again from the checkpoint
 func reset_to(vertex: StringName) -> void:
 	_vertex = vertex
+	_flying_to = &""
 	_committed = false
 	_route.clear()
 	_dirty = true
@@ -61,6 +69,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if not enabled:
 		_set_move(Vector3.ZERO)
+		return
+	if _flying_to != &"":
+		_fly(delta)
 		return
 	if _distracted_left > 0.0:
 		_distracted_left -= delta
@@ -85,6 +96,11 @@ func _plan() -> void:
 	_dirty = false
 	_seen_version = graph.version
 	_route.clear()
+	var at := forced_route.find(current_vertex())
+	if at >= 0:
+		for index in range(at + 1, forced_route.size()):
+			_route.append(forced_route[index])
+		return
 	var result := graph.shortest_path(current_vertex(), Level01Layout.GOAL)
 	if result.found:
 		for index in range(1, result.path.size()):
@@ -101,6 +117,9 @@ func _walk() -> Vector3:
 		var centre: Vector3 = Level01Layout.POSITIONS[_vertex]
 		return _toward(centre) if not _reached(centre) else Vector3.ZERO
 	var next: StringName = _route[0]
+	var launch := Level01Layout.launch_of(_vertex, next)
+	if not launch.is_empty():
+		return _walk_to_cannon(launch, next)
 	var gate := _gate_point(_vertex, next) + _lane(_vertex, next)
 	if not _reached(gate):
 		return _toward(gate)
@@ -117,10 +136,37 @@ func _walk() -> Vector3:
 	return _toward(_leg_point)
 
 
+#The racer walks to the pad of the cannon; when the cannon throws it, it waits in the air for the island it lands on
+func _walk_to_cannon(launch: Dictionary, next: StringName) -> Vector3:
+	if _player.is_flying():
+		_flying_to = next
+		_flight_time = 0.0
+		_route.pop_front()
+		return Vector3.ZERO
+	var pad := Level01Layout.launch_pad(launch)
+	return _toward(pad) if not _reached(pad) else Vector3.ZERO
+
+
+#In the air it only steers toward the middle of the island it is going to; on landing it goes on from there
+func _fly(delta: float) -> void:
+	_flight_time += delta
+	if not locator.on_bridge and locator.vertex == _flying_to and _player.is_on_floor():
+		_vertex = _flying_to
+		_flying_to = &""
+		_committed = false
+		_dirty = true
+		return
+	if _flight_time > 6.0:
+		_flying_to = &""
+		_dirty = true
+		return
+	_set_move(_toward(Level01Layout.POSITIONS[_flying_to]))
+
+
 func _arrive() -> void:
 	_vertex = _leg_vertex
 	_committed = false
-	if _vertex != Level01Layout.GOAL and rng.randf() < DISTRACTION_CHANCE:
+	if distractible and _vertex != Level01Layout.GOAL and rng.randf() < DISTRACTION_CHANCE:
 		_distracted_left = rng.randf_range(DISTRACTION_TIME.x, DISTRACTION_TIME.y)
 
 
@@ -146,7 +192,7 @@ func _jump_blocks() -> void:
 	if pusher.is_empty():
 		return
 	var wait := Level01Hazards.block_time_to_hit(pusher, clock.call(), _player.global_position, _toward(_leg_point), _player.move_speed, 0.6)
-	if wait >= 0.15 and wait <= 0.5:
+	if wait >= 0.15 and wait <= 0.38:
 		_player.jump_requested = true
 
 

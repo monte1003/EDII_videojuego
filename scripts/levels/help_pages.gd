@@ -29,6 +29,12 @@ Casi siempre hay varios caminos parecidos: cuando uno se cierra, los bots calcul
 				int(settings.feed_warning), int(settings.feed_duration), int(settings.feed_first + settings.feed_extra_delay)],
 		},
 		{
+			"title": "Tres caminos",
+			"body": "En cada parte del recorrido hay tres caminos. El del medio es el más recto, pero tiene puentes angostos y barras que giran.
+
+Los de los lados dan más vueltas y lo compensan: un tobogán azul te baja rápido pero solo en ese sentido, y un cañón dorado en el borde de una isla (sigue las flechas del piso) te lanza por el aire, a través de los aros, hasta otra isla. Los tres tardan casi lo mismo: elige el que mejor te salga.",
+		},
+		{
 			"title": "Cintas y barras",
 			"body": "Las cintas de flechas te arrastran: a favor van rápido y en contra cuestan el doble. El costo de cada puente que ves en F3 lo cuenta.
 
@@ -42,7 +48,7 @@ En algunos puentes anchos va y viene un bloque de rayas. Si te toca, te lanza al
 		},
 		{
 			"title": "Todo se mueve",
-			"body": "Las cintas cambian de sentido cada cierto tiempo y las flechas parpadean un instante antes: el costo de ese puente cambia con ellas.
+			"body": "Una cinta cambia de sentido cada cierto tiempo y sus flechas parpadean un instante antes: el costo de ese puente cambia con ella.
 
 En algunas islas rueda una bola de caramelo por una franja rosada que se enciende antes de que salga; salta cuando llegue. Algunas barras aceleran y frenan.
 
