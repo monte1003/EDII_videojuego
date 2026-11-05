@@ -32,7 +32,7 @@ func _expect(condition: bool, label: String) -> void:
 
 func _setup() -> void:
 	_context = ChaseContext.new()
-	_context.graph = Level01Layout.build_graph(false)
+	_context.graph = Level01Layout.build_graph(false, false)
 	_context.positions = Level01Layout.POSITIONS
 	_context.forbidden = Level01Layout.BOT_FORBIDDEN
 	_context.goal = Level01Layout.GOAL
@@ -77,7 +77,7 @@ func _check_chase() -> void:
 func _check_ambush() -> void:
 	var bot := _bot(BotRole.Kind.AMBUSH, &"D")
 	_player_at(&"S")
-	_expect(bot.role.pick_target(bot, _context, _target) == &"F", "el emboscador espera dos plataformas por delante del jugador")
+	_expect(bot.role.pick_target(bot, _context, _target) == &"E", "el emboscador espera dos plataformas por delante del jugador")
 	var near := _bot(BotRole.Kind.AMBUSH, &"B")
 	_expect(near.role.pick_target(near, _context, _target) == &"S", "si ya está cerca, deja la emboscada y persigue")
 	_player_at(&"L")
@@ -135,12 +135,12 @@ func _check_traffic() -> void:
 
 
 func _check_penalties() -> void:
-	var graph := Level01Layout.build_graph(false)
+	var graph := Level01Layout.build_graph(false, false)
 	var plain := graph.shortest_path(&"B", &"L")
-	_expect(plain.path == [&"B", &"F", &"J", &"L"] and plain.cost == 8.5 and plain.penalty == 0.0, "sin penalizaciones B a L sigue siendo B-F-J-L por 8,5")
+	_expect(plain.path == [&"B", &"F", &"J", &"L"] and plain.cost == 10.5 and plain.penalty == 0.0, "sin penalizaciones B a L sigue siendo B-F-J-L por 10,5")
 	var avoided := graph.shortest_path(&"B", &"L", [], {&"J": 10.0})
 	_expect(avoided.found and not avoided.path.has(&"J"), "una plataforma muy cargada se rodea: %s" % [avoided.path])
-	_expect(avoided.cost == 9.5 and avoided.penalty == 0.0, "el costo informado son los puentes: 9,5 y sin penalización")
-	var forced := graph.shortest_path(&"B", &"L", [], {&"J": 0.5})
-	_expect(forced.path == [&"B", &"F", &"J", &"L"] and forced.cost == 8.5 and is_equal_approx(forced.penalty, 0.5),
+	_expect(avoided.cost == 11.0 and avoided.penalty == 0.0, "el costo informado son los puentes: 11 y sin penalización")
+	var forced := graph.shortest_path(&"B", &"L", [], {&"J": 0.25})
+	_expect(forced.path == [&"B", &"F", &"J", &"L"] and forced.cost == 10.5 and is_equal_approx(forced.penalty, 0.25),
 		"una penalización pequeña no cambia la ruta y se informa aparte")

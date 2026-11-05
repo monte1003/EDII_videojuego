@@ -15,10 +15,16 @@ const QUESTION: Texture2D = preload("res://assets/ui/question_mark.png")
 #The two colours the hidden cards alternate in, like a chessboard
 const HIDDEN_COLORS: Array[Color] = [Color("6a52e0"), Color("ff6f91")]
 #A card hops this high while it turns over, and takes this long
-const FLIP_TIME := 0.6
-const FLIP_HOP := 0.45
-#The cards turn as a wave that starts in the middle of the board and goes out: the last card starts this much later than the first
-const FLIP_STAGGER := 0.12
+#The pictures of the cards roll like a slot machine (as the tiles of Fall Guys flash with one fruit after another): how long the roll takes at
+#the least and the most, how many cells of the strip pass per second at the start, how high the card lifts and how much it pops when it stops
+const ROLL_MIN := 0.42
+const ROLL_MAX := 0.75
+const ROLL_LIFT := 0.1
+const ROLL_POP := 0.045
+#Side in pixels of every picture in the strip
+const STRIP_CELL := 256
+#The cards roll as a wave that starts in the middle of the board and goes out: the last card starts this much later than the first
+const FLIP_STAGGER := 0.1
 #The cards come back up in the same wave
 const RISE_STAGGER := 0.22
 #The platforms: rounded corners, a soft bevel along the top edge and the glowing frame that fills the flat top
@@ -48,6 +54,8 @@ const WARNING_TINT := Color("ff5a5a")
 const GOLD_EDGE := Color("ffd84a")
 #The pips on the screens that tell the stage of the round (as many as SocialDrop.STAGES), and how the card to stand on glows
 const STAGE_PIPS := 7
+#How many icons flash by on the screens before the one that stays
+const SPIN_STEPS := 6
 const PIP_SPACING := 0.62
 const FOUND_GLOW := 1.7
 #How the card frames pulse and how far a doomed card shakes and a pressed card dips
@@ -62,10 +70,9 @@ const FRAME_BULB_SPACING := 1.3
 class Tile:
 	var body: StaticBody3D
 	var collider: CollisionShape3D
-	#The card on top: its front shows the icon and its back the "?"
+	#The card on top: one face whose picture rolls from the cover with the "?" to the icon and back
 	var card: Node3D
 	var top: ShaderMaterial
-	var back: ShaderMaterial
 	var icon := 0
 	var dropped := false
 	var face_up := false
@@ -74,11 +81,15 @@ class Tile:
 	var base := Vector3.ZERO
 	var frame: ShaderMaterial
 	var glow := FRAME_GLOW
+	#Where the strip of pictures is on the face, in cells
+	var scroll := 0.0
 	var warn := 0.0
 	var press: Tween
 
 
 var _icons: Array[Texture2D] = []
+#All the icons and the cover with the question mark, one under the other, in one picture
+var _strip: ImageTexture
 var _tiles: Array[Tile] = []
 var _screen_labels: Array[Label3D] = []
 var _screen_icons: Array[Sprite3D] = []
@@ -87,6 +98,7 @@ var _screen_pips: Array[Array] = []
 var _screen_accents: Array[Color] = []
 var _clock := 0.0
 var _punch_tween: Tween
+var _spin_tween: Tween
 var _stage: SocialDropStage
 var _bulb_spots: Array[Transform3D] = []
 var _bulb_colors: Array[Color] = []
@@ -94,6 +106,7 @@ var _bulb_colors: Array[Color] = []
 
 func build(icons: Array[Texture2D], rng: RandomNumberGenerator) -> void:
 	_icons = icons
+	_strip = _make_strip(icons)
 	_stage = SocialDropStage.new()
 	add_child(_stage)
 	_stage.build(icons)
@@ -180,7 +193,8 @@ func deal(rng: RandomNumberGenerator, target: int, distinct: int, copies: int) -
 	for index in _tiles.size():
 		var tile := _tiles[index]
 		tile.icon = deck[index]
-		tile.top.set_shader_parameter("icon", _icons[tile.icon])
+		if tile.face_up and tile.flip == null:
+			_set_card(tile, true)
 
 
 #The tiles that will drop blink red three times during "seconds"
@@ -288,14 +302,30 @@ func screen_text(text: String, color: Color) -> void:
 
 #"settle" is the final image of a spin: it lands with a bigger bounce
 func screen_icon(index: int, settle: bool) -> void:
-	var texture := _icons[index]
 	for screen_index in _screen_icons.size():
 		_screen_labels[screen_index].hide()
-		_screen_icons[screen_index].modulate = Color.WHITE
-		_screen_icons[screen_index].texture = texture
-		_screen_icons[screen_index].pixel_size = SCREEN_SIZE.y * 0.8 / maxf(texture.get_height(), 1.0)
 		_screen_icons[screen_index].show()
-	_punch(_screen_icons, 1.0, 1.3 if settle else 1.06)
+	if not settle:
+		_show_on_screens(_icons[index])
+		_punch(_screen_icons, 1.0, 1.06)
+		return
+	#The final icon comes out of a quick spin through the others that slows down, like the tiles of the floor
+	if _spin_tween and _spin_tween.is_valid():
+		_spin_tween.kill()
+	_spin_tween = create_tween()
+	for step in SPIN_STEPS:
+		_spin_tween.tween_callback(_show_on_screens.bind(_icons[(index + SPIN_STEPS - step) % _icons.size()]))
+		_spin_tween.tween_interval(0.05 + 0.018 * step)
+	_spin_tween.tween_callback(_show_on_screens.bind(_icons[index]))
+	_spin_tween.tween_callback(_punch.bind(_screen_icons, 1.0, 1.3))
+
+
+func _show_on_screens(texture: Texture2D) -> void:
+	for screen_icon_node in _screen_icons:
+		screen_icon_node.modulate = Color.WHITE
+		screen_icon_node.texture = texture
+		screen_icon_node.pixel_size = SCREEN_SIZE.y * 0.8 / maxf(texture.get_height(), 1.0)
+		screen_icon_node.scale = Vector3.ONE
 
 
 func _shuffle(list: Array[int], rng: RandomNumberGenerator) -> void:
@@ -319,7 +349,6 @@ func _tint(amount: float, tiles: Array[Tile]) -> void:
 	for tile in tiles:
 		tile.warn = amount
 		tile.top.set_shader_parameter("tint", color)
-		tile.back.set_shader_parameter("tint", color)
 
 
 #The cards that are going to fall tremble more as the time goes by
@@ -337,18 +366,21 @@ func _glow_card(amount: float, tile: Tile) -> void:
 	tile.top.set_shader_parameter("edge_glow", amount)
 
 
-#The card turns over with a hop; it ends face up or face down
+#The picture of the card rolls to its icon or to the cover with the question mark and stops there, slowing down; the card does not turn
 func _flip(tile: Tile, up: bool) -> void:
 	if tile.face_up == up and tile.flip == null:
 		return
 	if tile.flip != null and tile.flip.is_valid():
 		tile.flip.kill()
-	var from := tile.card.rotation.x
-	var to := 0.0 if up else PI
+	var cells := float(_icons.size() + 1)
+	var from := tile.scroll
+	var target := float(tile.icon) if up else cells - 1.0
+	#It always rolls forward; to show an icon it goes once round the whole strip first, like a slot machine
+	var distance := fposmod(target - from, cells) + (cells if up else 0.0)
 	tile.face_up = up
 	tile.flip = create_tween()
 	tile.flip.tween_interval(_wave_delay(tile, FLIP_STAGGER))
-	tile.flip.tween_method(_flip_step.bind(tile, from, to), 0.0, 1.0, FLIP_TIME)
+	tile.flip.tween_method(_roll_step.bind(tile, from, distance), 0.0, 1.0, clampf(0.3 + 0.05 * distance, ROLL_MIN, ROLL_MAX))
 	tile.flip.tween_callback(_set_card.bind(tile, up))
 
 
@@ -358,11 +390,15 @@ func _wave_delay(tile: Tile, spread: float) -> float:
 	return Vector2(tile.base.x, tile.base.z).length() / farthest * spread
 
 
-func _flip_step(progress: float, tile: Tile, from: float, to: float) -> void:
-	#A smoother step than smoothstep: it starts and ends very softly
-	var eased := progress * progress * progress * (progress * (progress * 6.0 - 15.0) + 10.0)
-	tile.card.rotation.x = lerpf(from, to, eased)
-	tile.card.position.y = TILE_THICKNESS / 2.0 + CARD_REST + sin(progress * PI) * FLIP_HOP
+#One moment of the roll: it starts fast and smeared and slows down until it stops; the card rises a little and pops when it lands
+func _roll_step(progress: float, tile: Tile, from: float, distance: float) -> void:
+	var eased := 1.0 - pow(1.0 - progress, 3.0)
+	var speed := distance * 3.0 * pow(1.0 - progress, 2.0)
+	tile.scroll = from + distance * eased
+	tile.top.set_shader_parameter("scroll", fposmod(tile.scroll, float(_icons.size() + 1)))
+	tile.top.set_shader_parameter("blur", minf(0.9, speed * 0.04))
+	tile.card.position.y = TILE_THICKNESS / 2.0 + CARD_REST + sin(progress * PI) * ROLL_LIFT
+	tile.card.scale = Vector3.ONE * (1.0 + ROLL_POP * sin(clampf((progress - 0.75) / 0.25, 0.0, 1.0) * PI))
 
 
 #The card at rest, with no tween running
@@ -371,7 +407,10 @@ func _set_card(tile: Tile, up: bool) -> void:
 		tile.flip.kill()
 	tile.flip = null
 	tile.face_up = up
-	tile.card.rotation.x = 0.0 if up else PI
+	tile.scroll = float(tile.icon) if up else float(_icons.size())
+	tile.top.set_shader_parameter("scroll", tile.scroll)
+	tile.top.set_shader_parameter("blur", 0.0)
+	tile.card.scale = Vector3.ONE
 	tile.card.position.y = TILE_THICKNESS / 2.0 + CARD_REST
 
 
@@ -414,16 +453,14 @@ func _build_tiles() -> void:
 			block.mesh = block_mesh
 			block.material_override = side
 			tile.body.add_child(block)
-			#The icon on top keeps its colours (only a touch desaturated, see icon_tile.gdshader)
+			#The face is a window on the strip of pictures: the icons keep their colours (only a touch desaturated, see icon_tile.gdshader)
+			#and the cover is a "?" on one of two colours that alternate like a chessboard
 			tile.top = ShaderMaterial.new()
 			tile.top.shader = TILE_SHADER
-			#Its back is a "?" on one of two colours that alternate like a chessboard
-			tile.back = ShaderMaterial.new()
-			tile.back.shader = TILE_SHADER
-			tile.back.set_shader_parameter("icon", QUESTION)
-			tile.back.set_shader_parameter("base_color", HIDDEN_COLORS[(row + column) % 2])
-			tile.back.set_shader_parameter("saturation", 1.0)
-			tile.back.set_shader_parameter("sparkle", 1.0)
+			tile.top.set_shader_parameter("strip", _strip)
+			tile.top.set_shader_parameter("cells", float(_icons.size() + 1))
+			tile.top.set_shader_parameter("hidden_color", HIDDEN_COLORS[(row + column) % 2])
+			tile.top.set_shader_parameter("sparkle", 1.0)
 			#A glowing frame under the card shows around it
 			tile.frame = ShaderMaterial.new()
 			tile.frame.shader = FRAME_SHADER
@@ -436,10 +473,26 @@ func _build_tiles() -> void:
 			tile.card = Node3D.new()
 			tile.body.add_child(tile.card)
 			tile.card.add_child(_face(face_mesh, tile.top, 0.0))
-			tile.card.add_child(_face(face_mesh, tile.back, PI))
 			_set_card(tile, false)
 			add_child(tile.body)
 			_tiles.append(tile)
+
+
+#The icons and, under them, the cover with the question mark, each in a square of STRIP_CELL pixels in one tall picture: the faces of all the cards
+#show windows of it
+func _make_strip(icons: Array[Texture2D]) -> ImageTexture:
+	var strip := Image.create(STRIP_CELL, STRIP_CELL * (icons.size() + 1), true, Image.FORMAT_RGBA8)
+	var pictures: Array[Texture2D] = icons.duplicate()
+	pictures.append(QUESTION)
+	for index in pictures.size():
+		var picture := pictures[index].get_image()
+		if picture.is_compressed():
+			picture.decompress()
+		picture.convert(Image.FORMAT_RGBA8)
+		picture.resize(STRIP_CELL, STRIP_CELL, Image.INTERPOLATE_LANCZOS)
+		strip.blit_rect(picture, Rect2i(0, 0, STRIP_CELL, STRIP_CELL), Vector2i(0, index * STRIP_CELL))
+	strip.generate_mipmaps()
+	return ImageTexture.create_from_image(strip)
 
 
 #A slab with rounded corners and a soft bevel along its top edge, in one mesh with smooth normals: the platforms have no hard edges

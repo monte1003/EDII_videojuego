@@ -1,7 +1,8 @@
 class_name Level01World
 extends Node3D
 
-#Builds level 1 from Level01Layout: a round platform per vertex, a bridge per edge (plain, conveyor belt or fragile) and a spinner on some islands
+#Builds level 1 from Level01Layout: a round platform per vertex, a bridge per edge (plain, conveyor belt, slide or fragile), a cannon on some
+#islands and a spinner on others
 
 #Start and goal stand out from the lilac course: cool mint to leave, warm sun to arrive
 const MINT := Color("86e8c6")
@@ -32,6 +33,7 @@ const CANDY_VERTEX: Shader = preload("res://assets/shaders/candy_vertex.gdshader
 const GLOW_VERTEX: Shader = preload("res://assets/shaders/tint_glow.gdshader")
 const BOARD_TEXTURE: Texture2D = preload("res://assets/textures/board_checker.png")
 const BELT_TEXTURE: Texture2D = preload("res://assets/textures/belt_chevrons.png")
+const SLIDE_TEXTURE: Texture2D = preload("res://assets/textures/slide_chevrons.png")
 
 #How far into a platform a bridge reaches, so there is no seam
 const BRIDGE_OVERLAP := 0.25
@@ -47,6 +49,14 @@ const MARK_INSET := 0.45
 const FALL_Y := -12.0
 #Meters of bridge that one chevron of the belt covers
 const BELT_TILE := 3.0
+#The rails of a slide are this thick; the gate over its mouth is a ring this wide and this far in from the island
+const RAIL_THICKNESS := 0.3
+const GATE_RADIUS := 2.15
+const GATE_INSET := 1.4
+#The arc of a cannon is marked by this many hoops; the pad and the target are these wide
+const HOOPS := 7
+const CANNON_RADIUS := 1.6
+const TARGET_RADIUS := 2.1
 #How long a fragile bridge takes to drop out of sight or to come back, and how far it drops
 const DROP_TIME := 0.5
 const DROP_DEPTH := 9.0
@@ -77,9 +87,14 @@ var _barrier: MeshInstance3D
 var _props: Level01Props
 var _belt_speed := 2.6
 var _clock := 0.0
+var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 #"a|b" with the two ids in order -> what the bridge is made of
 var _bridges: Dictionary = {}
 var _belts: Array[StandardMaterial3D] = []
+var _slides: Array[StandardMaterial3D] = []
+#Every cannon by "from>to": its pad; and the materials of its hoops, which light up one after the other
+var _cannons: Dictionary = {}
+var _hoops: Array[StandardMaterial3D] = []
 var _flashing: Dictionary = {}
 var _spinners: Dictionary = {}
 var _blocks: Array[Dictionary] = []
@@ -115,6 +130,7 @@ func build(locators: Array[PlayerLocator], refuge_radius: float, belt_speed: flo
 	_build_spinners()
 	_build_balls()
 	_build_pads()
+	_build_cannons()
 	_build_barrier()
 	_build_name_labels()
 	_scatter_decor()
@@ -209,6 +225,18 @@ func bounce_pad(id: StringName) -> void:
 	tween.tween_property(pad, "scale", Vector3.ONE, 0.5).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
 
+#A cannon squashes, blows a burst of confetti and booms when somebody is thrown
+func fire_cannon(launch: Dictionary) -> void:
+	var pad: Node3D = _cannons.get("%s>%s" % [launch["from"], launch["to"]])
+	if pad == null:
+		return
+	var tween := create_tween()
+	tween.tween_property(pad, "scale", Vector3(1.25, 0.4, 1.25), 0.07)
+	tween.tween_property(pad, "scale", Vector3.ONE, 0.6).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	ImpactFx.confetti(self, pad.global_position + Vector3(0.0, 0.6, 0.0), 36, 55.0, 6.5)
+	SynthSound.play(self, SynthSound.tone(150.0, 0.4, 480.0, 0.6), -4.0, 1.0)
+
+
 #A fragile bridge flashes while it is about to fall
 func flash_bridge(a: StringName, b: StringName, on: bool) -> void:
 	var key := _key(a, b)
@@ -245,6 +273,12 @@ func _process(delta: float) -> void:
 	_clock += delta
 	for belt in _belts:
 		belt.uv1_offset.y = fposmod(_clock * _belt_speed / BELT_TILE, 1.0)
+	for slide in _slides:
+		slide.uv1_offset.y = fposmod(_clock * Level01Layout.SLIDE_SPEED / BELT_TILE, 1.0)
+	#A pulse of light runs along the hoops of every cannon, from the pad to the target
+	for index in _hoops.size():
+		var wave := maxf(0.0, sin(_clock * 6.0 - float(index % HOOPS) * 0.8))
+		_hoops[index].emission_energy_multiplier = 0.9 + 2.2 * wave * wave
 	for key: String in _flashing:
 		var record: Dictionary = _bridges[key]
 		(record["material"] as StandardMaterial3D).emission_energy_multiplier = 0.3 + 1.6 * absf(sin(_clock * 9.0))
@@ -274,6 +308,18 @@ func _material(color: Color, emission := 0.0, alpha := 1.0) -> StandardMaterial3
 
 
 #A game-show floor: the checker texture tinted with the colour of the piece, mapped in world space
+#A material of its own that can be changed later, unlike the shared ones of _material
+func _material_copy(color: Color, emission: float, alpha: float) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(color, alpha)
+	material.roughness = 0.5
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = emission
+	return material
+
+
 func _board(color: Color) -> StandardMaterial3D:
 	var key := "board_%s" % color.to_html()
 	if not _materials.has(key):
@@ -445,10 +491,14 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 			_edge_spots.append(Transform3D(basis.scaled_local(Vector3(EDGE_WIDTH, EDGE_HEIGHT, edge_length)), centre + basis * edge_at))
 			_edge_colors.append(edge_material.albedo_color)
 
-	#Marks where a belt or a fragile bridge starts, lying on the ramp just past each island
+	if kind == Level01Layout.SLIDE:
+		_build_slide_rails(basis, centre, width, length)
+	#Marks where a belt, a slide or a fragile bridge starts, lying on the ramp just past each island
 	var strips: Array[Node3D] = []
-	if kind == Level01Layout.BELT or kind == Level01Layout.FRAGILE:
+	if kind == Level01Layout.BELT or kind == Level01Layout.FRAGILE or kind == Level01Layout.SLIDE:
 		var strip_color := MINT_DARK if kind == Level01Layout.BELT else MAGENTA
+		if kind == Level01Layout.SLIDE:
+			strip_color = SKY
 		for along: float in [BRIDGE_OVERLAP + MARK_INSET, length - BRIDGE_OVERLAP - MARK_INSET]:
 			var strip := _mesh(self, _box(Vector3(width, 0.05, 0.4)), _material(strip_color, 0.5), start - basis.z * along + basis.y * 0.03)
 			strip.basis = basis
@@ -467,6 +517,30 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 	var pusher := Level01Layout.pusher_of(a, b)
 	if not pusher.is_empty() and not _has_block(pusher):
 		_build_block(pusher)
+
+
+#The rails of a slide keep whoever rides it on: a padded wall on each side, a light along its top and a ring over the mouth
+func _build_slide_rails(basis: Basis, centre: Vector3, width: float, length: float) -> void:
+	var rail_length := length - 2.0 * (BRIDGE_OVERLAP + EDGE_TRIM)
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(RAIL_THICKNESS, Level01Layout.SLIDE_RAIL, rail_length)
+	var surface := centre + basis.y * THICKNESS / 2.0
+	for side in [-1.0, 1.0]:
+		var at: Vector3 = surface + basis.x * side * (width / 2.0 - RAIL_THICKNESS / 2.0) + basis.y * Level01Layout.SLIDE_RAIL / 2.0
+		_body(shape, Transform3D(basis, at))
+		_merger.add(&"board", _merged(&"board"), true, _box(shape.size), Transform3D(basis, at), SKY.lightened(0.55))
+		var light_at := Vector3(side * (width / 2.0 - RAIL_THICKNESS / 2.0), THICKNESS / 2.0 + Level01Layout.SLIDE_RAIL + EDGE_HEIGHT / 2.0, 0.0)
+		_edge_spots.append(Transform3D(basis.scaled_local(Vector3(RAIL_THICKNESS * 0.7, EDGE_HEIGHT, rail_length)), centre + basis * light_at))
+		_edge_colors.append(Color("b8dcff"))
+	#A glowing ring marks the mouth, and the slide goes through it
+	var ring := TorusMesh.new()
+	ring.inner_radius = GATE_RADIUS - 0.14
+	ring.outer_radius = GATE_RADIUS + 0.14
+	ring.rings = 36
+	ring.ring_segments = 8
+	var gate_at := surface + basis.z * (length / 2.0 - BRIDGE_OVERLAP - GATE_INSET) + basis.y * 0.2
+	var gate := _mesh(self, ring, _material(SKY.lightened(0.3), 1.4), gate_at, false)
+	gate.basis = basis * Basis(Vector3.RIGHT, PI / 2.0)
 
 
 func _commit_edge_lights() -> void:
@@ -534,7 +608,9 @@ func _build_block(pusher: Dictionary) -> void:
 #One light colour per kind of bridge: cool for a plain one, mint for a belt and coral for a fragile one
 func _edge_material(kind: StringName) -> StandardMaterial3D:
 	var color := Color("7ae6ff")
-	if kind == Level01Layout.BELT:
+	if kind == Level01Layout.SLIDE:
+		color = Color("8ec5ff")
+	elif kind == Level01Layout.BELT:
 		color = Color("4cf2b0")
 	elif kind == Level01Layout.FRAGILE:
 		color = Color("ff6f7d")
@@ -556,6 +632,16 @@ func _bridge_material(kind: StringName, length: float) -> StandardMaterial3D:
 		belt.uv1_scale = Vector3(1.0, -length / BELT_TILE, 1.0)
 		_belts.append(belt)
 		return belt
+	if kind == Level01Layout.SLIDE:
+		var slide := StandardMaterial3D.new()
+		slide.albedo_texture = SLIDE_TEXTURE
+		slide.roughness = 0.35
+		slide.emission_enabled = true
+		slide.emission_texture = SLIDE_TEXTURE
+		slide.emission_energy_multiplier = 0.25
+		slide.uv1_scale = Vector3(1.0, -length / BELT_TILE, 1.0)
+		_slides.append(slide)
+		return slide
 	if kind == Level01Layout.FRAGILE:
 		var fragile := _board_copy(CORAL)
 		fragile.emission_enabled = true
@@ -752,6 +838,64 @@ func _build_pads() -> void:
 		_pads[id] = pad
 
 
+#Each cannon: a pad on its island with arrows toward where it throws, a row of hoops along the arc it flies, and a target ring where it lands
+func _build_cannons() -> void:
+	var cushion := CylinderMesh.new()
+	cushion.top_radius = CANNON_RADIUS
+	cushion.bottom_radius = CANNON_RADIUS + 0.12
+	cushion.height = 0.26
+	cushion.radial_segments = 28
+	cushion.rings = 1
+	var surface := CylinderMesh.new()
+	surface.top_radius = CANNON_RADIUS - 0.2
+	surface.bottom_radius = CANNON_RADIUS - 0.2
+	surface.height = 0.06
+	surface.radial_segments = 28
+	surface.rings = 1
+	var arrow := PrismMesh.new()
+	arrow.size = Vector3(1.2, 1.2, 0.04)
+	var hoop := TorusMesh.new()
+	hoop.inner_radius = 1.35
+	hoop.outer_radius = 1.75
+	hoop.rings = 28
+	hoop.ring_segments = 8
+	var target := TorusMesh.new()
+	target.inner_radius = TARGET_RADIUS - 0.16
+	target.outer_radius = TARGET_RADIUS
+	target.rings = 36
+	target.ring_segments = 6
+	for launch: Dictionary in Level01Layout.LAUNCHES:
+		var spot := Level01Layout.launch_pad(launch)
+		var aim := Level01Layout.launch_landing(launch) - spot
+		aim.y = 0.0
+		aim = aim.normalized()
+		var pad := Node3D.new()
+		pad.position = spot
+		add_child(pad)
+		_mesh(pad, cushion, PartyKit.candy(Color("fdfbff"), AMBER, 10.0, 0.0, 0.2), Vector3(0.0, 0.13, 0.0), true)
+		_mesh(pad, surface, _material(AMBER, 1.3), Vector3(0.0, 0.27, 0.0))
+		var flat := Basis.looking_at(aim, Vector3.UP) * Basis(Vector3.RIGHT, -PI / 2.0)
+		var cushion_mark := _mesh(pad, arrow, _material(Color("fdfbff"), 0.8), Vector3(0.0, 0.31, 0.0))
+		cushion_mark.basis = flat
+		#Arrows painted on the floor lead from the middle of the island to the pad
+		for step in 3:
+			var painted := _mesh(self, arrow, _material(AMBER, 0.9), spot - aim * (2.6 + step * 1.6) + Vector3(0.0, 0.045, 0.0))
+			painted.basis = flat
+		_cannons["%s>%s" % [launch["from"], launch["to"]]] = pad
+		for index in HOOPS:
+			var seconds := float(launch["time"]) * float(index + 1) / float(HOOPS + 1)
+			var at := Level01Hazards.launch_point(launch, seconds, _gravity)
+			var heading := Level01Hazards.launch_velocity(launch, _gravity) - Vector3(0.0, _gravity * seconds, 0.0)
+			var material := _material_copy(AMBER, 1.0, 0.95)
+			_hoops.append(material)
+			var ring := _mesh(self, hoop, material, at + Vector3(0.0, 0.9, 0.0))
+			ring.basis = Basis.looking_at(heading.normalized(), Vector3.UP) * Basis(Vector3.RIGHT, PI / 2.0)
+		var landing := Level01Layout.launch_landing(launch)
+		_mesh(self, target, _material(AMBER, 1.2), landing + Vector3(0.0, 0.05, 0.0))
+		var core := _mesh(self, target, _material(Color("fdfbff"), 0.8), landing + Vector3(0.0, 0.055, 0.0))
+		core.scale = Vector3(0.55, 1.0, 0.55)
+
+
 #A translucent wall across the bridge that Bloquear closes for the bots
 func _build_barrier() -> void:
 	var a: Vector3 = Level01Layout.POSITIONS[Level01Layout.BLOCK_EDGE[0]]
@@ -780,6 +924,11 @@ func _build_name_labels() -> void:
 		["SILENCIAR", "Los bots te ven menos", CYAN, station_positions[&"silence"], 3.7, 30.0],
 		["PAUSA DIGITAL", "Refugio: nadie te empuja", AMBER, station_positions[&"refuge"], 4.6, 30.0],
 	]
+	for launch: Dictionary in Level01Layout.LAUNCHES:
+		entries.append(["CAÑÓN", "Te lanza a la isla %s" % launch["to"], AMBER, Level01Layout.launch_pad(launch), 3.4, 30.0])
+	for edge in Level01Layout.EDGES:
+		if edge[4] == Level01Layout.SLIDE:
+			entries.append(["TOBOGÁN", "Solo baja, y muy rápido", SKY, Level01Layout.POSITIONS[edge[0]], 5.2, 30.0])
 	for vertex: StringName in _props.checkpoint_positions:
 		entries.append(["CHECKPOINT", "Guarda tu progreso", AMBER, _props.checkpoint_positions[vertex], 4.9, 30.0])
 	for entry in entries:
