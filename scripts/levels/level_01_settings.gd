@@ -4,13 +4,13 @@ extends Resource
 #Every number that tunes level 1; the rules, the bots and the help texts all read them from here
 
 @export_group("Round")
-@export var time_limit := 65.0
+@export var time_limit := 150.0
 @export var attempts := 3
 @export var countdown_seconds := 3.0
 #Seconds the racers run before the bots are released
 @export var bot_head_start := 2.0
 #Seconds the rest have to arrive once somebody did; then the doors of the goal close
-@export var finish_window := 15.0
+@export var finish_window := 20.0
 
 @export_group("Bots")
 #Bots of a round with one player; each extra player adds "bots_per_extra_player", up to "max_bots"

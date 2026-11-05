@@ -1,10 +1,14 @@
 class_name Player
 extends CharacterBody3D
 
-#A player in third person; a hit throws it, flips it, leaves it lying a moment and gets it up again (the same in every round)
+#A player in third person; a hit throws it, flips it, leaves it lying a moment and gets it up again (the same in every round).
+#Its body is soft: it squashes and stretches when it jumps and lands, leans into its run, breathes when it stands, bounces off other players
+#and kicks up a little dust. All of that is only on top of the animations of its model and never changes where the body goes except the bump
 
 signal hit_taken(hit: Hit)
 signal landed(at: Vector3, hard: bool)
+#Two players ran into each other and bounced apart; "strength" goes from 0 to 1
+signal bumped(other: Player, strength: float)
 
 #What a blow does to the player
 class Hit:
@@ -27,6 +31,18 @@ class Hit:
 const TUMBLE_CENTER := 0.5
 const LYING_HEIGHT := 0.28
 const GET_UP_TIME := 0.32
+#The soft body: how stiff and how damped the spring of the squash is, how much of it shows and how far the body leans into its run
+const SQUASH_STIFFNESS := 120.0
+const SQUASH_DAMPING := 9.5
+const SQUASH_LIMIT := 0.38
+const LEAN_LIMIT := 0.2
+const LEAN_FOLLOW := 14.0
+#A bump between players needs this closing speed (m/s) and gives this push; then it rests so one touch is one bounce
+const BUMP_MIN_CLOSING := 1.4
+const BUMP_PUSH := 3.4
+const BUMP_REST := 0.4
+const BUMP_HOP := 1.6
+const DUST_EVERY := 0.26
 
 var player_id := 0
 var move_input := Vector2.ZERO
@@ -47,6 +63,17 @@ var _was_airborne := false
 var _stun_left := 0.0
 var _input_wanted := true
 var _tumble: Node3D
+#The soft body: everything of the model hangs from here, so a squash grows from the feet and a lean tilts the whole body
+var _body: Node3D
+var _squash := 0.0
+var _squash_speed := 0.0
+var _lean := Vector2.ZERO
+var _spin := 0.0
+var _intended := Vector3.ZERO
+var _peak_fall := 0.0
+var _bump_rest_left := 0.0
+var _dust_left := 0.0
+var _celebrating := false
 var _tumble_axis := Vector3.RIGHT
 var _tumble_angle := 0.0: set = _set_tumble_angle
 var _tumble_tween: Tween
@@ -59,10 +86,12 @@ var _tumble_tween: Tween
 func _ready() -> void:
 	#Models face +Z, so turn them to look where the camera looks
 	_model_pivot.rotation.y = _camera_rig.global_rotation.y + PI
-	#The model hangs from the tumble node, so a flip turns it around its middle
+	#The model hangs from the tumble node, so a flip turns it around its middle, and that one from the soft body
+	_body = Node3D.new()
+	_model_pivot.add_child(_body)
 	_tumble = Node3D.new()
 	_tumble.position = Vector3(0.0, TUMBLE_CENTER, 0.0)
-	_model_pivot.add_child(_tumble)
+	_body.add_child(_tumble)
 
 
 func set_character(character: CharacterData) -> void:
@@ -97,6 +126,26 @@ func is_down() -> bool:
 func apply_push(impulse: Vector3) -> void:
 	push_velocity = Vector3(impulse.x, 0.0, impulse.z)
 	velocity.y = maxf(velocity.y, impulse.y)
+	if impulse.y > 3.0:
+		_squash_speed += 3.0 + impulse.y * 0.4
+
+
+#A jump for joy: it hops, spins once in the air and lands with a little squash; the rounds call it when somebody wins
+func victory_hop() -> void:
+	if _celebrating or _stun_left > 0.0:
+		return
+	_celebrating = true
+	if is_on_floor():
+		velocity.y = jump_velocity * 1.25
+	_squash_speed += 6.0
+	var tween := create_tween()
+	tween.tween_property(self, "_spin", TAU, 0.75).from(0.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_callback(_end_celebration)
+
+
+#The body squashes (negative) or stretches (positive) like a spring and settles; strength 1 is a hard knock
+func squash(amount: float) -> void:
+	_squash_speed += amount
 
 
 #A blow: it throws the player, then it flips or staggers and gets up
@@ -146,17 +195,22 @@ func _physics_process(delta: float) -> void:
 
 	if jump_requested and is_on_floor():
 		velocity.y = jump_velocity
+		_squash_speed += 5.0
 	jump_requested = false
 
 	#Movement follows the camera direction
 	var direction := _camera_rig.get_yaw_basis() * Vector3(move_input.x, 0.0, move_input.y)
 	velocity.x = direction.x * move_speed + push_velocity.x + external_velocity.x
 	velocity.z = direction.z * move_speed + push_velocity.z + external_velocity.z
+	_intended = Vector3(velocity.x, 0.0, velocity.z)
+	if not is_on_floor():
+		_peak_fall = maxf(_peak_fall, -velocity.y)
 	#Each part of the push fades on its own, so a blow along the street stops sooner sideways than forward
 	push_velocity.x = move_toward(push_velocity.x, 0.0, push_decay * delta)
 	push_velocity.z = move_toward(push_velocity.z, 0.0, push_decay * delta)
 	move_and_slide()
 	_track_landing()
+	_check_bumps()
 
 	var moving := direction.length() > 0.1
 	if moving:
@@ -165,6 +219,8 @@ func _physics_process(delta: float) -> void:
 	if _model:
 		_model.set_state(moving, not is_on_floor())
 	_tick_grace(delta)
+	_animate_body(delta)
+	_kick_dust(delta)
 
 
 func _apply_input() -> void:
@@ -182,6 +238,9 @@ func _tick_stun(delta: float) -> void:
 func _track_landing() -> void:
 	var grounded := is_on_floor()
 	if grounded and _was_airborne:
+		#A fall squashes the body as much as it was fast
+		_squash_speed -= clampf(_peak_fall * 0.9, 1.5, 7.5)
+		_peak_fall = 0.0
 		landed.emit(global_position, _hit_flight)
 		_hit_flight = false
 	_was_airborne = not grounded
@@ -194,6 +253,81 @@ func _tick_grace(delta: float) -> void:
 		if _invulnerable_left <= 0.0 and not touching:
 			_invulnerable = false
 	_model_pivot.visible = not _invulnerable or _stun_left > 0.0 or fmod(Time.get_ticks_msec() / 1000.0, 0.16) > 0.08
+
+
+#Whoever the body runs into while going fast bounces away softly, and so does the other: a push, a little hop, a squash and a puff of dust
+func _check_bumps() -> void:
+	_bump_rest_left = maxf(_bump_rest_left - get_physics_process_delta_time(), 0.0)
+	if _bump_rest_left > 0.0:
+		return
+	for index in get_slide_collision_count():
+		var contact := get_slide_collision(index)
+		var other := contact.get_collider() as Player
+		if other == null or other._bump_rest_left > 0.0:
+			continue
+		var away := contact.get_normal()
+		away.y = 0.0
+		if away.length() < 0.1:
+			continue
+		away = away.normalized()
+		var closing := (_intended - other._intended).dot(-away)
+		if closing >= BUMP_MIN_CLOSING:
+			_bump(other, away, clampf(closing / (move_speed * 2.0), 0.15, 1.0))
+			return
+
+
+func _bump(other: Player, away: Vector3, strength: float) -> void:
+	var push := BUMP_PUSH + 3.0 * strength
+	for pair: Array in [[self, away], [other, -away]]:
+		var body := pair[0] as Player
+		body.push_velocity = (body.push_velocity + (pair[1] as Vector3) * push).limit_length(8.0)
+		if body.is_on_floor():
+			body.velocity.y = maxf(body.velocity.y, BUMP_HOP * strength + 0.5)
+		body._squash_speed -= 4.0 + 5.0 * strength
+		body._bump_rest_left = BUMP_REST
+	var middle := (global_position + other.global_position) / 2.0 + Vector3(0.0, 0.1, 0.0)
+	ImpactFx.dust(get_parent(), middle, ImpactFx.DUST_COLOR, 4 + roundi(6.0 * strength))
+	SynthSound.play(get_parent(), SynthSound.tone(230.0, 0.18, 320.0, 0.5), -9.0 + 4.0 * strength, randf_range(0.95, 1.1))
+	shake_camera(0.1 + 0.2 * strength)
+	other.shake_camera(0.1 + 0.2 * strength)
+	bumped.emit(other, strength)
+	other.bumped.emit(self, strength)
+
+
+#The soft body: a spring for the squash, a lean into the movement and a soft breath when it stands still. In a hit flight or lying down it is
+#left alone, so the blow looks the same as ever
+func _animate_body(delta: float) -> void:
+	var calm := _hit_flight or _stun_left > 0.0
+	if calm:
+		_squash_speed = 0.0
+		_squash = move_toward(_squash, 0.0, delta * 3.0)
+		_lean = _lean.move_toward(Vector2.ZERO, delta * 3.0)
+	else:
+		_squash_speed += (-SQUASH_STIFFNESS * _squash - SQUASH_DAMPING * _squash_speed) * delta
+		_squash = clampf(_squash + _squash_speed * delta, -SQUASH_LIMIT, SQUASH_LIMIT)
+		var local := _model_pivot.global_basis.inverse() * _intended
+		var aim := Vector2(clampf(local.z * 0.028, -LEAN_LIMIT, LEAN_LIMIT), clampf(-local.x * 0.03, -LEAN_LIMIT, LEAN_LIMIT))
+		if not is_on_floor():
+			aim *= 0.5
+		_lean = _lean.lerp(aim, 1.0 - exp(-LEAN_FOLLOW * delta))
+	var breath := sin(Time.get_ticks_msec() * 0.0022) * 0.012 if _intended.length() < 0.5 and not calm else 0.0
+	var stretch := _squash + breath
+	_body.basis = Basis(Vector3.UP, _spin) * Basis(Vector3.RIGHT, _lean.x) * Basis(Vector3.BACK, _lean.y) \
+		* Basis.from_scale(Vector3(1.0 - 0.5 * stretch, 1.0 + stretch, 1.0 - 0.5 * stretch))
+
+
+#A little puff under the feet now and then while it runs
+func _kick_dust(delta: float) -> void:
+	_dust_left -= delta
+	if _dust_left > 0.0 or not is_on_floor() or _hit_flight or _intended.length() < move_speed * 0.7:
+		return
+	_dust_left = DUST_EVERY
+	ImpactFx.dust(get_parent(), global_position + Vector3(0.0, 0.04, 0.0), ImpactFx.DUST_COLOR, 3)
+
+
+func _end_celebration() -> void:
+	_spin = 0.0
+	_celebrating = false
 
 
 #A flip is a somersault toward where the blow sends the player, a lie on the ground and a get-up; a stagger is a quick lean

@@ -32,7 +32,7 @@ func _expect(condition: bool, label: String) -> void:
 
 func _setup() -> void:
 	_context = ChaseContext.new()
-	_context.graph = Level01Layout.build_graph()
+	_context.graph = Level01Layout.build_graph(false)
 	_context.positions = Level01Layout.POSITIONS
 	_context.forbidden = Level01Layout.BOT_FORBIDDEN
 	_context.goal = Level01Layout.GOAL
@@ -135,7 +135,7 @@ func _check_traffic() -> void:
 
 
 func _check_penalties() -> void:
-	var graph := Level01Layout.build_graph()
+	var graph := Level01Layout.build_graph(false)
 	var plain := graph.shortest_path(&"B", &"L")
 	_expect(plain.path == [&"B", &"F", &"J", &"L"] and plain.cost == 8.5 and plain.penalty == 0.0, "sin penalizaciones B a L sigue siendo B-F-J-L por 8,5")
 	var avoided := graph.shortest_path(&"B", &"L", [], {&"J": 10.0})
