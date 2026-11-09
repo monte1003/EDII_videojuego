@@ -106,17 +106,14 @@ func _fill(place: Dictionary, slot: PlayerSlot, is_local: bool) -> void:
 		_set_model(place, null)
 		place["player_id"] = -1
 		_tint(place["ring"], EMPTY_RING, 0.25)
-		_text(place["name"], "Libre", Color(Palette.INK_SOFT, 0.55))
+		_text(place["name"], "", Palette.INK_SOFT)
 		_text(place["status"], "", Palette.INK_SOFT)
 		return
 	place["player_id"] = slot.player_id
 	_set_model(place, slot.character)
 	_tint(place["ring"], slot.character.accent_color, 1.4 if slot.ready else 0.7)
 	_text(place["name"], slot.display_name + ("  ·  Tú" if is_local else ""), Palette.INK)
-	if slot.ready:
-		_text(place["status"], "Listo", Palette.TEAL)
-	else:
-		_text(place["status"], "Sin confirmar", Color(Palette.INK_SOFT, 0.8))
+	_text(place["status"], "Listo" if slot.ready else "", Palette.TEAL)
 
 
 func _set_model(place: Dictionary, character: CharacterData) -> void:

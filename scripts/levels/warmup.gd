@@ -32,7 +32,6 @@ func _ready() -> void:
 	_keys.interact_pressed.connect(_use_station)
 	_hud.set_time(_time_left)
 	_hud.set_votes(0, participants.size(), false)
-	_hud.toast("Prueba los controles: la partida empieza enseguida")
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -61,7 +60,7 @@ func cast_vote(player_id: int) -> void:
 func _respawn(player: Player, point: Vector3) -> void:
 	player.global_position = point
 	player.clear_motion()
-	_hud.toast("Sin problema, ¡otra vez!")
+	_hud.toast("Otra vez")
 
 
 func _use_station() -> void:
@@ -70,7 +69,7 @@ func _use_station() -> void:
 		return
 	_station_on = not _station_on
 	_world.set_station_active(_station_on)
-	_hud.toast("¡Eso es! Así se usan las consolas")
+	_hud.toast("¡Eso es!")
 
 
 func _finish() -> void:

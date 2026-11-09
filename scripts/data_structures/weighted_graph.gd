@@ -107,6 +107,19 @@ func set_edge_enabled(a: StringName, b: StringName, enabled: bool) -> bool:
 	return true
 
 
+#Changes the cost of a to b and of b to a (a belt that turns around swaps them); the version grows so whoever planned a route plans it again
+func set_weights(a: StringName, b: StringName, forward: float, backward: float) -> bool:
+	var there := get_edge(a, b)
+	var back := get_edge(b, a)
+	if there == null or back == null or forward < 0.0 or backward < 0.0:
+		return false
+	if there.weight != forward or back.weight != backward:
+		there.weight = forward
+		back.weight = backward
+		version += 1
+	return true
+
+
 #Each connection once (a < b for two-way edges), for drawing and listings
 func undirected_edges() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []

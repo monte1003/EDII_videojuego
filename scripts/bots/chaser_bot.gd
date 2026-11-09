@@ -35,10 +35,10 @@ enum State { INACTIVE, CHASE, SEARCH }
 
 @export_group("Push")
 @export var push_enabled := true
-@export var push_trigger_range := 2.3
-@export var push_hit_range := 2.9
-@export var push_windup := 0.7
-@export var push_cooldown := 2.5
+@export var push_trigger_range := 2.8
+@export var push_hit_range := 3.2
+@export var push_windup := 0.55
+@export var push_cooldown := 1.8
 
 var appearance: BotAppearance
 var role: BotRole = ChaseRole.new()
@@ -50,6 +50,8 @@ var route: Array[StringName] = []
 var route_cost := INF
 var route_found := false
 var route_message := ""
+#Constant drift of the bridge the bot is on (a conveyor belt); the level sets it every frame
+var external_velocity := Vector3.ZERO
 #Set by the level for scripted demos: ignores perception and keeps the given target
 var manual_target := false
 #Keeps the bot standing still (used to show a route before the bot starts to walk it)
@@ -156,6 +158,15 @@ func is_crossing() -> bool:
 	return _committed
 
 
+#The two ends of the bridge the bot is crossing; empty when it is on a platform
+func crossing_pair() -> Array[StringName]:
+	var pair: Array[StringName] = []
+	if _committed:
+		pair.append(current_vertex)
+		pair.append(_leg_vertex)
+	return pair
+
+
 func debug_info() -> Dictionary:
 	return {
 		"name": appearance.display_name if appearance else "Bot",
@@ -190,8 +201,8 @@ func _physics_process(delta: float) -> void:
 			wanted = _walk(delta)
 
 	wanted = _stay_on_platform(_with_separation(wanted))
-	velocity.x = wanted.x
-	velocity.z = wanted.z
+	velocity.x = wanted.x + external_velocity.x
+	velocity.z = wanted.z + external_velocity.z
 	move_and_slide()
 	if _visual != null:
 		_look().set_moving(wanted.length() > 0.1)
@@ -233,6 +244,9 @@ func _nearest_noticed() -> ChaseTarget:
 
 #The player this bot pays attention to now; the closest one if it has not noticed anybody yet
 func _watched() -> ChaseTarget:
+	#A racer that left the course is freed with its node and its locator
+	if _focus != null and not (is_instance_valid(_focus.node) and is_instance_valid(_focus.locator)):
+		_focus = null
 	if _focus != null:
 		return _focus
 	var best: ChaseTarget = null
@@ -368,7 +382,7 @@ func _to_player_flat() -> Vector3:
 	if _ctx == null:
 		return Vector3.ZERO
 	var watched := _watched()
-	if watched == null:
+	if watched == null or not is_instance_valid(watched.node):
 		return Vector3.ZERO
 	return _flat(watched.node.global_position - global_position)
 

@@ -1,347 +1,335 @@
 class_name StreetWorld
 extends Node3D
 
-#Static scenery of the street minigame, built from the numbers of the game script.
-#The street runs along X; the obstacles flow toward +X, where the end line is.
-#The game camera looks at the street from the +Z side, so the near side only gets low things
-#close to the street and its buildings stand behind the camera. The victory close-up looks
-#down the street toward +X, so the street and the buildings go on far past the end line and
-#a painted skyline closes the horizon all around.
-#Repeated pieces (buildings, windows, trees...) are drawn with one MultiMesh per kind, so the
-#whole city costs a handful of draw calls.
+#Scenery of the street minigame: a toy-town boulevard along X, end line and giant arch at +X; the runner walks on its ground
 
 const SIDEWALK_HEIGHT := 0.12
+const CURB_WIDTH := 0.24
 const HEADING_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
-const BUILDING_COLORS: Array[Color] = [
-	Color("cdbcf7"), Color("f8a4b3"), Color("bcc8fa"), Color("f6d29a"), Color("a9dcc8"),
+const GRASS_TEXTURE: Texture2D = preload("res://assets/textures/grass_checker.png")
+const SIDEWALK_TEXTURE: Texture2D = preload("res://assets/textures/sidewalk_tiles.png")
+const CURB_TEXTURE: Texture2D = preload("res://assets/textures/curb_stripes.png")
+const ROAD_COLOR := Color("5a5eb0")
+const LINE_COLOR := Color("fff6ec")
+#Faint tints on the cream walls: the colours of each building stay and no two neighbours look the same
+const WALL_TINTS: Array[Color] = [
+	Color(1.0, 1.0, 1.0), Color(1.0, 0.93, 0.95), Color(0.93, 0.97, 1.0), Color(1.0, 0.97, 0.88),
 ]
-const AWNING_COLORS: Array[Color] = [Color("fd567f"), Color("2f9fb8"), Color("e08a22"), Color("7b6cf6")]
-const GLASS_COLORS: Array[Color] = [Color("eef3ff"), Color("c9d4f6")]
-const LEAF_COLORS: Array[Color] = [Color("7cc59a"), Color("94d4a5"), Color("6fb8a0")]
-const GRASS := Color("9fd3a8")
-const ROAD := Color("4b4e63")
-const SIDEWALK := Color("ddd6ea")
-const SIDEWALK_JOINT := Color("cbc2de")
-const PAINT := Color("f5f1fb")
-const TRUNK := Color("9b7a72")
-const POLE := Color("5d5873")
+const BUILDING_IDS: Array[StringName] = [&"building_shop", &"building_flats"]
+const CLOUD_COUNT := 16
+#Meters after which the markings repeat, so the belt can slide them without end: each period holds one zebra crossing,
+#five lane dashes and three arrows, and none of them touches another
+const MARKS_PERIOD := 24.0
+const ZEBRA_DEPTH := 2.4
+const ZEBRA_STRIPE := 0.55
+const ZEBRA_PITCH := 1.1
+const DASH_LENGTH := 2.0
+const DASH_COUNT := 5
+const DASH_WIDTH := 0.15
+#The arrows painted on every lane that show where the belt takes you: toward +X, away from the traffic
+const CHEVRON_COUNT := 3
+const CHEVRON_COLOR := Color("8e96f2")
+const CHEVRON_ANGLE := deg_to_rad(38.0)
+const CHEVRON_ARM := 1.1
+#Meters kept free around the arch and the bus stops
+const ARCH_CLEARANCE := 6.0
+const STOP_CLEARANCE := 6.5
 
-#Meters of street and city past the end of the obstacles' path, for the victory close-up
-const EXTRA_LENGTH := 200.0
-#The near side (+Z) is open grass with trees up to here; its buildings start behind it,
-#out of the game camera's view
-const NEAR_TREES_FROM := 11.0
-const NEAR_BUILDINGS_Z := 23.0
-#Near-side lamps stand only past this X, outside the game camera's frame
-const NEAR_LAMPS_FROM_X := 24.0
-const LAMP_SPACING := 12.0
-#Painted skyline: two rings around the scene, the far one paler, for some depth
-const SKYLINE_SIZE := Vector2i(2048, 512)
-
-var _batches: Dictionary = {}
+var _materials: Dictionary = {}
+#The ground is a conveyor: the markings and the textures slide toward +X at this speed
+var _belt_speed := 0.0
+var _belt_offset := 0.0
+var _marks_row: Node3D
+var _clouds: Array[Dictionary] = []
+var _stops: Array[Vector2] = []
+var _clock := 0.0
+var _rng := RandomNumberGenerator.new()
 
 
 func build(street_half_width: float, sidewalk_width: float, lane_count: int,
 		from_x: float, to_x: float, end_x: float) -> void:
-	var far_x := maxf(to_x, end_x) + EXTRA_LENGTH
-	var length := far_x - from_x
-	var center_x := (from_x + far_x) / 2.0
+	_rng.seed = 7
 	var outer := street_half_width + sidewalk_width
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 7
-
-	_add_box("solid", Vector3(0.0, -0.06, 0.0), Vector3(900.0, 0.1, 900.0), GRASS)
-	_add_box("solid", Vector3(center_x, -0.03, 0.0), Vector3(length, 0.06, street_half_width * 2.0), ROAD)
-	for side in [-1.0, 1.0]:
-		_add_box("solid", Vector3(center_x, SIDEWALK_HEIGHT / 2.0, side * (street_half_width + sidewalk_width / 2.0)),
-			Vector3(length, SIDEWALK_HEIGHT, sidewalk_width), SIDEWALK)
-		#Curb
-		_add_box("solid", Vector3(center_x, (SIDEWALK_HEIGHT + 0.02) / 2.0, side * (street_half_width + 0.12)),
-			Vector3(length, SIDEWALK_HEIGHT + 0.02, 0.24), PAINT)
-		#Paving joints across the sidewalk
-		var x := from_x
-		while x < far_x:
-			_add_box("solid", Vector3(x, SIDEWALK_HEIGHT + 0.003, side * (street_half_width + sidewalk_width / 2.0 + 0.12)),
-				Vector3(0.07, 0.006, sidewalk_width - 0.24), SIDEWALK_JOINT)
-			x += 1.5
-
-	#Dashed lines between the lanes
-	var lane_width := street_half_width * 2.0 / lane_count
-	for lane in range(1, lane_count):
-		var z := -street_half_width + lane * lane_width
-		var x := from_x
-		while x < far_x:
-			_add_box("solid", Vector3(x + 1.0, 0.005, z), Vector3(2.0, 0.01, 0.15), PAINT)
-			x += 4.0
-
-	_build_crosswalk(end_x + 16.0, street_half_width)
-	_build_crosswalk(end_x + 90.0, street_half_width)
-	_build_end_line(end_x, outer)
-	#Far side: a low row along the street with shops and a taller row behind it
-	_build_building_row(rng, from_x, far_x, -(outer + 1.5), 1.0, Vector2(5.0, 7.0), Vector2(3.5, 9.0), true)
-	_build_building_row(rng, from_x, far_x, -(outer + 12.0), 1.0, Vector2(8.0, 12.0), Vector2(10.0, 22.0), false)
-	#Near side: behind the game camera, so only the victory close-up sees them
-	_build_building_row(rng, from_x, far_x, NEAR_BUILDINGS_Z, -1.0, Vector2(6.0, 9.0), Vector2(5.0, 14.0), true)
-	_build_trees(rng, from_x, far_x, outer)
-	_build_lamps(from_x, far_x, outer)
-	_build_clouds(rng)
-	_build_skyline(Color("c3b2ee"), Color("dcd2fa"), 280.0, 7, Vector2i(150, 400), 3)
-	_build_skyline(Color("e3cdec"), Color(), 340.0, 9, Vector2i(220, 470), 5)
-	_flush_batches()
+	_build_ground(street_half_width, sidewalk_width, from_x, to_x)
+	_build_road_marks(street_half_width, lane_count, from_x, to_x)
+	_build_end(end_x, street_half_width, outer)
+	_build_skyline(from_x, to_x, outer)
+	_build_bus_stops(outer)
+	_build_greenery(from_x, to_x, outer, end_x)
+	_build_clouds(from_x, to_x)
 
 
-#---- pieces ----------------------------------------------------------------------------
+func set_belt_speed(speed: float) -> void:
+	_belt_speed = speed
 
-func _build_end_line(end_x: float, outer: float) -> void:
-	_add_box("solid", Vector3(end_x, SIDEWALK_HEIGHT + 0.02, 0.0), Vector3(0.6, 0.04, outer * 2.0), Palette.CORAL)
-	for side in [-1.0, 1.0]:
-		_add_box("solid", Vector3(end_x, 1.2, side * (outer + 0.4)), Vector3(0.4, 2.4, 0.4), Palette.CORAL)
+
+func _process(delta: float) -> void:
+	_clock += delta
+	if _belt_speed > 0.0:
+		_slide_ground(delta)
+	for entry in _clouds:
+		var node: Node3D = entry["node"]
+		node.position.y = entry["base_y"] + sin(_clock * entry["speed"] + entry["phase"]) * 0.8
+
+
+func _slide_ground(delta: float) -> void:
+	_belt_offset += _belt_speed * delta
+	_marks_row.position.x = fposmod(_belt_offset, MARKS_PERIOD)
+	_textured(SIDEWALK_TEXTURE, 4.0).uv1_offset.x = -_belt_offset / 4.0
+	_curb_material().uv1_offset.x = -_belt_offset / 4.0
+
+
+func _build_ground(half: float, sidewalk_width: float, from_x: float, to_x: float) -> void:
+	var length := to_x - from_x
+	var center_x := (from_x + to_x) / 2.0
+	var outer := half + sidewalk_width
+	var span := outer * 2.0 + 40.0
+	_box(Vector3(center_x, -0.06, 0.0), Vector3(length, 0.1, span), _textured(GRASS_TEXTURE, 8.0))
+	_box(Vector3(center_x, -0.03, 0.0), Vector3(length, 0.06, half * 2.0), _flat(ROAD_COLOR))
+
+	var ground := StaticBody3D.new()
+	ground.position = Vector3(center_x, -0.5, 0.0)
+	var slab := BoxShape3D.new()
+	slab.size = Vector3(length, 1.0, span)
+	var slab_collider := CollisionShape3D.new()
+	slab_collider.shape = slab
+	ground.add_child(slab_collider)
+	add_child(ground)
+
+	for side: float in [-1.0, 1.0]:
+		#The paving starts where the curb ends, so the two never share a face
+		var paving := sidewalk_width - CURB_WIDTH
+		_box(Vector3(center_x, SIDEWALK_HEIGHT / 2.0, side * (half + CURB_WIDTH + paving / 2.0)),
+			Vector3(length, SIDEWALK_HEIGHT, paving), _textured(SIDEWALK_TEXTURE, 4.0))
+		_box(Vector3(center_x, (SIDEWALK_HEIGHT + 0.02) / 2.0, side * (half + CURB_WIDTH / 2.0)),
+			Vector3(length, SIDEWALK_HEIGHT + 0.02, CURB_WIDTH), _curb_material())
+		_sidewalk_collider(center_x, length, side, half, outer)
+
+
+#The curb is a ramp for the physics, so the runner steps up onto the sidewalk without catching on the edge
+func _sidewalk_collider(center_x: float, length: float, side: float, half: float, outer: float) -> void:
+	var points := PackedVector3Array()
+	for end: float in [-length / 2.0, length / 2.0]:
+		points.append(Vector3(end, -0.3, side * half))
+		points.append(Vector3(end, 0.0, side * half))
+		points.append(Vector3(end, SIDEWALK_HEIGHT, side * (half + 0.35)))
+		points.append(Vector3(end, SIDEWALK_HEIGHT, side * outer))
+		points.append(Vector3(end, -0.3, side * outer))
+	var shape := ConvexPolygonShape3D.new()
+	shape.points = points
+	var body := StaticBody3D.new()
+	body.position = Vector3(center_x, 0.0, 0.0)
+	var collider := CollisionShape3D.new()
+	collider.shape = shape
+	body.add_child(collider)
+	add_child(body)
+
+
+func _build_road_marks(half: float, lane_count: int, from_x: float, to_x: float) -> void:
+	_marks_row = Node3D.new()
+	add_child(_marks_row)
+	var lane_width := half * 2.0 / lane_count
+	var stripes := int(floorf((half * 2.0 - 1.0) / ZEBRA_PITCH)) + 1
+	#Equal gaps between the lane dashes and between the last dash and the zebra stripes
+	var dash_gap := (MARKS_PERIOD - ZEBRA_DEPTH - DASH_COUNT * DASH_LENGTH) / (DASH_COUNT + 1.0)
+	var chevron_step := MARKS_PERIOD / CHEVRON_COUNT
+	var white: Array[Transform3D] = []
+	var arrows: Array[Transform3D] = []
+	#Zebra crossings; the first one is where the runner starts. The row slides up to one period, so it starts one period early
+	var crossing_x := -7.0 - MARKS_PERIOD * ceilf((-7.0 - (from_x - MARKS_PERIOD)) / MARKS_PERIOD)
+	while crossing_x < to_x + MARKS_PERIOD:
+		for index in stripes:
+			var z := (index - (stripes - 1) / 2.0) * ZEBRA_PITCH
+			white.append(_mark(Vector3(crossing_x, 0.006, z), Vector3(ZEBRA_DEPTH, 0.01, ZEBRA_STRIPE)))
+		for lane in range(1, lane_count):
+			for index in DASH_COUNT:
+				var dash_x := crossing_x + ZEBRA_DEPTH / 2.0 + dash_gap + (index + 0.5) * DASH_LENGTH + index * dash_gap
+				white.append(_mark(Vector3(dash_x, 0.005, -half + lane * lane_width), Vector3(DASH_LENGTH, 0.01, DASH_WIDTH)))
+		for lane in lane_count:
+			for index in CHEVRON_COUNT:
+				var tip_x := crossing_x + chevron_step / 2.0 + index * chevron_step
+				_add_chevron(arrows, Vector3(tip_x + 0.48, 0.007, -half + (lane + 0.5) * lane_width))
+		crossing_x += MARKS_PERIOD
+	_scatter(white, _flat(LINE_COLOR))
+	_scatter(arrows, _flat(CHEVRON_COLOR))
+
+
+#A "V" whose point goes to +X: two bars that meet at "tip"
+func _add_chevron(into: Array[Transform3D], tip: Vector3) -> void:
+	for side: float in [-1.0, 1.0]:
+		var direction := Vector3(-cos(CHEVRON_ANGLE), 0.0, side * sin(CHEVRON_ANGLE))
+		var mark := _mark(tip + direction * CHEVRON_ARM / 2.0, Vector3(CHEVRON_ARM, 0.01, 0.2))
+		mark.basis = Basis(Vector3.UP, side * CHEVRON_ANGLE) * mark.basis
+		into.append(mark)
+
+
+#A flat box of the unit mesh of _scatter, at "center" with the given size
+func _mark(center: Vector3, size: Vector3) -> Transform3D:
+	return Transform3D(Basis.from_scale(size), center)
+
+
+#All the boxes of one colour in a single draw call
+func _scatter(boxes: Array[Transform3D], material: Material) -> void:
+	var mesh := BoxMesh.new()
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = mesh
+	multi.instance_count = boxes.size()
+	for index in boxes.size():
+		multi.set_instance_transform(index, boxes[index])
+	var instance := MultiMeshInstance3D.new()
+	instance.multimesh = multi
+	instance.material_override = material
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_marks_row.add_child(instance)
+
+
+#A coral band on the ground marks the line; the inflatable arch over it is what shows from far away
+func _build_end(end_x: float, half: float, outer: float) -> void:
+	#Painted flat: over the road and over each paving, never across the curb
+	var coral := _flat(Palette.CORAL)
+	_box(Vector3(end_x, 0.012, 0.0), Vector3(0.6, 0.024, half * 2.0), coral)
+	var paving := outer - half - CURB_WIDTH
+	for side: float in [-1.0, 1.0]:
+		_box(Vector3(end_x, SIDEWALK_HEIGHT + 0.006, side * (half + CURB_WIDTH + paving / 2.0)), Vector3(0.6, 0.012, paving), coral)
+	var arch := PropKit.make(&"arch", Vector3((outer + 0.5) * 2.0, 0.0, 0.0))
+	arch.position = Vector3(end_x, 0.0, 0.0)
+	arch.rotation.y = PI / 2.0
+	add_child(arch)
 	var label := Label3D.new()
 	label.text = "FIN"
 	label.font = HEADING_FONT
 	label.font_size = 160
-	label.pixel_size = 0.01
+	label.pixel_size = 0.02
 	label.modulate = Palette.PAPER
 	label.outline_modulate = Palette.CORAL
 	label.outline_size = 36
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.position = Vector3(end_x, 3.2, -outer - 0.4)
+	label.position = Vector3(end_x, outer * 1.05, 0.0)
 	add_child(label)
 
 
-#Zebra stripes run along the traffic, side by side across the road
-func _build_crosswalk(x: float, street_half_width: float) -> void:
-	var z := -street_half_width + 0.5
-	while z < street_half_width - 0.3:
-		_add_box("solid", Vector3(x, 0.006, z), Vector3(2.6, 0.012, 0.5), PAINT)
-		z += 1.0
+#Two rows of toy buildings behind the greenery and a block closing each end of the street
+func _build_skyline(from_x: float, to_x: float, outer: float) -> void:
+	for side: float in [-1.0, 1.0]:
+		var x := from_x
+		while x < to_x:
+			x += _place_building(Vector3(x, 0.0, side * (outer + 7.0)), Vector3.RIGHT, PI if side > 0.0 else 0.0, 9.0, 12.5) + 0.3
+	for end: float in [-1.0, 1.0]:
+		var edge := from_x - 1.0 if end < 0.0 else to_x + 1.0
+		var z := -outer - 8.0
+		while z < outer + 8.0:
+			z += _place_building(Vector3(edge, 0.0, z), Vector3.BACK, -end * PI / 2.0, 14.0, 19.0) + 0.3
 
 
-#Buildings side by side from from_x to to_x. front_z is the face toward the street and
-#facing the direction it looks at (+1 is +Z). With "shops" the ground floor gets a shop
-#window and an awning, and the roofs get small machines
-func _build_building_row(rng: RandomNumberGenerator, from_x: float, to_x: float, front_z: float,
-		facing: float, depth_range: Vector2, height_range: Vector2, shops: bool) -> void:
-	var x := from_x
-	while x < to_x:
-		var width := rng.randf_range(4.5, 7.5)
-		var height := rng.randf_range(height_range.x, height_range.y)
-		var depth := rng.randf_range(depth_range.x, depth_range.y)
-		var color := BUILDING_COLORS[rng.randi() % BUILDING_COLORS.size()]
-		var cx := x + width / 2.0
-		var cz := front_z - facing * depth / 2.0
-		_add_box("solid", Vector3(cx, height / 2.0, cz), Vector3(width - 0.4, height, depth), color)
-		_add_box("solid", Vector3(cx, height + 0.12, cz), Vector3(width - 0.1, 0.24, depth + 0.3), color.darkened(0.12))
-
-		var face := front_z + facing * 0.03
-		var first_floor := 1.8
-		if shops:
-			first_floor = 4.2
-			_add_box("glass", Vector3(cx, 1.3, face), Vector3(width - 1.8, 1.5, 0.06), GLASS_COLORS[1])
-			var awning := AWNING_COLORS[rng.randi() % AWNING_COLORS.size()]
-			_add_box("solid", Vector3(cx, 2.55, front_z + facing * 0.5), Vector3(width - 1.2, 0.14, 1.0), awning)
-			_add_box("solid", Vector3(cx, 2.4, front_z + facing * 1.0), Vector3(width - 1.2, 0.3, 0.06), awning)
-			if rng.randf() < 0.5:
-				_add_box("solid", Vector3(cx + rng.randf_range(-1.0, 1.0), height + 0.6, cz),
-					Vector3(1.2, 0.8, 1.0), Color("e7e2f0"))
-		var columns := floori((width - 1.4) / 1.5)
-		var y := first_floor
-		while y < height - 1.0:
-			for column in columns:
-				if rng.randf() < 0.1:
-					continue
-				var wx := cx + (column - (columns - 1) / 2.0) * 1.5
-				_add_box("glass", Vector3(wx, y, face), Vector3(0.8, 1.1, 0.06),
-					GLASS_COLORS[rng.randi() % GLASS_COLORS.size()])
-			y += 2.4
-		x += width
+#Places a building starting at "start" and growing along "along", front turned to "yaw"; returns the width it takes
+func _place_building(start: Vector3, along: Vector3, yaw: float, min_height: float, max_height: float) -> float:
+	var id := BUILDING_IDS[_rng.randi() % BUILDING_IDS.size()]
+	var height := _rng.randf_range(min_height, max_height)
+	var size := PropKit.base_size(id)
+	var width := size.x * height / size.y
+	var building := PropKit.make_tall(id, height, WALL_TINTS[_rng.randi() % WALL_TINTS.size()], false)
+	building.position = start + along * width / 2.0
+	building.rotation.y = yaw
+	add_child(building)
+	return width
 
 
-#Low round trees on the near-side grass, and bushes along the far sidewalk
-func _build_trees(rng: RandomNumberGenerator, from_x: float, to_x: float, outer: float) -> void:
-	var x := from_x
-	while x < to_x:
-		var at := Vector3(x + rng.randf_range(-1.0, 1.0), 0.0, rng.randf_range(NEAR_TREES_FROM, NEAR_BUILDINGS_Z - 3.0))
-		var size := rng.randf_range(0.8, 1.25)
-		var leaves := LEAF_COLORS[rng.randi() % LEAF_COLORS.size()]
-		_add("pole", Transform3D(Basis.from_scale(Vector3(0.28, 1.6, 0.28) * size), at + Vector3(0, 0.8 * size, 0)), TRUNK)
-		_add("round", Transform3D(Basis.from_scale(Vector3(2.2, 1.9, 2.2) * size), at + Vector3(0, 2.3 * size, 0)), leaves)
-		_add("round", Transform3D(Basis.from_scale(Vector3(1.5, 1.3, 1.5) * size),
-			at + Vector3(0.5, 3.1 * size, 0.3)), leaves.lightened(0.1))
-		x += rng.randf_range(3.5, 6.5)
-
-	x = from_x + LAMP_SPACING / 2.0
-	while x < to_x:
-		for offset in [-1.2, 0.0, 1.1]:
-			var radius := rng.randf_range(0.45, 0.65)
-			_add("round", Transform3D(Basis.from_scale(Vector3(radius * 2.2, radius * 1.5, radius * 1.8)),
-				Vector3(x + offset, radius * 0.6, -(outer + 0.75))), LEAF_COLORS[rng.randi() % LEAF_COLORS.size()])
-		x += LAMP_SPACING
+#A bus stop on each side, back to the buildings and open toward the street
+func _build_bus_stops(outer: float) -> void:
+	for entry in [[1.0, -20.0], [-1.0, 8.0]]:
+		var side: float = entry[0]
+		var x: float = entry[1]
+		var stop := PropKit.make(&"bus_stop", Vector3(5.2, 0.0, 0.0))
+		stop.position = Vector3(x, 0.0, side * (outer + 2.6))
+		stop.rotation.y = PI if side > 0.0 else 0.0
+		add_child(stop)
+		_stops.append(Vector2(side, x))
 
 
-func _build_lamps(from_x: float, to_x: float, outer: float) -> void:
-	var x := from_x
-	while x < to_x:
-		_lamp(Vector3(x, 0.0, -(outer + 0.45)), 1.0)
-		if x > NEAR_LAMPS_FROM_X:
-			_lamp(Vector3(x, 0.0, outer + 0.45), -1.0)
-		x += LAMP_SPACING
+#Trees and bushes on the grass strip and lamps along the curb; they leave room for the arch and the stops
+func _build_greenery(from_x: float, to_x: float, outer: float, end_x: float) -> void:
+	for side: float in [-1.0, 1.0]:
+		var x := from_x + 4.0 + (5.0 if side > 0.0 else 0.0)
+		while x < to_x - 3.0:
+			if _is_free(side, x, end_x):
+				var tree := PropKit.make_tall(&"tree", _rng.randf_range(5.2, 6.8))
+				tree.position = Vector3(x, 0.0, side * (outer + 2.0))
+				tree.rotation.y = _rng.randf() * TAU
+				add_child(tree)
+			var bush_x := x + _rng.randf_range(4.2, 5.4)
+			if _is_free(side, bush_x, end_x):
+				var bush := PropKit.make_tall(&"bush", _rng.randf_range(1.4, 2.0), Color.WHITE, false)
+				bush.position = Vector3(bush_x, 0.0, side * (outer + 1.2))
+				bush.rotation.y = _rng.randf() * TAU
+				add_child(bush)
+			x += _rng.randf_range(9.0, 11.5)
+		var lamp_x := from_x + 8.0 + (8.0 if side > 0.0 else 0.0)
+		while lamp_x < to_x - 3.0:
+			if _is_free(side, lamp_x, end_x):
+				var lamp := PropKit.make_tall(&"lamp", 5.0)
+				lamp.position = Vector3(lamp_x, 0.0, side * (outer + 0.6))
+				add_child(lamp)
+			lamp_x += 16.0
 
 
-#A street lamp whose arm reaches over the sidewalk toward the street (facing is +1 toward +Z)
-func _lamp(at: Vector3, facing: float) -> void:
-	_add("pole", Transform3D(Basis.from_scale(Vector3(0.14, 4.2, 0.14)), at + Vector3(0, 2.1, 0)), POLE)
-	_add_box("solid", at + Vector3(0, 4.15, facing * 0.5), Vector3(0.1, 0.1, 1.1), POLE)
-	_add("glow", Transform3D(Basis.from_scale(Vector3(0.42, 0.3, 0.42)), at + Vector3(0, 4.0, facing * 1.0)), Color("fff3c4"))
+func _is_free(side: float, x: float, end_x: float) -> bool:
+	if absf(x - end_x) < ARCH_CLEARANCE:
+		return false
+	for stop in _stops:
+		if stop.x == side and absf(x - stop.y) < STOP_CLEARANCE:
+			return false
+	return true
 
 
-#Puffy clouds in the sky, more of them toward +X where the victory close-up looks
-func _build_clouds(rng: RandomNumberGenerator) -> void:
-	for index in 16:
-		var angle := rng.randf_range(-1.1, 1.1) if index < 10 else rng.randf_range(0.0, TAU)
-		var distance := rng.randf_range(140.0, 230.0)
-		var centre := Vector3(cos(angle) * distance, rng.randf_range(38.0, 70.0), sin(angle) * distance)
-		var size := rng.randf_range(6.0, 11.0)
-		for puff in rng.randi_range(3, 5):
-			var offset := Vector3(rng.randf_range(-1.6, 1.6), rng.randf_range(-0.2, 0.5), rng.randf_range(-0.8, 0.8)) * size
-			var scale := Vector3(1.8, 0.9, 1.3) * size * rng.randf_range(0.7, 1.1)
-			_add("cloud", Transform3D(Basis.from_scale(scale), centre + offset), Color.WHITE)
+func _build_clouds(from_x: float, to_x: float) -> void:
+	for index in CLOUD_COUNT:
+		var side := -1.0 if index % 2 == 0 else 1.0
+		var cloud := PropKit.make_long(&"cloud", _rng.randf_range(12.0, 24.0), Color.WHITE, false)
+		var base_y := _rng.randf_range(17.0, 34.0)
+		cloud.position = Vector3(lerpf(from_x, to_x, _rng.randf()), base_y, side * _rng.randf_range(26.0, 62.0))
+		cloud.rotation.y = _rng.randf() * TAU
+		add_child(cloud)
+		_clouds.append({"node": cloud, "base_y": base_y, "phase": _rng.randf() * TAU, "speed": _rng.randf_range(0.25, 0.6)})
 
 
-#A ring of painted city silhouettes around the whole scene. The texture is drawn here, so
-#there is no image file to keep; window_color with alpha 0 leaves the windows out
-func _build_skyline(color: Color, window_color: Color, radius: float, repeats: int,
-		height_px: Vector2i, image_seed: int) -> void:
-	var image := Image.create(SKYLINE_SIZE.x, SKYLINE_SIZE.y, false, Image.FORMAT_RGBA8)
-	image.fill(Color(0, 0, 0, 0))
-	var rng := RandomNumberGenerator.new()
-	rng.seed = image_seed
-	var bottom := SKYLINE_SIZE.y
-	var x := 0
-	while x < SKYLINE_SIZE.x:
-		var width := rng.randi_range(40, 120)
-		var height := rng.randi_range(height_px.x, height_px.y)
-		_wrap_rect(image, Rect2i(x, bottom - height, width, height), color)
-		if rng.randf() < 0.35:
-			var step := rng.randi_range(20, 60)
-			_wrap_rect(image, Rect2i(x + width / 4, bottom - height - step, width / 2, step), color)
-		if rng.randf() < 0.25:
-			_wrap_rect(image, Rect2i(x + width / 2, bottom - height - 50, 3, 50), color)
-		if window_color.a > 0.0:
-			for wy in range(bottom - height + 14, bottom - 12, 18):
-				for wx in range(x + 8, x + width - 12, 14):
-					if rng.randf() < 0.55:
-						_wrap_rect(image, Rect2i(wx, wy, 6, 8), window_color)
-		x += width - rng.randi_range(0, 18)
-	image.generate_mipmaps()
-
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_texture = ImageTexture.create_from_image(image)
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	#The texture keeps its proportions: its height follows from the width of one repeat
-	var height := TAU * radius / repeats * SKYLINE_SIZE.y / SKYLINE_SIZE.x
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var segments := 128
-	for index in segments:
-		var a0 := TAU * index / segments
-		var a1 := TAU * (index + 1) / segments
-		var u0 := float(repeats) * index / segments
-		var u1 := float(repeats) * (index + 1) / segments
-		var low0 := Vector3(cos(a0) * radius, -1.0, sin(a0) * radius)
-		var low1 := Vector3(cos(a1) * radius, -1.0, sin(a1) * radius)
-		var high0 := low0 + Vector3(0, height, 0)
-		var high1 := low1 + Vector3(0, height, 0)
-		for corner in [[low0, Vector2(u0, 1)], [high0, Vector2(u0, 0)], [high1, Vector2(u1, 0)],
-				[low0, Vector2(u0, 1)], [high1, Vector2(u1, 0)], [low1, Vector2(u1, 1)]]:
-			surface.set_uv(corner[1])
-			surface.add_vertex(corner[0])
-	var ring := MeshInstance3D.new()
-	ring.mesh = surface.commit()
-	ring.material_override = material
-	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(ring)
-
-
-#Fills a rectangle that may run past the right edge, continuing it on the left so the
-#texture tiles without a seam
-func _wrap_rect(image: Image, rect: Rect2i, color: Color) -> void:
-	image.fill_rect(rect, color)
-	if rect.end.x > image.get_width():
-		image.fill_rect(Rect2i(rect.position.x - image.get_width(), rect.position.y, rect.size.x, rect.size.y), color)
-
-
-#---- batching --------------------------------------------------------------------------
-
-func _add_box(batch: String, center: Vector3, size: Vector3, color: Color) -> void:
-	_add(batch, Transform3D(Basis.from_scale(size), center), color)
-
-
-func _add(batch: String, xform: Transform3D, color: Color) -> void:
-	if not _batches.has(batch):
-		_batches[batch] = []
-	(_batches[batch] as Array).append([xform, color])
-
-
-#One MultiMesh per kind of piece; the colour of each piece goes in its instance colour
-func _flush_batches() -> void:
-	for batch: String in _batches:
-		var items: Array = _batches[batch]
-		var multimesh := MultiMesh.new()
-		multimesh.transform_format = MultiMesh.TRANSFORM_3D
-		multimesh.use_colors = true
-		multimesh.mesh = _batch_mesh(batch)
-		multimesh.instance_count = items.size()
-		for index in items.size():
-			multimesh.set_instance_transform(index, items[index][0])
-			multimesh.set_instance_color(index, items[index][1])
-		var instance := MultiMeshInstance3D.new()
-		instance.multimesh = multimesh
-		instance.material_override = _batch_material(batch)
-		if batch == "cloud" or batch == "glass":
-			instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(instance)
-	_batches.clear()
-
-
-func _batch_mesh(batch: String) -> Mesh:
-	match batch:
-		"round", "glow", "cloud":
-			var sphere := SphereMesh.new()
-			sphere.radius = 0.5
-			sphere.height = 1.0
-			sphere.radial_segments = 12
-			sphere.rings = 6
-			return sphere
-		"pole":
-			var cylinder := CylinderMesh.new()
-			cylinder.top_radius = 0.5
-			cylinder.bottom_radius = 0.5
-			cylinder.height = 1.0
-			cylinder.radial_segments = 8
-			cylinder.rings = 1
-			return cylinder
-		_:
-			return BoxMesh.new()
-
-
-func _batch_material(batch: String) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.vertex_color_use_as_albedo = true
-	material.vertex_color_is_srgb = true
-	material.roughness = 0.9
-	match batch:
-		"glass":
-			material.roughness = 0.25
-			material.emission_enabled = true
-			material.emission = Color("6d7fb8")
-			material.emission_energy_multiplier = 0.25
-		"glow":
-			material.emission_enabled = true
-			material.emission = Color("fff3c4")
-			material.emission_energy_multiplier = 1.2
-		"cloud":
-			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+func _curb_material() -> StandardMaterial3D:
+	var material := _textured(CURB_TEXTURE, 4.0)
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	return material
+
+
+func _flat(color: Color) -> StandardMaterial3D:
+	var key := "flat_" + color.to_html()
+	if _materials.has(key):
+		return _materials[key]
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.9
+	_materials[key] = material
+	return material
+
+
+#World-space mapping: the texture covers "meters" meters of ground whatever the size of the box
+func _textured(texture: Texture2D, meters: float) -> StandardMaterial3D:
+	var key := "tex_%s_%s" % [texture.resource_path, meters]
+	if _materials.has(key):
+		return _materials[key]
+	var material := StandardMaterial3D.new()
+	material.albedo_texture = texture
+	material.roughness = 0.9
+	material.uv1_triplanar = true
+	material.uv1_world_triplanar = true
+	material.uv1_scale = Vector3.ONE / meters
+	_materials[key] = material
+	return material
+
+
+func _box(center: Vector3, size: Vector3, material: Material, parent: Node3D = null) -> void:
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.material_override = material
+	instance.position = center
+	(parent if parent != null else self).add_child(instance)

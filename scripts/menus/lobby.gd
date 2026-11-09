@@ -8,7 +8,6 @@ const ACTION_WIDTH := 300.0
 var _stage: LobbyStage
 var _ready_button: GameButton
 var _count_label: Label
-var _places_label: Label
 var _dots: HBoxContainer
 var _banner: PanelContainer
 var _name_field: LineEdit
@@ -74,7 +73,6 @@ func _build_interface() -> void:
 	titles.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	titles.add_theme_constant_override("separation", 10)
 	top.add_child(titles)
-	titles.add_child(_caption(ScreenFlow.trail(screen_id), 18, 0.85))
 	titles.add_child(UiKit.label("Sala de espera", UiKit.BOLD_FONT, 44, Palette.INK))
 	var gap := CenterContainer.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -108,9 +106,6 @@ func _build_interface() -> void:
 	_ready_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_ready_button.pressed.connect(_toggle_ready)
 	actions.add_child(_ready_button)
-	var hint := _caption("Enter para confirmar  ·  E para volver", 17, 0.9)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	actions.add_child(hint)
 	var links := HBoxContainer.new()
 	links.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	links.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -144,15 +139,11 @@ func _build_status() -> VBoxContainer:
 	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status.add_theme_constant_override("separation", 12)
 	status.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	_places_label = _caption("", 20, 1.0)
-	_places_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	status.add_child(_places_label)
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 12)
 	row.alignment = BoxContainer.ALIGNMENT_END
 	status.add_child(row)
-	row.add_child(_caption("Listos", 20, 1.0))
 	_dots = HBoxContainer.new()
 	_dots.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_dots.add_theme_constant_override("separation", 7)
@@ -187,8 +178,8 @@ func _build_name_row() -> VBoxContainer:
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.size_flags_vertical = Control.SIZE_SHRINK_END
 	box.add_theme_constant_override("separation", 6)
-	box.add_child(_caption("Tu nombre", 18, 0.9))
 	_name_field = LineEdit.new()
+	_name_field.placeholder_text = "Tu nombre"
 	_name_field.custom_minimum_size = Vector2(260, 42)
 	_name_field.max_length = GameState.MAX_NAME_LENGTH
 	_name_field.text = GameState.get_player_name(_local_id)
@@ -237,7 +228,6 @@ func _toggle_ready() -> void:
 func _refresh() -> void:
 	var lobby := GameSession.lobby
 	_stage.show_slots(lobby.slots, _local_id)
-	_places_label.text = "%d de %d jugadores" % [lobby.slots.size(), LobbyState.CAPACITY]
 	_count_label.text = "%d/%d" % [lobby.ready_count(), lobby.slots.size()]
 	for index in _dots.get_child_count():
 		var dot := _dots.get_child(index) as Panel
