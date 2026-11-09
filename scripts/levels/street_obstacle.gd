@@ -242,6 +242,10 @@ func advance(speed: float, delta: float) -> void:
 	_visual.rotation.x = sin(step) * BOB_SWAY
 
 
+#Circle (the runner) against box (this obstacle) on the ground plane. Simplified from the
+#sphere-vs-AABB test in C. Ericson, "Real-Time Collision Detection", ch. 5: instead of looking for
+#the closest point of the box, the box grows by the radius and each axis is compared (O(1)); it
+#overstates the corners a little. Adapted and written by the team; Godot does not take part here
 func overlaps(point: Vector3, radius: float) -> bool:
 	return absf(point.x - position.x) <= half_extents.x + radius \
 		and absf(point.z - position.z) <= half_extents.y + radius
