@@ -11,6 +11,8 @@ var vertex: StringName = &""
 var on_bridge := false
 var bridge_a: StringName = &""
 var bridge_b: StringName = &""
+#The platform a cannon shot is flying to, until it lands there
+var flight_to: StringName = &""
 
 var _platforms_inside: Array[StringName] = []
 var _bridges_inside: Array[Array] = []
@@ -26,9 +28,15 @@ func watch_bridge(a: StringName, b: StringName, area: Area3D) -> void:
 	area.body_exited.connect(_on_body_exited.bind(a, b, false))
 
 
+#A cannon throws the player toward a platform: for the bots and the standings it already counts as being on its way there
+func begin_flight(to: StringName) -> void:
+	flight_to = to
+
+
 #Used after the player is put somewhere on purpose (respawn)
 func force_vertex(id: StringName) -> void:
 	vertex = id
+	flight_to = &""
 	on_bridge = false
 	_platforms_inside.clear()
 	_bridges_inside.clear()
@@ -39,6 +47,8 @@ func force_vertex(id: StringName) -> void:
 func chase_candidates() -> Array[StringName]:
 	if on_bridge:
 		return [bridge_a, bridge_b]
+	if flight_to != &"":
+		return [vertex, flight_to]
 	return [vertex]
 
 
@@ -78,5 +88,7 @@ func _resolve() -> void:
 		on_bridge = true
 		bridge_a = _bridges_inside[0][0]
 		bridge_b = _bridges_inside[0][1]
+	if vertex != old_vertex and not on_bridge:
+		flight_to = &""
 	if vertex != old_vertex or on_bridge != old_bridge or bridge_a != old_a:
 		place_changed.emit()

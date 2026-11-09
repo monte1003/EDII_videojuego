@@ -5,14 +5,16 @@ extends BotRole
 
 const LOOKAHEAD := 2
 #Within this cost of the player the ambush is over and it chases directly
-const ENGAGE_COST := 2.0
+const ENGAGE_COST := 2.5
 
 
 func release_delay(_head_start: float) -> float:
 	return 0.0
 
 
-func pick_target(bot: ChaserBot, ctx: ChaseContext, target: ChaseTarget) -> StringName:
+func pick_target(bot: ChaserBot, ctx: ChaseContext, seen: ChaseTarget) -> StringName:
+	#It waits for whoever leads the race, wherever it is
+	var target := ctx.leader() if ctx.leader() != null else seen
 	var from := ctx.player_anchor(target)
 	if ctx.cost(bot.anchor_vertex(), from) <= ENGAGE_COST:
 		return direct_target(bot, ctx, target)

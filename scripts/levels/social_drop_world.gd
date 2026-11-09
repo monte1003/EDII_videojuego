@@ -229,7 +229,7 @@ func launch_rocket(row: int, direction: float, warning: float, speed: float) -> 
 	_rockets.append(rocket)
 
 
-#Same idea as StreetObstacle.overlaps(): the rocket box grows by the player radius (sphere vs
+#Same idea as StreetObstacle.contact(): the rocket box grows by the player radius (sphere vs
 #AABB, C. Ericson, "Real-Time Collision Detection", ch. 5), plus a height check so that a jump
 #goes over it. Adapted and written by the team
 #Direction (+1 or -1) of a flying rocket that runs into "at" now, 0 when none; each rocket

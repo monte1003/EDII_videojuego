@@ -1,39 +1,70 @@
 class_name Level01Backdrop
 extends Node3D
 
-#Floating hearts, chat bubbles and typing bubbles around the islands: they give the level depth and its theme and never collide
+#Giant hearts, chat bubbles, bells, phones, islands and clouds around the course: they give the level depth and its theme and never collide.
+#Each one keeps clear of the big wheels and of every other piece, and sleeps when no camera is near
 
-const COUNT := 36
-const COLORS: Array[Color] = [Color("ff8fb1"), Color("fdfbff"), Color("7fe3f0"), Color("c5b3f7"), Color("ffd27a")]
-const HEART_POINTS := 40
+#What floats around: model, how many, its size range (the measure that is fitted) and whether it is tall or long
+const KINDS: Array[Dictionary] = [
+	{"id": &"heart", "count": 10, "size": Vector2(4.5, 8.0), "tall": true},
+	{"id": &"bubble", "count": 10, "size": Vector2(6.0, 10.0), "tall": false},
+	{"id": &"bell", "count": 6, "size": Vector2(4.5, 7.5), "tall": true},
+	{"id": &"phone", "count": 6, "size": Vector2(8.0, 13.0), "tall": true},
+	{"id": &"island", "count": 8, "size": Vector2(9.0, 15.0), "tall": false},
+	{"id": &"cloud", "count": 14, "size": Vector2(14.0, 26.0), "tall": false},
+]
+#The cloud sea under the course: big white clouds, a few draw calls
+const SEA_COUNT := 150
+const SEA_COLORS: Array[Color] = [Color("ffffff"), Color("f4f0ff"), Color("eaf3ff")]
+#The stretch of the course where pieces may float, away from the rainbows at both ends
+const Z_RANGE := Vector2(-216.0, 192.0)
+#Free air around each piece on top of its own size, and how many places are tried before a piece is left out
+const BREATHING := 3.0
+const TRIES := 30
 
 var _items: Array[Dictionary] = []
-var _materials: Dictionary = {}
+#The balls (centre and radius) that are already taken: the wheels of the set and the pieces placed so far
+var _taken: Array[Vector4] = []
 var _clock := 0.0
 
 
 func build() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 23
-	var heart := _heart_mesh()
-	for index in COUNT:
-		var side := -1.0 if index % 2 == 0 else 1.0
-		var at := Vector3(side * rng.randf_range(30.0, 82.0), rng.randf_range(-8.0, 24.0), rng.randf_range(-105.0, 22.0))
-		var color := COLORS[rng.randi() % COLORS.size()]
-		var item: Node3D
-		match index % 3:
-			0:
-				item = _heart(heart, color)
-			1:
-				item = _bubble(color, false)
-			_:
-				item = _bubble(color, true)
-		item.scale = Vector3.ONE * rng.randf_range(2.6, 6.5)
-		item.position = at
-		var yaw := atan2(-side, 0.8)
-		item.rotation.y = yaw
-		add_child(item)
-		_items.append({"node": item, "base_y": at.y, "yaw": yaw, "phase": rng.randf() * TAU, "speed": rng.randf_range(0.35, 0.8)})
+	for wheel in Level01Set.WHEELS:
+		var at: Vector3 = wheel["at"]
+		_taken.append(Vector4(at.x, at.y + float(wheel["radius"]) + 2.5, at.z, float(wheel["radius"]) + 3.0))
+	var index := 0
+	for kind in KINDS:
+		for _step in kind["count"] as int:
+			var size := rng.randf_range((kind["size"] as Vector2).x, (kind["size"] as Vector2).y)
+			var reach := size * 0.75 + 1.0
+			var place: Variant = _free_place(rng, size, reach, index)
+			index += 1
+			if place == null:
+				continue
+			var at := place as Vector3
+			var item: Node3D
+			if kind["tall"]:
+				item = PropKit.make_tall(kind["id"], size, Color.WHITE, false)
+			else:
+				item = PropKit.make_long(kind["id"], size, Color.WHITE, false)
+			_taken.append(Vector4(at.x, at.y, at.z, reach))
+			_add(item, at, atan2(-signf(at.x), 0.8), rng)
+	var sea := CloudField.new()
+	sea.setup(Vector2(-170.0, 170.0))
+	for cloud in SEA_COUNT:
+		sea.add_cloud(Vector3(rng.randf_range(-170.0, 170.0), rng.randf_range(-38.0, -26.0), rng.randf_range(-310.0, 240.0)),
+			rng.randf_range(4.0, 9.0), SEA_COLORS[cloud % SEA_COLORS.size()], rng.randf_range(0.5, 1.6), rng)
+	add_child(sea)
+	sea.commit()
+	var sparks := PartyKit.sparkles(Vector3(80.0, 14.0, 190.0), 170)
+	sparks.position = Vector3(0.0, 14.0, 20.0)
+	add_child(sparks)
+	#Little hearts float up over the whole course, like the likes of the crowd
+	var likes := PartyKit.hearts(Vector3(70.0, 12.0, 150.0), 90)
+	likes.position = Vector3(0.0, 14.0, 20.0)
+	add_child(likes)
 
 
 func _process(delta: float) -> void:
@@ -45,90 +76,24 @@ func _process(delta: float) -> void:
 		node.rotation.y = entry["yaw"] + sin(wave * 0.7) * 0.22
 
 
-func _heart(mesh: Mesh, color: Color) -> Node3D:
-	var root := Node3D.new()
-	_add(root, mesh, color, Vector3.ZERO)
-	return root
+#A spot beside the course (big pieces keep further out so they never swallow it) where a ball of radius "reach" touches nothing, or null
+func _free_place(rng: RandomNumberGenerator, size: float, reach: float, index: int) -> Variant:
+	for attempt in TRIES:
+		var side := -1.0 if (index + attempt) % 2 == 0 else 1.0
+		var gap := 84.0 + size * 0.6
+		var at := Vector3(side * (gap + rng.randf_range(0.0, 50.0)), rng.randf_range(0.0, 44.0), rng.randf_range(Z_RANGE.x, Z_RANGE.y))
+		var free := true
+		for other in _taken:
+			if at.distance_to(Vector3(other.x, other.y, other.z)) < reach + other.w + BREATHING:
+				free = false
+				break
+		if free:
+			return at
+	return null
 
 
-#A speech bubble: a flat capsule with a corner tail; the typing one has three dots
-func _bubble(color: Color, typing: bool) -> Node3D:
-	var root := Node3D.new()
-	var body := CapsuleMesh.new()
-	body.radius = 0.45
-	body.height = 1.9
-	body.radial_segments = 20
-	body.rings = 6
-	var capsule := _add(root, body, color, Vector3.ZERO)
-	capsule.rotation.z = PI / 2.0
-	capsule.scale = Vector3(1.0, 1.0, 0.42)
-	var tail := BoxMesh.new()
-	tail.size = Vector3(0.42, 0.42, 0.2)
-	var corner := _add(root, tail, color, Vector3(-0.55, -0.46, 0.0))
-	corner.rotation.z = PI / 4.0
-	if typing:
-		var dot := SphereMesh.new()
-		dot.radius = 0.1
-		dot.height = 0.2
-		dot.radial_segments = 10
-		dot.rings = 5
-		for step in [-1.0, 0.0, 1.0]:
-			_add(root, dot, Color("6d55c2"), Vector3(step * 0.36, 0.0, 0.2))
-	return root
-
-
-func _add(parent: Node3D, mesh: Mesh, color: Color, at: Vector3) -> MeshInstance3D:
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.material_override = _material(color)
-	instance.position = at
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(instance)
-	return instance
-
-
-func _material(color: Color) -> StandardMaterial3D:
-	var key := color.to_html()
-	if _materials.has(key):
-		return _materials[key]
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 0.55
-	material.emission_enabled = true
-	material.emission = color
-	material.emission_energy_multiplier = 0.4
-	_materials[key] = material
-	return material
-
-
-#A heart as a thin slab: the classic heart curve, closed with a fan on each face
-func _heart_mesh() -> ArrayMesh:
-	var outline: Array[Vector2] = []
-	for index in HEART_POINTS:
-		var t := TAU * index / HEART_POINTS
-		outline.append(Vector2(
-			16.0 * pow(sin(t), 3.0),
-			13.0 * cos(t) - 5.0 * cos(2.0 * t) - 2.0 * cos(3.0 * t) - cos(4.0 * t) + 1.5) / 32.0)
-	var depth := 0.16
-	var tool := SurfaceTool.new()
-	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var middle := Vector2(0.0, 0.05)
-	for index in HEART_POINTS:
-		var a := outline[index]
-		var b := outline[(index + 1) % HEART_POINTS]
-		_triangle(tool, Vector3(middle.x, middle.y, depth), Vector3(a.x, a.y, depth), Vector3(b.x, b.y, depth), Vector3(0, 0, 1))
-		_triangle(tool, Vector3(middle.x, middle.y, -depth), Vector3(a.x, a.y, -depth), Vector3(b.x, b.y, -depth), Vector3(0, 0, -1))
-		var out := Vector3((a.x + b.x) / 2.0 - middle.x, (a.y + b.y) / 2.0 - middle.y, 0.0)
-		_triangle(tool, Vector3(a.x, a.y, depth), Vector3(a.x, a.y, -depth), Vector3(b.x, b.y, -depth), out)
-		_triangle(tool, Vector3(a.x, a.y, depth), Vector3(b.x, b.y, -depth), Vector3(b.x, b.y, depth), out)
-	tool.generate_normals()
-	return tool.commit()
-
-
-#Godot front faces are clockwise seen from outside; "outward" tells which way is out
-func _triangle(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, outward: Vector3) -> void:
-	var corners: Array[Vector3] = [a, b, c]
-	if (b - a).cross(c - a).dot(outward) > 0.0:
-		corners = [a, c, b]
-	for corner in corners:
-		tool.add_vertex(corner)
+func _add(item: Node3D, at: Vector3, yaw: float, rng: RandomNumberGenerator) -> void:
+	item.position = at
+	item.rotation.y = yaw
+	add_child(item)
+	_items.append({"node": item, "base_y": at.y, "yaw": yaw, "phase": rng.randf() * TAU, "speed": rng.randf_range(0.35, 0.8)})

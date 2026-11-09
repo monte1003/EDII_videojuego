@@ -16,6 +16,7 @@ func _initialize() -> void:
 	_check_hits_and_protection()
 	_check_goal()
 	_check_checkpoint_and_detection()
+	_check_race()
 	print("level_rules_check: %s" % ("OK" if _failures == 0 else "%d FALLOS" % _failures))
 	quit(1 if _failures > 0 else 0)
 
@@ -43,8 +44,9 @@ func _run(rules: Level01Rules, seconds: float) -> void:
 func _check_time() -> void:
 	var rules := _rules([1])
 	_run(rules, 60.0)
-	_expect(is_equal_approx(rules.time_left, 60.0) and rules.is_running(), "pasan 60 s y la ronda sigue: quedan %.1f" % rules.time_left)
-	_run(rules, 70.0)
+	_expect(is_equal_approx(rules.time_left, rules.settings.time_limit - 60.0) and rules.is_running(),
+		"pasan 60 s y la ronda sigue: quedan %.1f" % rules.time_left)
+	_run(rules, rules.settings.time_limit)
 	_expect(rules.outcome == Level01Rules.Outcome.LOST_TIME and rules.time_left == 0.0, "al acabarse el reloj se pierde por tiempo")
 	_expect(_outcomes == [Level01Rules.Outcome.LOST_TIME], "el resultado se avisa una sola vez")
 	var elapsed := rules.elapsed
@@ -112,5 +114,69 @@ func _check_checkpoint_and_detection() -> void:
 	_expect(rules.detection_radius(1) == rules.settings.silenced_detection_radius, "con silencio ven de cerca")
 	_run(rules, rules.settings.silence_duration + 0.5)
 	_expect(rules.detection_radius(1) == rules.settings.detection_radius, "el silencio se acaba")
-	_expect(Level01Settings.new().bot_count_for(1) == 3 and Level01Settings.new().bot_count_for(2) == 4 and Level01Settings.new().bot_count_for(4) == 4,
-		"los bots crecen con los jugadores hasta 4")
+	_expect(Level01Settings.new().bot_count_for(1) == 4 and Level01Settings.new().bot_count_for(4) == 4,
+		"hay cuatro bots con cualquier cantidad de jugadores")
+
+
+func _race(player_ids: Array[int]) -> Level01Rules:
+	_outcomes.clear()
+	_blocks.clear()
+	var rules := Level01Rules.new(Level01Settings.new(), player_ids, &"S")
+	rules.outcome_decided.connect(func(outcome: int) -> void: _outcomes.append(outcome))
+	return rules
+
+
+func _check_race() -> void:
+	var rules := _race([1, 2, 3, 4])
+	_expect(rules.racers_in_race() == 4, "la carrera lleva los cuatro jugadores")
+	rules.reach_goal(2)
+	_expect(rules.state_of(2).place == 1 and rules.is_running(), "si un jugador llega primero, la ronda sigue para los demás")
+	_expect(is_equal_approx(rules.window_left, rules.settings.finish_window), "al llegar el primero se abre la ventana de cierre")
+	_run(rules, 10.0)
+	_expect(rules.window_left < rules.settings.finish_window and rules.is_running(), "la ventana corre mientras alguien sigue en carrera")
+	rules.reach_goal(1)
+	_expect(rules.state_of(1).place == 2 and rules.is_running(), "el segundo en llegar toma el puesto 2 y la ronda sigue")
+	rules.reach_goal(3)
+	rules.reach_goal(4)
+	_expect(rules.outcome == Level01Rules.Outcome.WON, "al llegar los cuatro la ronda termina")
+	_expect(rules.standings() == [2, 1, 3, 4], "la tabla pone a cada uno en su orden de llegada: %s" % [rules.standings()])
+	_expect(rules.place_of(1) == 2, "el puesto del jugador 1 es el 2")
+
+	var late := _race([1, 2])
+	late.reach_goal(2)
+	_run(late, late.settings.finish_window + 1.0)
+	_expect(late.outcome == Level01Rules.Outcome.WON and late.window_left == 0.0 and not late.state_of(1).reached_goal(),
+		"al cerrarse la meta la ronda termina y quien no llegó queda fuera")
+	_expect(_outcomes == [Level01Rules.Outcome.WON], "el cierre de la meta se avisa una vez")
+
+	var order := _race([1, 2, 3, 4])
+	order.state_of(1).progress = 8.0
+	order.state_of(2).progress = 3.0
+	order.state_of(3).progress = 12.0
+	order.state_of(4).progress = 5.0
+	_expect(order.standings() == [2, 4, 1, 3], "sin llegar, la tabla ordena por cercanía a la meta: %s" % [order.standings()])
+	for index in 3:
+		order.fall(4)
+	_expect(order.state_of(4).eliminated and order.standings()[3] == 4, "un jugador sin intentos queda al final")
+	_expect(order.is_running(), "que un jugador se quede sin intentos no termina la ronda")
+	order.reach_goal(2)
+	order.reach_goal(3)
+	_expect(order.is_running(), "con otro jugador todavía en carrera la ronda sigue")
+	for index in 3:
+		order.fall(1)
+	_expect(order.outcome == Level01Rules.Outcome.WON, "si el último se queda sin intentos, la ronda termina con quienes llegaron")
+
+	var broke := _race([1, 2])
+	for id in [1, 2]:
+		for index in 3:
+			broke.fall(id)
+	_expect(broke.outcome == Level01Rules.Outcome.LOST_ATTEMPTS, "si nadie llega y todos se quedan sin intentos, pierden por intentos")
+
+	var pair := _race([1, 2])
+	pair.reach_goal(1)
+	_expect(pair.is_running() and pair.state_of(1).place == 1, "con dos jugadores, que uno llegue no termina la ronda")
+	pair.reach_goal(2)
+	_expect(pair.outcome == Level01Rules.Outcome.WON, "cuando los dos jugadores llegaron la ronda termina")
+	var arrived := _race([1, 2])
+	arrived.reach_goal(1)
+	_expect(arrived.use_ability(1, Level01Rules.Ability.SILENCE) == Level01Rules.Use.COOLDOWN, "quien ya llegó no usa estaciones")
