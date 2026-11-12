@@ -1,142 +1,200 @@
 class_name SocialDropWorld
 extends Node3D
 
-#The SocialDrop stage: a platform of social media tiles (6 across, 5 deep) floating in the
-#sky, the giant screen in front of the player where the spin is shown, and a sea of clouds
-#drifting below
+#The SocialDrop board: nine big app icon cards (3 across, 3 deep) floating in the sky inside a frame of lights, and a giant
+#screen on each side that counts down and shows the icon to find; the set around it is in SocialDropStage
 
-const COLUMNS := 6
-const ROWS := 5
-const TILE_SIZE := 2.75
-const TILE_GAP := 0.22
+const COLUMNS := 3
+const ROWS := 3
+const TILE_SIZE := 4.4
+const TILE_GAP := 0.3
 const TILE_THICKNESS := 0.4
 const TILE_SHADER := preload("res://assets/ui/shaders/icon_tile.gdshader")
+const PANEL_SHADER := preload("res://assets/ui/shaders/screen_panel.gdshader")
+const QUESTION: Texture2D = preload("res://assets/ui/question_mark.png")
+#The two colours the hidden cards alternate in, like a chessboard
+const HIDDEN_COLORS: Array[Color] = [Color("6a52e0"), Color("ff6f91")]
+#A card hops this high while it turns over, and takes this long
+#The pictures of the cards roll like a slot machine (as the tiles of Fall Guys flash with one fruit after another): how long the roll takes at
+#the least and the most, how many cells of the strip pass per second at the start, how high the card lifts and how much it pops when it stops
+const ROLL_MIN := 0.42
+const ROLL_MAX := 0.75
+const ROLL_LIFT := 0.1
+const ROLL_POP := 0.045
+#Side in pixels of every picture in the strip
+const STRIP_CELL := 256
+#The cards roll as a wave that starts in the middle of the board and goes out: the last card starts this much later than the first
+const FLIP_STAGGER := 0.1
+#The cards come back up in the same wave
+const RISE_STAGGER := 0.22
+#The platforms: rounded corners, a soft bevel along the top edge and the glowing frame that fills the flat top
+const SLAB_CORNER := 0.5
+const SLAB_BEVEL := 0.1
+const CARD_SHARE := 0.92
+const FRAME_SHARE := 0.955
+const FRAME_SHADER := preload("res://assets/ui/shaders/tile_frame.gdshader")
+const CARD_REST := 0.02
 #How far a tile falls before it hides; it comes back from half of it
 const DROP_DEPTH := 14.0
-const DROP_TIME := 0.9
-const RISE_TIME := 0.7
-#Free meters between the front edge of the platform and the screen
-const SCREEN_DISTANCE := 3.0
-const SCREEN_SIZE := Vector2(11.5, 6.6)
-const SCREEN_HEIGHT := 3.6
-#The screen leans back toward the camera above, so it does not look squashed from there
-const SCREEN_TILT_DEGREES := 35.0
-#Fixed camera high above the back of the platform: the whole board and the screen fit in it
-const CAMERA_POSITION := Vector3(0.0, 22.2, 12.4)
-const CAMERA_TARGET := Vector3(0.0, 0.0, -4.1)
-const CAMERA_FOV := 60.0
+const DROP_TIME := 1.0
+const RISE_TIME := 0.85
+#Free meters between the edge of the platform and each screen, and the size and height of a screen
+const SCREEN_DISTANCE := 3.6
+const SCREEN_SIZE := Vector2(9.0, 5.0)
+const SCREEN_HEIGHT := 3.2
+#The screens lean back a little, so they face the players that look up at them
+const SCREEN_TILT_DEGREES := 12.0
 const SCREEN_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 const SCREEN_FONT_SIZE := 220
 const TEXT_PIXEL_SIZE := 0.012
-const SIDE_COLOR := Color("9d88e0")
+const SIDE_COLOR := Color("a48ae8")
 const FRAME_COLOR := Color("372c58")
 const PANEL_COLOR := Color("1d1638")
-const CYAN := Color("4fd6e8")
-const MAGENTA := Color("ee4fb8")
-const AMBER := Color("ffc857")
 const WARNING_TINT := Color("ff5a5a")
-#The sea of clouds: how many, the box they drift in (x wraps around) and their speed
-const CLOUD_COUNT := 26
-const CLOUD_AREA := Rect2(-60.0, -45.0, 120.0, 80.0)
-const CLOUD_DEPTH_RANGE := Vector2(-20.0, -9.0)
-const CLOUD_SPEED_RANGE := Vector2(0.8, 2.2)
-const CLOUD_COLORS: Array[Color] = [Color("ffffff"), Color("f3ecff"), Color("fde8f1")]
-#Icon cards floating far around the platform, turning slowly
-const CARD_COUNT := 10
-#Round shadow under the player, on the floor even while it jumps
-const SHADOW_DIAMETER := 2.1
-#How much the gold marker over the player bobs up and down
-const MARKER_BOB := 0.12
-#Rockets fly along a row this high; they start and end this far past the sides of the board
-const ROCKET_HEIGHT := 0.85
-const ROCKET_RUN_OUT := 20.0
-#Length of the whole rocket (flame aside) before ROCKET_SCALE, for the hit test
-const ROCKET_LENGTH := 2.7
-const ROCKET_SCALE := 1.45
-const ROCKET_WARNING_COLOR := Color("ff1f3d")
-
-
+const GOLD_EDGE := Color("ffd84a")
+#The pips on the screens that tell the stage of the round (as many as SocialDrop.STAGES), and how the card to stand on glows
+const STAGE_PIPS := 7
+#How many icons flash by on the screens before the one that stays
+const SPIN_STEPS := 6
+const PIP_SPACING := 0.62
+const FOUND_GLOW := 1.7
+#How the card frames pulse and how far a doomed card shakes and a pressed card dips
+const FRAME_GLOW := 0.7
+const SHAKE_REACH := 0.035
+const PRESS_DEPTH := 0.07
+#The trim of each screen (one colour per screen) and the spacing of the lights on the screens and around the board
+const SCREEN_ACCENTS: Array[Color] = [PartyKit.PINK, PartyKit.CYAN, PartyKit.YELLOW, PartyKit.VIOLET]
+const SCREEN_BULB_SPACING := 1.0
+const FRAME_MARGIN := 0.55
+const FRAME_BULB_SPACING := 1.3
 class Tile:
 	var body: StaticBody3D
 	var collider: CollisionShape3D
+	#The card on top: one face whose picture rolls from the cover with the "?" to the icon and back
+	var card: Node3D
 	var top: ShaderMaterial
 	var icon := 0
 	var dropped := false
+	var face_up := false
+	var flip: Tween
+	#Where the card rests, its glowing frame, how red it is while it is about to fall and the dip of a step on it
+	var base := Vector3.ZERO
+	var frame: ShaderMaterial
+	var glow := FRAME_GLOW
+	#Where the strip of pictures is on the face, in cells
+	var scroll := 0.0
+	var warn := 0.0
+	var press: Tween
 
-
-class Cloud:
-	var node: Node3D
-	var speed := 1.0
-
-
-#A rocket crossing one row: its row blinks red for "delay" seconds, then it flies across
-class Rocket:
-	var node: Node3D
-	var flame: Node3D
-	var strip: MeshInstance3D
-	var strip_material: StandardMaterial3D
-	var direction := 1.0
-	var speed := 1.0
-	var delay := 0.0
-	var hit := false
-
-
-var camera: Camera3D
 
 var _icons: Array[Texture2D] = []
+#All the icons and the cover with the question mark, one under the other, in one picture
+var _strip: ImageTexture
 var _tiles: Array[Tile] = []
-var _clouds: Array[Cloud] = []
-var _cards: Array[Node3D] = []
-var _rockets: Array[Rocket] = []
-var _decor_time := 0.0
-var _marker: MeshInstance3D
-var _shadow: MeshInstance3D
-var _screen_label: Label3D
-var _screen_icon: Sprite3D
+var _screen_labels: Array[Label3D] = []
+var _screen_icons: Array[Sprite3D] = []
+#The pips of every screen, one list per screen, and the colour of each screen
+var _screen_pips: Array[Array] = []
+var _screen_accents: Array[Color] = []
+var _clock := 0.0
 var _punch_tween: Tween
+var _spin_tween: Tween
+var _stage: SocialDropStage
+var _bulb_spots: Array[Transform3D] = []
+var _bulb_colors: Array[Color] = []
 
 
 func build(icons: Array[Texture2D], rng: RandomNumberGenerator) -> void:
 	_icons = icons
-	_build_sky()
-	_build_camera()
+	_strip = _make_strip(icons)
+	_stage = SocialDropStage.new()
+	add_child(_stage)
+	_stage.build(icons)
 	_build_tiles()
-	_build_screen()
-	_build_clouds()
-	_build_cards()
-	_build_player_marks()
-	shuffle(rng)
+	_build_screens()
+	_build_lights()
+	deal(rng, 0, 2, 4)
 
 
-#The gold triangle floats "marker_height" over the player and its shadow stays on the floor,
-#smaller the higher the player jumps; the shadow goes away once the player falls
-func follow_player(at: Vector3, marker_height: float) -> void:
-	_marker.position = at + Vector3(0.0, marker_height + sin(_decor_time * 4.0) * MARKER_BOB, 0.0)
-	_shadow.visible = at.y > -0.3
-	_shadow.position = Vector3(at.x, 0.03, at.z)
-	_shadow.scale = Vector3.ONE * clampf(1.0 - at.y * 0.3, 0.5, 1.0)
-
-
-#With an even count the centre of the platform is a gap: start on a tile next to it
-func spawn_point() -> Vector3:
-	var half_step := (TILE_SIZE + TILE_GAP) / 2.0
-	return Vector3(half_step if COLUMNS % 2 == 0 else 0.0, 0.05, half_step if ROWS % 2 == 0 else 0.0)
-
-
-#Every icon is on at least one tile; the rest of the tiles get any icon at random
-func shuffle(rng: RandomNumberGenerator) -> void:
-	var deck: Array[int] = []
+#The frames of the cards pulse through the colours of the set, red while their card is about to fall
+func _process(delta: float) -> void:
+	_clock += delta
 	for index in _tiles.size():
-		deck.append(index if index < _icons.size() else rng.randi() % _icons.size())
-	for index in range(deck.size() - 1, 0, -1):
-		var other := rng.randi_range(0, index)
-		var held := deck[index]
-		deck[index] = deck[other]
-		deck[other] = held
+		var tile := _tiles[index]
+		var color := _frame_color(index).lerp(WARNING_TINT, tile.warn)
+		var level := FRAME_GLOW + 0.25 * sin(_clock * 1.6 + index * 0.8) + tile.warn * 0.9
+		tile.glow = move_toward(tile.glow, level, delta * 4.0)
+		tile.frame.set_shader_parameter("glow_color", color)
+		tile.frame.set_shader_parameter("energy", tile.glow)
+
+
+#The colour of a frame slides through the colours of the set without any jump, a little behind the card next to it
+func _frame_color(index: int) -> Color:
+	var position := _clock * 0.35 + index * 0.45
+	var count := PartyKit.PALETTE.size()
+	return PartyKit.PALETTE[int(position) % count].lerp(PartyKit.PALETTE[(int(position) + 1) % count], smoothstep(0.0, 1.0, fposmod(position, 1.0)))
+
+
+#Four free places in the middle of the board, one per player
+func spawn_points() -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	for spot in [Vector2(-1.3, -1.3), Vector2(1.3, -1.3), Vector2(-1.3, 1.3), Vector2(1.3, 1.3)]:
+		points.append(Vector3(spot.x, 0.05, spot.y))
+	return points
+
+
+#Where the card with "icon" that is nearest to "from" is, in the world; the centre of the board when none is left
+func cell_position(icon: int, from := Vector3.ZERO) -> Vector3:
+	var best := Vector3.ZERO
+	var best_distance := INF
+	for tile in _tiles:
+		if tile.icon != icon or tile.dropped:
+			continue
+		var distance := Vector2(tile.body.position.x - from.x, tile.body.position.z - from.z).length()
+		if distance < best_distance:
+			best_distance = distance
+			best = tile.body.position + Vector3(0.0, TILE_THICKNESS / 2.0, 0.0)
+	return best
+
+
+#The icon of the card under a point, -1 when there is no card
+func icon_at(at: Vector3) -> int:
+	var half := TILE_SIZE / 2.0
+	for tile in _tiles:
+		if not tile.dropped and absf(at.x - tile.body.position.x) <= half and absf(at.z - tile.body.position.z) <= half:
+			return tile.icon
+	return -1
+
+
+#Every card turns to show its icon or its "?"
+func show_icons(up: bool) -> void:
+	for tile in _tiles:
+		if not tile.dropped:
+			_flip(tile, up)
+
+
+#Gives every card its icon for a round: "distinct" different icons, the one to find ("target") among them and on "copies"
+#cards; the rest of the cards repeat the other icons, each shown at least once
+func deal(rng: RandomNumberGenerator, target: int, distinct: int, copies: int) -> void:
+	var others: Array[int] = []
+	for index in _icons.size():
+		if index != target:
+			others.append(index)
+	_shuffle(others, rng)
+	var kinds := clampi(distinct - 1, 1, others.size())
+	var deck: Array[int] = []
+	for _copy in copies:
+		deck.append(target)
+	for index in kinds:
+		deck.append(others[index])
+	while deck.size() < _tiles.size():
+		deck.append(others[rng.randi() % kinds])
+	_shuffle(deck, rng)
 	for index in _tiles.size():
 		var tile := _tiles[index]
 		tile.icon = deck[index]
-		tile.top.set_shader_parameter("icon", _icons[tile.icon])
+		if tile.face_up and tile.flip == null:
+			_set_card(tile, true)
 
 
 #The tiles that will drop blink red three times during "seconds"
@@ -144,197 +202,138 @@ func warn(icon: int, seconds: float) -> void:
 	var doomed := _doomed(icon)
 	var half := seconds / 6.0
 	var tween := create_tween().set_loops(3)
-	tween.tween_method(_tint.bind(doomed), 0.0, 1.0, half)
-	tween.tween_method(_tint.bind(doomed), 1.0, 0.0, half)
+	tween.tween_method(_tint.bind(doomed), 0.0, 1.0, half).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_method(_tint.bind(doomed), 1.0, 0.0, half).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	#They tremble more and more until they let go
+	var shake := create_tween()
+	shake.tween_method(_shake.bind(doomed), 0.0, 1.0, seconds)
+	shake.tween_callback(_shake.bind(0.0, doomed))
 
 
-#Every tile without "icon" stops holding the player and falls out of sight
+#Every tile without "icon" stops holding the player and falls out of sight; the one that stays shows its icon
 func drop(icon: int) -> void:
+	for tile in _tiles:
+		if tile.icon == icon and not tile.dropped:
+			_flip(tile, true)
+			#The cards that stay light up their border in gold and throw a few stars
+			var found := create_tween()
+			found.tween_method(_glow_card.bind(tile), 0.0, FOUND_GLOW, 0.35)
+			ImpactFx.stars(self, tile.base + Vector3(0.0, 0.6, 0.0), 4)
 	for tile in _doomed(icon):
 		tile.dropped = true
 		tile.collider.set_deferred("disabled", true)
-		var tween := create_tween()
+		if tile.press != null and tile.press.is_valid():
+			tile.press.kill()
+		tile.body.position = tile.base
+		#It lets go with a puff of dust and tumbles away, a different way for each card
+		var spin := Vector3(signf(sin(tile.base.x * 7.0 + tile.base.z)), signf(cos(tile.base.x + tile.base.z * 5.0)), signf(sin(tile.base.z * 3.0 + 1.0)))
+		ImpactFx.dust(self, tile.base + Vector3(0.0, 0.3, 0.0), SIDE_COLOR.lightened(0.55), 10)
+		var tween := create_tween().set_parallel(true)
 		tween.tween_property(tile.body, "position:y", -TILE_THICKNESS / 2.0 - DROP_DEPTH, DROP_TIME) \
-			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		tween.tween_callback(tile.body.hide)
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		tween.tween_property(tile.body, "rotation", Vector3(0.9 * spin.x, 0.6 * spin.y, 0.8 * spin.z), DROP_TIME) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tween.chain().tween_callback(tile.body.hide)
 
 
-#A new board: the icons change places and the fallen tiles rise back; they only hold the
-#player again once they are in place
-func restore(rng: RandomNumberGenerator) -> void:
-	shuffle(rng)
+#A new board: the fallen tiles rise back and turn face down; they only hold the player again once they are in place
+func restore() -> void:
 	_tint(0.0, _tiles)
+	_stage.cheer(2.2)
 	for tile in _tiles:
+		_glow_card(0.0, tile)
 		if not tile.dropped:
+			_flip(tile, false)
 			continue
 		tile.dropped = false
+		_set_card(tile, false)
+		tile.body.rotation = Vector3.ZERO
 		tile.body.position.y = -TILE_THICKNESS / 2.0 - DROP_DEPTH / 2.0
-		tile.body.show()
+		#It comes back up in the wave of the board, slowing down as it gets to its place
 		var tween := create_tween()
+		tween.tween_interval(_wave_delay(tile, RISE_STAGGER))
+		tween.tween_callback(tile.body.show)
 		tween.tween_property(tile.body, "position:y", -TILE_THICKNESS / 2.0, RISE_TIME) \
 			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		tween.tween_callback(tile.collider.set_deferred.bind("disabled", false))
 
 
+#Confetti and a crowd gone wild
+func celebrate() -> void:
+	_stage.celebrate()
+
+
+#The pips on the screens: the first "index + 1" of them are lit, in the colour of their screen
+func set_stage(index: int) -> void:
+	for screen in _screen_pips.size():
+		for pip in STAGE_PIPS:
+			var node := _screen_pips[screen][pip] as MeshInstance3D
+			var lit := pip <= index
+			node.material_override = _material(_screen_accents[screen] if lit else FRAME_COLOR.lightened(0.15), 1.4 if lit else 0.0)
+			node.scale = Vector3.ONE * (1.25 if pip == index else 1.0)
+
+
+#A card dips when somebody lands on it and springs back, and its frame flashes
+func press_tile(at: Vector3) -> void:
+	var half := TILE_SIZE / 2.0
+	for tile in _tiles:
+		if tile.dropped or absf(at.x - tile.base.x) > half or absf(at.z - tile.base.z) > half:
+			continue
+		if tile.press != null and tile.press.is_valid():
+			tile.press.kill()
+		tile.press = create_tween()
+		tile.press.tween_property(tile.body, "position:y", tile.base.y - PRESS_DEPTH, 0.06)
+		tile.press.tween_property(tile.body, "position:y", tile.base.y, 0.5).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+		tile.glow = 2.6
+		return
+
+
 func screen_text(text: String, color: Color) -> void:
-	_screen_icon.hide()
-	_screen_label.text = text
-	_screen_label.modulate = color
-	_screen_label.show()
-	#Long words shrink to fit the screen
 	var width := SCREEN_FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, SCREEN_FONT_SIZE).x * TEXT_PIXEL_SIZE
-	_punch(_screen_label, minf(1.0, SCREEN_SIZE.x * 0.86 / maxf(width, 0.01)), 1.3)
+	#Long words shrink to fit the screen
+	var fit := minf(1.0, SCREEN_SIZE.x * 0.86 / maxf(width, 0.01))
+	for index in _screen_labels.size():
+		_screen_icons[index].hide()
+		_screen_labels[index].text = text
+		_screen_labels[index].modulate = color
+		_screen_labels[index].show()
+	_punch(_screen_labels, fit, 1.3)
 
 
 #"settle" is the final image of a spin: it lands with a bigger bounce
 func screen_icon(index: int, settle: bool) -> void:
-	_screen_label.hide()
-	var texture := _icons[index]
-	_screen_icon.texture = texture
-	_screen_icon.pixel_size = SCREEN_SIZE.y * 0.82 / maxf(texture.get_height(), 1.0)
-	_screen_icon.show()
-	_punch(_screen_icon, 1.0, 1.3 if settle else 1.06)
+	for screen_index in _screen_icons.size():
+		_screen_labels[screen_index].hide()
+		_screen_icons[screen_index].show()
+	if not settle:
+		_show_on_screens(_icons[index])
+		_punch(_screen_icons, 1.0, 1.06)
+		return
+	#The final icon comes out of a quick spin through the others that slows down, like the tiles of the floor
+	if _spin_tween and _spin_tween.is_valid():
+		_spin_tween.kill()
+	_spin_tween = create_tween()
+	for step in SPIN_STEPS:
+		_spin_tween.tween_callback(_show_on_screens.bind(_icons[(index + SPIN_STEPS - step) % _icons.size()]))
+		_spin_tween.tween_interval(0.05 + 0.018 * step)
+	_spin_tween.tween_callback(_show_on_screens.bind(_icons[index]))
+	_spin_tween.tween_callback(_punch.bind(_screen_icons, 1.0, 1.3))
 
 
-#A rocket along "row" (0 is the row next to the screen); "direction" +1 flies to the right
-func launch_rocket(row: int, direction: float, warning: float, speed: float) -> void:
-	var rocket := Rocket.new()
-	rocket.direction = direction
-	rocket.speed = speed
-	rocket.delay = warning
-	var z := _row_z(row)
-	var half_width := COLUMNS * (TILE_SIZE + TILE_GAP) / 2.0
-
-	rocket.strip_material = StandardMaterial3D.new()
-	rocket.strip_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	rocket.strip_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	rocket.strip_material.disable_fog = true
-	rocket.strip_material.no_depth_test = true
-	rocket.strip_material.albedo_color = Color(ROCKET_WARNING_COLOR, 0.0)
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(half_width * 2.0 + 3.0, TILE_SIZE * 0.85)
-	rocket.strip = MeshInstance3D.new()
-	rocket.strip.mesh = plane
-	rocket.strip.material_override = rocket.strip_material
-	rocket.strip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	rocket.strip.position = Vector3(0.0, 0.06, z)
-	add_child(rocket.strip)
-
-	rocket.node = _build_rocket_model()
-	rocket.flame = rocket.node.find_child("Flame", true, false)
-	rocket.node.position = Vector3(-direction * (half_width + ROCKET_RUN_OUT), ROCKET_HEIGHT, z)
-	rocket.node.rotation.y = 0.0 if direction > 0.0 else PI
-	rocket.node.hide()
-	add_child(rocket.node)
-	_rockets.append(rocket)
+func _show_on_screens(texture: Texture2D) -> void:
+	for screen_icon_node in _screen_icons:
+		screen_icon_node.modulate = Color.WHITE
+		screen_icon_node.texture = texture
+		screen_icon_node.pixel_size = SCREEN_SIZE.y * 0.8 / maxf(texture.get_height(), 1.0)
+		screen_icon_node.scale = Vector3.ONE
 
 
-#Same idea as StreetObstacle.contact(): the rocket box grows by the player radius (sphere vs
-#AABB, C. Ericson, "Real-Time Collision Detection", ch. 5), plus a height check so that a jump
-#goes over it. Adapted and written by the team
-#Direction (+1 or -1) of a flying rocket that runs into "at" now, 0 when none; each rocket
-#hits only once. A high enough jump goes over it
-func rocket_hit(at: Vector3, radius: float) -> float:
-	var half_row := (TILE_SIZE + TILE_GAP) / 2.0
-	for rocket in _rockets:
-		if rocket.hit or rocket.delay > 0.0:
-			continue
-		#Over it after a jump, or already under the platform
-		if at.y > ROCKET_HEIGHT - 0.25 or at.y < -0.5 or absf(at.z - rocket.node.position.z) > half_row:
-			continue
-		if absf(at.x - rocket.node.position.x) <= ROCKET_LENGTH * ROCKET_SCALE / 2.0 + radius:
-			rocket.hit = true
-			return rocket.direction
-	return 0.0
-
-
-#The clouds drift sideways and come back from the other side; the cards bob and turn; the
-#rockets blink their row and then fly
-func _process(delta: float) -> void:
-	_decor_time += delta
-	_update_rockets(delta)
-	for cloud in _clouds:
-		cloud.node.position.x += cloud.speed * delta
-		if cloud.node.position.x > CLOUD_AREA.end.x:
-			cloud.node.position.x -= CLOUD_AREA.size.x
-	for index in _cards.size():
-		var card := _cards[index]
-		card.rotation.y += delta * (0.25 + 0.05 * index)
-		card.position.y += sin(_decor_time * 0.9 + index) * delta * 0.35
-
-
-func _update_rockets(delta: float) -> void:
-	var half_width := COLUMNS * (TILE_SIZE + TILE_GAP) / 2.0
-	for index in range(_rockets.size() - 1, -1, -1):
-		var rocket := _rockets[index]
-		#The row keeps blinking until the rocket has crossed the board
-		rocket.strip_material.albedo_color.a = 0.3 + 0.4 * absf(sin(_decor_time * 9.0))
-		if rocket.delay > 0.0:
-			rocket.delay -= delta
-			if rocket.delay <= 0.0:
-				rocket.node.show()
-			continue
-		rocket.node.position.x += rocket.direction * rocket.speed * delta
-		rocket.flame.scale = Vector3.ONE * (0.85 + 0.3 * absf(sin(_decor_time * 30.0 + index)))
-		var past := rocket.node.position.x * rocket.direction
-		if past > half_width + 2.0:
-			rocket.strip.hide()
-		if past > half_width + ROCKET_RUN_OUT:
-			rocket.node.queue_free()
-			rocket.strip.queue_free()
-			_rockets.remove_at(index)
-
-
-func _row_z(row: int) -> float:
-	return (row - (ROWS - 1) / 2.0) * (TILE_SIZE + TILE_GAP)
-
-
-#White body, coral nose and fins, a cyan window on top and a flickering flame; it points +X
-func _build_rocket_model() -> Node3D:
-	var root := Node3D.new()
-	var body := Node3D.new()
-	body.scale = Vector3.ONE * ROCKET_SCALE
-	root.add_child(body)
-	#Cylinders stand on Y: turned -90 degrees around Z their top points to +X
-	var pointing := Vector3(0.0, 0.0, -PI / 2.0)
-	_cone(body, 0.32, 0.32, 1.8, Vector3.ZERO, pointing, _material(Palette.PAPER))
-	_cone(body, 0.0, 0.32, 0.65, Vector3(1.22, 0.0, 0.0), pointing, _material(Palette.CORAL, 0.3))
-	_cone(body, 0.36, 0.26, 0.25, Vector3(-0.98, 0.0, 0.0), pointing, _material(FRAME_COLOR))
-	var fin_material := _material(Palette.CORAL, 0.3)
-	_box(body, Vector3(0.55, 0.9, 0.07), Vector3(-0.65, 0.0, 0.0), fin_material)
-	_box(body, Vector3(0.55, 0.07, 0.9), Vector3(-0.65, 0.0, 0.0), fin_material)
-	var window := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.15
-	sphere.height = 0.3
-	window.mesh = sphere
-	window.material_override = _material(CYAN, 0.8)
-	window.position = Vector3(0.4, 0.27, 0.0)
-	body.add_child(window)
-	var flame := Node3D.new()
-	flame.name = "Flame"
-	flame.position = Vector3(-1.1, 0.0, 0.0)
-	body.add_child(flame)
-	_cone(flame, 0.26, 0.0, 0.9, Vector3(-0.45, 0.0, 0.0), pointing, _material(AMBER, 2.0))
-	_cone(flame, 0.14, 0.0, 0.55, Vector3(-0.28, 0.0, 0.0), pointing, _material(Palette.PAPER, 2.0))
-	for child in body.find_children("*", "MeshInstance3D", true, false):
-		(child as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return root
-
-
-func _cone(parent: Node3D, top: float, bottom: float, height: float, at: Vector3, rotation_angles: Vector3,
-		material: Material) -> void:
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = top
-	mesh.bottom_radius = bottom
-	mesh.height = height
-	mesh.radial_segments = 20
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.material_override = material
-	instance.position = at
-	instance.rotation = rotation_angles
-	parent.add_child(instance)
+func _shuffle(list: Array[int], rng: RandomNumberGenerator) -> void:
+	for index in range(list.size() - 1, 0, -1):
+		var other := rng.randi_range(0, index)
+		var held := list[index]
+		list[index] = list[other]
+		list[other] = held
 
 
 func _doomed(icon: int) -> Array[Tile]:
@@ -348,32 +347,97 @@ func _doomed(icon: int) -> Array[Tile]:
 func _tint(amount: float, tiles: Array[Tile]) -> void:
 	var color := Color.WHITE.lerp(WARNING_TINT, amount)
 	for tile in tiles:
+		tile.warn = amount
 		tile.top.set_shader_parameter("tint", color)
 
 
-func _punch(node: Node3D, base: float, from: float) -> void:
+#The cards that are going to fall tremble more as the time goes by
+func _shake(progress: float, tiles: Array[Tile]) -> void:
+	for tile in tiles:
+		if tile.dropped:
+			continue
+		tile.body.position.x = tile.base.x + sin(progress * 95.0 + tile.base.z) * SHAKE_REACH * progress
+		tile.body.position.z = tile.base.z + cos(progress * 83.0 + tile.base.x) * SHAKE_REACH * progress
+
+
+#The border of a card lights up in gold as much as "amount"
+func _glow_card(amount: float, tile: Tile) -> void:
+	tile.top.set_shader_parameter("edge_color", GOLD_EDGE)
+	tile.top.set_shader_parameter("edge_glow", amount)
+
+
+#The picture of the card rolls to its icon or to the cover with the question mark and stops there, slowing down; the card does not turn
+func _flip(tile: Tile, up: bool) -> void:
+	if tile.face_up == up and tile.flip == null:
+		return
+	if tile.flip != null and tile.flip.is_valid():
+		tile.flip.kill()
+	var cells := float(_icons.size() + 1)
+	var from := tile.scroll
+	var target := float(tile.icon) if up else cells - 1.0
+	#It always rolls forward; to show an icon it goes once round the whole strip first, like a slot machine
+	var distance := fposmod(target - from, cells) + (cells if up else 0.0)
+	tile.face_up = up
+	tile.flip = create_tween()
+	tile.flip.tween_interval(_wave_delay(tile, FLIP_STAGGER))
+	tile.flip.tween_method(_roll_step.bind(tile, from, distance), 0.0, 1.0, clampf(0.3 + 0.05 * distance, ROLL_MIN, ROLL_MAX))
+	tile.flip.tween_callback(_set_card.bind(tile, up))
+
+
+#How long a card waits for its turn: the cards in the middle go first and the corners last
+func _wave_delay(tile: Tile, spread: float) -> float:
+	var farthest := (TILE_SIZE + TILE_GAP) * sqrt(2.0)
+	return Vector2(tile.base.x, tile.base.z).length() / farthest * spread
+
+
+#One moment of the roll: it starts fast and smeared and slows down until it stops; the card rises a little and pops when it lands
+func _roll_step(progress: float, tile: Tile, from: float, distance: float) -> void:
+	var eased := 1.0 - pow(1.0 - progress, 3.0)
+	var speed := distance * 3.0 * pow(1.0 - progress, 2.0)
+	tile.scroll = from + distance * eased
+	tile.top.set_shader_parameter("scroll", fposmod(tile.scroll, float(_icons.size() + 1)))
+	tile.top.set_shader_parameter("blur", minf(0.9, speed * 0.04))
+	tile.card.position.y = TILE_THICKNESS / 2.0 + CARD_REST + sin(progress * PI) * ROLL_LIFT
+	tile.card.scale = Vector3.ONE * (1.0 + ROLL_POP * sin(clampf((progress - 0.75) / 0.25, 0.0, 1.0) * PI))
+
+
+#The card at rest, with no tween running
+func _set_card(tile: Tile, up: bool) -> void:
+	if tile.flip != null and tile.flip.is_valid():
+		tile.flip.kill()
+	tile.flip = null
+	tile.face_up = up
+	tile.scroll = float(tile.icon) if up else float(_icons.size())
+	tile.top.set_shader_parameter("scroll", tile.scroll)
+	tile.top.set_shader_parameter("blur", 0.0)
+	tile.card.scale = Vector3.ONE
+	tile.card.position.y = TILE_THICKNESS / 2.0 + CARD_REST
+
+
+#What a screen shows grows into place while it fades in; the last icon of a spin ("from" above 1.2) lands with a soft bounce
+func _punch(nodes: Array, base: float, from: float) -> void:
 	if _punch_tween and _punch_tween.is_valid():
 		_punch_tween.kill()
-	node.scale = Vector3.ONE * base * from
-	_punch_tween = create_tween()
-	_punch_tween.tween_property(node, "scale", Vector3.ONE * base, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-
-func _build_camera() -> void:
-	camera = Camera3D.new()
-	camera.fov = CAMERA_FOV
-	add_child(camera)
-	camera.look_at_from_position(CAMERA_POSITION, CAMERA_TARGET)
+	_punch_tween = create_tween().set_parallel(true)
+	var settle := from > 1.2
+	for node: Node3D in nodes:
+		node.scale = Vector3.ONE * base * (0.72 if settle else 0.9)
+		var shown: Color = node.get("modulate")
+		node.set("modulate", Color(shown, 0.0))
+		_punch_tween.tween_property(node, "modulate:a", 1.0, 0.2)
+		_punch_tween.tween_property(node, "scale", Vector3.ONE * base, 0.5 if settle else 0.32) \
+			.set_trans(Tween.TRANS_BACK if settle else Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 
 func _build_tiles() -> void:
 	var step := TILE_SIZE + TILE_GAP
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(TILE_SIZE, TILE_THICKNESS, TILE_SIZE)
-	var block_mesh := BoxMesh.new()
-	block_mesh.size = shape.size
+	var block_mesh := _rounded_slab(TILE_SIZE, TILE_THICKNESS, SLAB_CORNER, SLAB_BEVEL)
 	var face_mesh := PlaneMesh.new()
-	face_mesh.size = Vector2.ONE * TILE_SIZE * 0.94
+	face_mesh.size = Vector2.ONE * TILE_SIZE * CARD_SHARE
+	var frame_mesh := PlaneMesh.new()
+	frame_mesh.size = Vector2.ONE * TILE_SIZE * FRAME_SHARE
 	var side := _material(SIDE_COLOR)
 	for row in ROWS:
 		for column in COLUMNS:
@@ -381,6 +445,7 @@ func _build_tiles() -> void:
 			tile.body = StaticBody3D.new()
 			tile.body.position = Vector3((column - (COLUMNS - 1) / 2.0) * step, -TILE_THICKNESS / 2.0,
 				(row - (ROWS - 1) / 2.0) * step)
+			tile.base = tile.body.position
 			tile.collider = CollisionShape3D.new()
 			tile.collider.shape = shape
 			tile.body.add_child(tile.collider)
@@ -388,49 +453,227 @@ func _build_tiles() -> void:
 			block.mesh = block_mesh
 			block.material_override = side
 			tile.body.add_child(block)
-			#The icon on top keeps its colours (only a touch desaturated, see icon_tile.gdshader)
+			#The face is a window on the strip of pictures: the icons keep their colours (only a touch desaturated, see icon_tile.gdshader)
+			#and the cover is a "?" on one of two colours that alternate like a chessboard
 			tile.top = ShaderMaterial.new()
 			tile.top.shader = TILE_SHADER
-			var face := MeshInstance3D.new()
-			face.mesh = face_mesh
-			face.material_override = tile.top
-			face.position.y = TILE_THICKNESS / 2.0 + 0.01
-			face.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			tile.body.add_child(face)
+			tile.top.set_shader_parameter("strip", _strip)
+			tile.top.set_shader_parameter("cells", float(_icons.size() + 1))
+			tile.top.set_shader_parameter("hidden_color", HIDDEN_COLORS[(row + column) % 2])
+			tile.top.set_shader_parameter("sparkle", 1.0)
+			#A glowing frame under the card shows around it
+			tile.frame = ShaderMaterial.new()
+			tile.frame.shader = FRAME_SHADER
+			var frame := MeshInstance3D.new()
+			frame.mesh = frame_mesh
+			frame.material_override = tile.frame
+			frame.position.y = TILE_THICKNESS / 2.0 + 0.008
+			frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			tile.body.add_child(frame)
+			tile.card = Node3D.new()
+			tile.body.add_child(tile.card)
+			tile.card.add_child(_face(face_mesh, tile.top, 0.0))
+			_set_card(tile, false)
 			add_child(tile.body)
 			_tiles.append(tile)
 
 
-func _build_screen() -> void:
-	var half := ROWS * (TILE_SIZE + TILE_GAP) / 2.0
+#The icons and, under them, the cover with the question mark, each in a square of STRIP_CELL pixels in one tall picture: the faces of all the cards
+#show windows of it
+func _make_strip(icons: Array[Texture2D]) -> ImageTexture:
+	var strip := Image.create(STRIP_CELL, STRIP_CELL * (icons.size() + 1), true, Image.FORMAT_RGBA8)
+	var pictures: Array[Texture2D] = icons.duplicate()
+	pictures.append(QUESTION)
+	for index in pictures.size():
+		var picture := pictures[index].get_image()
+		if picture.is_compressed():
+			picture.decompress()
+		picture.convert(Image.FORMAT_RGBA8)
+		picture.resize(STRIP_CELL, STRIP_CELL, Image.INTERPOLATE_LANCZOS)
+		strip.blit_rect(picture, Rect2i(0, 0, STRIP_CELL, STRIP_CELL), Vector2i(0, index * STRIP_CELL))
+	strip.generate_mipmaps()
+	return ImageTexture.create_from_image(strip)
+
+
+#A slab with rounded corners and a soft bevel along its top edge, in one mesh with smooth normals: the platforms have no hard edges
+func _rounded_slab(size: float, thickness: float, corner: float, bevel: float) -> ArrayMesh:
+	var half := size / 2.0 - corner
+	var arc := 7
+	var outline: Array[Vector2] = []
+	var outward: Array[Vector2] = []
+	var centres: Array[Vector2] = [Vector2(half, half), Vector2(-half, half), Vector2(-half, -half), Vector2(half, -half)]
+	for quarter in 4:
+		for step in arc + 1:
+			var angle := PI / 2.0 * (quarter + float(step) / arc)
+			var direction := Vector2(cos(angle), sin(angle))
+			outline.append(centres[quarter] + direction * corner)
+			outward.append(direction)
+	#From the bottom edge up the side and round the bevel to the flat top: how far in, how high and how much the surface looks up
+	var top := thickness / 2.0
+	var profile: Array[Vector3] = [Vector3(0.0, -top, 0.0), Vector3(0.0, top - bevel, 0.0)]
+	var bevel_steps := 5
+	for step in range(1, bevel_steps + 1):
+		var tilt := PI / 2.0 * step / bevel_steps
+		profile.append(Vector3(bevel * (1.0 - cos(tilt)), top - bevel + bevel * sin(tilt), tilt))
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var count := outline.size()
+	for band in profile.size() - 1:
+		for index in count:
+			var next := (index + 1) % count
+			var corners: Array[Array] = []
+			for pair: Array in [[band, index], [band, next], [band + 1, next], [band + 1, index]]:
+				var ring: Vector3 = profile[pair[0]]
+				var spot: Vector2 = outline[pair[1]] - outward[pair[1]] * ring.x
+				var look := Vector3(outward[pair[1]].x * cos(ring.z), sin(ring.z), outward[pair[1]].y * cos(ring.z))
+				corners.append([Vector3(spot.x, ring.y, spot.y), look])
+			_slab_triangle(tool, corners[0], corners[1], corners[2])
+			_slab_triangle(tool, corners[0], corners[2], corners[3])
+	#The flat top and the flat bottom
+	var last: Vector3 = profile[profile.size() - 1]
+	for index in count:
+		var next := (index + 1) % count
+		var a := outline[index] - outward[index] * last.x
+		var b := outline[next] - outward[next] * last.x
+		_slab_triangle(tool, [Vector3(0.0, top, 0.0), Vector3.UP], [Vector3(a.x, top, a.y), Vector3.UP], [Vector3(b.x, top, b.y), Vector3.UP])
+		_slab_triangle(tool, [Vector3(0.0, -top, 0.0), Vector3.DOWN], [Vector3(outline[index].x, -top, outline[index].y), Vector3.DOWN],
+			[Vector3(outline[next].x, -top, outline[next].y), Vector3.DOWN])
+	return tool.commit()
+
+
+#A triangle of the slab (each corner is [position, normal]) turned so that its front side looks the way its normals do
+func _slab_triangle(tool: SurfaceTool, a: Array, b: Array, c: Array) -> void:
+	var flat := ((c[0] as Vector3) - (a[0] as Vector3)).cross((b[0] as Vector3) - (a[0] as Vector3))
+	var looks := (a[1] as Vector3) + (b[1] as Vector3) + (c[1] as Vector3)
+	var ordered: Array[Array] = []
+	ordered.assign([a, b, c] if flat.dot(looks) >= 0.0 else [a, c, b])
+	for corner in ordered:
+		tool.set_normal(corner[1] as Vector3)
+		tool.add_vertex(corner[0] as Vector3)
+
+
+#One side of a card: a plane that faces up, or down when "tilt" is a half turn
+func _face(mesh: Mesh, material: Material, tilt: float) -> MeshInstance3D:
+	var face := MeshInstance3D.new()
+	face.mesh = mesh
+	face.material_override = material
+	face.rotation.x = tilt
+	face.position.y = 0.0 if tilt == 0.0 else -0.01
+	face.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return face
+
+
+#A screen on each side of the platform, facing the middle: wherever the camera turns there is one to see
+func _build_screens() -> void:
+	var half_columns := COLUMNS * (TILE_SIZE + TILE_GAP) / 2.0
+	var half_rows := ROWS * (TILE_SIZE + TILE_GAP) / 2.0
+	var entries := [
+		[Vector3(0.0, SCREEN_HEIGHT, -(half_rows + SCREEN_DISTANCE)), 0.0],
+		[Vector3(half_columns + SCREEN_DISTANCE, SCREEN_HEIGHT, 0.0), -PI / 2.0],
+		[Vector3(0.0, SCREEN_HEIGHT, half_rows + SCREEN_DISTANCE), PI],
+		[Vector3(-(half_columns + SCREEN_DISTANCE), SCREEN_HEIGHT, 0.0), PI / 2.0],
+	]
+	for index in entries.size():
+		_build_screen(entries[index][0], entries[index][1], SCREEN_ACCENTS[index])
+	set_stage(0)
+
+
+func _build_screen(at: Vector3, yaw: float, accent: Color) -> void:
+	var mount := Node3D.new()
+	mount.position = at
+	mount.rotation.y = yaw
+	add_child(mount)
 	var screen := Node3D.new()
-	screen.position = Vector3(0.0, SCREEN_HEIGHT, -(half + SCREEN_DISTANCE))
 	screen.rotation.x = -deg_to_rad(SCREEN_TILT_DEGREES)
-	add_child(screen)
-	_box(screen, Vector3(SCREEN_SIZE.x + 1.3, SCREEN_SIZE.y + 1.3, 0.3), Vector3(0.0, 0.0, -0.2), _material(MAGENTA, 1.2))
-	_box(screen, Vector3(SCREEN_SIZE.x + 0.8, SCREEN_SIZE.y + 0.8, 0.6), Vector3.ZERO, _material(FRAME_COLOR))
+	mount.add_child(screen)
+	_box(screen, Vector3(SCREEN_SIZE.x + 1.2, SCREEN_SIZE.y + 1.2, 0.3), Vector3(0.0, 0.0, -0.2), _material(accent, 0.35))
+	_screen_lights(Transform3D(mount.basis * screen.basis, at), accent)
+	_box(screen, Vector3(SCREEN_SIZE.x + 0.7, SCREEN_SIZE.y + 0.7, 0.6), Vector3.ZERO, _material(FRAME_COLOR))
 	var panel := MeshInstance3D.new()
 	var quad := QuadMesh.new()
 	quad.size = SCREEN_SIZE
 	panel.mesh = quad
-	panel.material_override = _material(PANEL_COLOR, 0.4)
+	var glass := ShaderMaterial.new()
+	glass.shader = PANEL_SHADER
+	glass.set_shader_parameter("accent", accent)
+	panel.material_override = glass
 	panel.position.z = 0.31
 	screen.add_child(panel)
+	#The pips of the stage of the round, in a row under the numbers
+	var pips: Array = []
+	var pip_mesh := SphereMesh.new()
+	pip_mesh.radius = 0.2
+	pip_mesh.height = 0.4
+	pip_mesh.radial_segments = 12
+	pip_mesh.rings = 6
+	for pip in STAGE_PIPS:
+		var disc := MeshInstance3D.new()
+		disc.mesh = pip_mesh
+		disc.position = Vector3((pip - (STAGE_PIPS - 1) / 2.0) * PIP_SPACING, -SCREEN_SIZE.y * 0.4, 0.4)
+		disc.scale = Vector3(1.0, 1.0, 0.35)
+		disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		screen.add_child(disc)
+		pips.append(disc)
+	_screen_pips.append(pips)
+	_screen_accents.append(accent)
+	#A post that holds it, so it does not float
+	_box(mount, Vector3(0.9, SCREEN_HEIGHT + 3.0, 0.9), Vector3(0.0, -(SCREEN_HEIGHT + 3.0) / 2.0 + 0.2, -0.6), _material(FRAME_COLOR))
 
-	_screen_icon = Sprite3D.new()
-	_screen_icon.position.z = 0.34
-	_screen_icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	_screen_icon.hide()
-	screen.add_child(_screen_icon)
+	var icon := Sprite3D.new()
+	icon.position.z = 0.34
+	icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.hide()
+	screen.add_child(icon)
+	_screen_icons.append(icon)
 
-	_screen_label = Label3D.new()
-	_screen_label.font = SCREEN_FONT
-	_screen_label.font_size = SCREEN_FONT_SIZE
-	_screen_label.pixel_size = TEXT_PIXEL_SIZE
-	_screen_label.outline_size = 36
-	_screen_label.outline_modulate = Palette.EDGE
-	_screen_label.position.z = 0.36
-	screen.add_child(_screen_label)
+	var label := Label3D.new()
+	label.font = SCREEN_FONT
+	label.font_size = SCREEN_FONT_SIZE
+	label.pixel_size = TEXT_PIXEL_SIZE
+	label.outline_size = 36
+	label.outline_modulate = Palette.EDGE
+	label.position.z = 0.36
+	screen.add_child(label)
+	_screen_labels.append(label)
+
+
+#Lights along the trim of a screen, in the colour of that screen
+func _screen_lights(frame: Transform3D, accent: Color) -> void:
+	var half := (SCREEN_SIZE + Vector2.ONE * 0.95) / 2.0
+	var corners := [Vector2(-half.x, -half.y), Vector2(half.x, -half.y), Vector2(half.x, half.y), Vector2(-half.x, half.y)]
+	for index in 4:
+		var from: Vector2 = corners[index]
+		var to: Vector2 = corners[(index + 1) % 4]
+		var count := roundi(from.distance_to(to) / SCREEN_BULB_SPACING)
+		for step in count:
+			var spot := from.lerp(to, float(step) / count)
+			_light_at(frame * Vector3(spot.x, spot.y, 0.0), accent.lerp(Color.WHITE, 0.3))
+
+
+#Lights around the board, just outside the cards
+func _build_lights() -> void:
+	var half := Vector2(COLUMNS * (TILE_SIZE + TILE_GAP) - TILE_GAP, ROWS * (TILE_SIZE + TILE_GAP) - TILE_GAP) / 2.0 + Vector2.ONE * FRAME_MARGIN
+	var corners := [Vector2(-half.x, -half.y), Vector2(half.x, -half.y), Vector2(half.x, half.y), Vector2(-half.x, half.y)]
+	var tint := 0
+	for index in 4:
+		var from: Vector2 = corners[index]
+		var to: Vector2 = corners[(index + 1) % 4]
+		var count := roundi(from.distance_to(to) / FRAME_BULB_SPACING)
+		for step in count:
+			var spot := from.lerp(to, float(step) / count)
+			_light_at(Vector3(spot.x, 0.12, spot.y), PartyKit.PALETTE[tint % PartyKit.PALETTE.size()])
+			tint += 1
+	var colors: Array[Color] = []
+	var phases: Array[float] = []
+	for index in _bulb_spots.size():
+		colors.append(_bulb_colors[index])
+		phases.append(index * 0.7)
+	add_child(PartyKit.bulbs(_bulb_spots, colors, phases))
+
+
+func _light_at(at: Vector3, color: Color) -> void:
+	_bulb_spots.append(Transform3D(Basis.IDENTITY, at))
+	_bulb_colors.append(color)
 
 
 func _box(parent: Node3D, size: Vector3, at: Vector3, material: Material) -> void:
@@ -441,151 +684,6 @@ func _box(parent: Node3D, size: Vector3, at: Vector3, material: Material) -> voi
 	instance.material_override = material
 	instance.position = at
 	parent.add_child(instance)
-
-
-#Each cloud is a flat cluster of puffs; they start spread over the whole area
-func _build_clouds() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 7
-	var puff_mesh := SphereMesh.new()
-	puff_mesh.radial_segments = 16
-	puff_mesh.rings = 8
-	var materials: Array[StandardMaterial3D] = []
-	for color in CLOUD_COLORS:
-		var material := _material(color, 0.35)
-		material.roughness = 1.0
-		materials.append(material)
-	for index in CLOUD_COUNT:
-		var cloud := Cloud.new()
-		cloud.node = Node3D.new()
-		cloud.node.position = Vector3(rng.randf_range(CLOUD_AREA.position.x, CLOUD_AREA.end.x),
-			rng.randf_range(CLOUD_DEPTH_RANGE.x, CLOUD_DEPTH_RANGE.y),
-			rng.randf_range(CLOUD_AREA.position.y, CLOUD_AREA.end.y))
-		cloud.speed = rng.randf_range(CLOUD_SPEED_RANGE.x, CLOUD_SPEED_RANGE.y)
-		var size := rng.randf_range(2.0, 4.5)
-		var material := materials[index % materials.size()]
-		for puff_index in rng.randi_range(4, 7):
-			var puff := MeshInstance3D.new()
-			puff.mesh = puff_mesh
-			puff.material_override = material
-			puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			var radius := size * rng.randf_range(0.55, 1.0)
-			puff.scale = Vector3(radius * 2.0, radius * 0.9, radius * 1.6)
-			puff.position = Vector3(rng.randf_range(-1.6, 1.6) * size, rng.randf_range(-0.2, 0.3) * size,
-				rng.randf_range(-0.8, 0.8) * size)
-			cloud.node.add_child(puff)
-		add_child(cloud.node)
-		_clouds.append(cloud)
-
-
-#Big icon cards around the platform, never between the camera and the board or the screen
-func _build_cards() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 31
-	for index in CARD_COUNT:
-		var side := -1.0 if index % 2 == 0 else 1.0
-		var card := Sprite3D.new()
-		card.texture = _icons[index % _icons.size()]
-		card.pixel_size = rng.randf_range(2.2, 3.4) / maxf(card.texture.get_height(), 1.0)
-		card.modulate = Color(1.0, 1.0, 1.0, 0.85)
-		card.double_sided = true
-		card.position = Vector3(side * rng.randf_range(16.0, 26.0), rng.randf_range(-5.0, 3.0),
-			rng.randf_range(-22.0, 8.0))
-		card.rotation = Vector3(rng.randf_range(-0.3, 0.3), rng.randf() * TAU, rng.randf_range(-0.3, 0.3))
-		add_child(card)
-		_cards.append(card)
-
-
-func _build_player_marks() -> void:
-	#A flat triangle pointing down that always faces the camera, drawn over everything, with a
-	#dark border so it stands out on any tile
-	_marker = _billboard_triangle(0.5, Palette.EDGE, 0)
-	_marker.add_child(_billboard_triangle(0.38, Palette.GOLD, 1))
-	add_child(_marker)
-
-	var gradient := Gradient.new()
-	gradient.set_color(0, Color(0.0, 0.0, 0.0, 0.65))
-	#Solid in the middle, soft only near the edge
-	gradient.set_offset(0, 0.45)
-	gradient.set_color(1, Color(0.0, 0.0, 0.0, 0.0))
-	var texture := GradientTexture2D.new()
-	texture.gradient = gradient
-	texture.fill = GradientTexture2D.FILL_RADIAL
-	texture.fill_from = Vector2(0.5, 0.5)
-	texture.fill_to = Vector2(1.0, 0.5)
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.disable_fog = true
-	material.albedo_texture = texture
-	var disc := PlaneMesh.new()
-	disc.size = Vector2.ONE * SHADOW_DIAMETER
-	_shadow = MeshInstance3D.new()
-	_shadow.mesh = disc
-	_shadow.material_override = material
-	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_shadow)
-
-
-#"size" is half its width; "priority" orders the triangles drawn at the same spot
-func _billboard_triangle(size: float, color: Color, priority: int) -> MeshInstance3D:
-	var vertices := PackedVector3Array([
-		Vector3(-size, size * 0.8, 0.0), Vector3(size, size * 0.8, 0.0), Vector3(0.0, -size * 0.95, 0.0)])
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	material.no_depth_test = true
-	material.disable_fog = true
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.render_priority = priority
-	var triangle := MeshInstance3D.new()
-	triangle.mesh = mesh
-	triangle.material_override = material
-	triangle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return triangle
-
-
-func _build_sky() -> void:
-	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color(0.62, 0.68, 0.98)
-	sky_material.sky_horizon_color = Color(0.86, 0.74, 0.95)
-	sky_material.ground_bottom_color = Color(0.55, 0.62, 0.95)
-	sky_material.ground_horizon_color = Color(0.86, 0.74, 0.95)
-	sky_material.ground_curve = 0.06
-	var sky := Sky.new()
-	sky.sky_material = sky_material
-	var environment := Environment.new()
-	environment.background_mode = Environment.BG_SKY
-	environment.sky = sky
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.ambient_light_energy = 0.9
-	#Linear keeps the icons' colours as they are; filmic would dull them
-	environment.tonemap_mode = Environment.TONE_MAPPER_LINEAR
-	#Depth fog only reaches past the board and the screen: it fades the far clouds into the sky
-	environment.fog_enabled = true
-	environment.fog_mode = Environment.FOG_MODE_DEPTH
-	environment.fog_light_color = Color(0.82, 0.76, 0.97)
-	environment.fog_density = 0.85
-	environment.fog_depth_begin = 32.0
-	environment.fog_depth_end = 75.0
-	environment.fog_sky_affect = 0.0
-	var world := WorldEnvironment.new()
-	world.environment = environment
-	add_child(world)
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-52, 35, 0)
-	sun.light_color = Color(1, 0.95, 0.93)
-	sun.light_energy = 0.8
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 45.0
-	add_child(sun)
 
 
 func _material(color: Color, emission := 0.0, alpha := 1.0) -> StandardMaterial3D:

@@ -42,6 +42,9 @@ var _danger := 0.0
 var _flash := 0.0
 var _flash_tween: Tween
 var _last_whole := -1
+var _count_shown := -1
+#The rounds that turn it on get a soft beat with every one of the last seconds
+var low_time_beat := false
 var _end: Control
 var _end_title: Label
 var _end_message: Label
@@ -81,9 +84,33 @@ func _process(_delta: float) -> void:
 	_glow_material.set_shader_parameter("amount", maxf(_danger, _flash))
 
 
+#The start every round shares: "3", "2", "1" in the middle of the screen, each with its beep; call it with the seconds left
+func tick_countdown(left: float) -> void:
+	var shown := ceili(left)
+	if shown == _count_shown or shown <= 0:
+		return
+	_count_shown = shown
+	show_countdown(str(shown))
+	SynthSound.play(self, SynthSound.tone(523.0, 0.14, 0.0, 0.4), -9.0)
+
+
+#"¡YA!": the round is on; it leaves by itself
+func show_go() -> void:
+	_count_shown = 0
+	show_countdown("¡YA!")
+	_countdown.add_theme_color_override("font_color", Palette.GOLD)
+	SynthSound.play(self, SynthSound.tone(1046.0, 0.4, 0.0, 0.45), -7.0)
+	var leave := create_tween()
+	leave.tween_interval(0.55)
+	leave.tween_property(_countdown, "modulate:a", 0.0, 0.25)
+	leave.tween_callback(hide_countdown)
+
+
 #A number in the middle of the screen that pops in
 func show_countdown(text: String) -> void:
 	_countdown.text = text
+	_countdown.modulate.a = 1.0
+	_countdown.add_theme_color_override("font_color", Palette.PAPER)
 	_countdown.show()
 	_countdown.pivot_offset = _countdown.size / 2.0
 	_countdown.scale = Vector2.ONE * 1.35
@@ -103,6 +130,8 @@ func set_time(seconds: float) -> void:
 	_timer_label.add_theme_font_size_override("font_size", LOW_CLOCK_SIZE if low else CLOCK_SIZE)
 	if low and whole != _last_whole:
 		_pulse(_timer_label, 1.18)
+		if low_time_beat and whole > 0:
+			SynthSound.play(self, SynthSound.tone(196.0, 0.12, -60.0, 0.5), -10.0, 1.0 + 0.04 * (low_time_seconds - whole))
 	_last_whole = whole
 
 

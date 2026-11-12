@@ -9,6 +9,8 @@ const ENTRIES: Array[MinigameInfo] = [
 	preload("res://resources/minigames/level_01.tres"),
 	preload("res://resources/minigames/street_game.tres"),
 	preload("res://resources/minigames/social_drop.tres"),
+	preload("res://resources/minigames/trend_war.tres"),
+	preload("res://resources/minigames/perfect_selfie.tres"),
 ]
 
 

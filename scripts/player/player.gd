@@ -43,6 +43,9 @@ const BUMP_PUSH := 3.4
 const BUMP_REST := 0.4
 const BUMP_HOP := 1.6
 const DUST_EVERY := 0.26
+#A pose: how far the body leans from side to side and how much taller it stands
+const POSE_LEAN := 0.2
+const POSE_STRETCH := 0.07
 #A cannon shot: how much of its own speed the player can steer with in the air, the seconds before landing can end it, and how much of the
 #speed of the flight it keeps as a skid when it lands
 const FLIGHT_CONTROL := 0.3
@@ -58,6 +61,8 @@ var push_velocity := Vector3.ZERO
 var external_velocity := Vector3.ZERO
 #Set by the round every frame: true while the player overlaps what hit it
 var touching := false
+#Striking a pose: the player stands still and cannot jump while the round keeps it on
+var posing := false
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _model: CharacterModel
@@ -109,6 +114,11 @@ func set_character(character: CharacterData) -> void:
 	_model = character.model_scene.instantiate() as CharacterModel
 	_tumble.add_child(_model)
 	_model.position = Vector3(0.0, -TUMBLE_CENTER, 0.0)
+
+
+#Where the model looks, on the ground
+func look_direction() -> Vector3:
+	return Basis(Vector3.UP, _model_pivot.rotation.y) * Vector3.BACK
 
 
 func view_camera() -> Camera3D:
@@ -215,6 +225,9 @@ func set_input_enabled(enabled: bool) -> void:
 
 func _physics_process(delta: float) -> void:
 	_tick_stun(delta)
+	if posing:
+		move_input = Vector2.ZERO
+		jump_requested = false
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
 
@@ -349,8 +362,13 @@ func _animate_body(delta: float) -> void:
 		var aim := Vector2(clampf(local.z * 0.028, -LEAN_LIMIT, LEAN_LIMIT), clampf(-local.x * 0.03, -LEAN_LIMIT, LEAN_LIMIT))
 		if not is_on_floor():
 			aim *= 0.5
+		if posing:
+			#A pose: the hip out to one side and the body swaying a little, proud of itself
+			aim = Vector2(-0.1, POSE_LEAN * sin(Time.get_ticks_msec() * 0.004))
 		_lean = _lean.lerp(aim, 1.0 - exp(-LEAN_FOLLOW * delta))
 	var breath := sin(Time.get_ticks_msec() * 0.0022) * 0.012 if _intended.length() < 0.5 and not calm else 0.0
+	if posing and not calm:
+		breath = POSE_STRETCH + 0.03 * sin(Time.get_ticks_msec() * 0.008)
 	var stretch := _squash + breath
 	_body.basis = Basis(Vector3.UP, _spin) * Basis(Vector3.RIGHT, _lean.x) * Basis(Vector3.BACK, _lean.y) \
 		* Basis.from_scale(Vector3(1.0 - 0.5 * stretch, 1.0 + stretch, 1.0 - 0.5 * stretch))

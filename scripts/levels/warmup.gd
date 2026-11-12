@@ -28,7 +28,7 @@ func _ready() -> void:
 	var air_time := 2.0 * local.jump_velocity / gravity
 	var jump_height := local.jump_velocity * local.jump_velocity / (2.0 * gravity)
 	_world.build(jump_height, local.move_speed * air_time)
-	_keys.confirm_pressed.connect(cast_vote.bind(local.player_id))
+	_keys.ready_pressed.connect(cast_vote.bind(local.player_id))
 	_keys.interact_pressed.connect(_use_station)
 	_hud.set_time(_time_left)
 	_hud.set_votes(0, participants.size(), false)

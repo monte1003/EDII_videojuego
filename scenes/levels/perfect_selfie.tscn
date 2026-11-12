@@ -1,0 +1,34 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/levels/selfie/perfect_selfie.gd" id="1_script"]
+[ext_resource type="Resource" path="res://resources/characters/fire.tres" id="2_fire"]
+[ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="3_pause"]
+[ext_resource type="Script" path="res://scripts/levels/arena/arena_world.gd" id="4_world"]
+[ext_resource type="Script" path="res://scripts/levels/selfie/selfie_hud.gd" id="5_hud"]
+[ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="6_help"]
+[ext_resource type="Script" path="res://scripts/levels/level_input.gd" id="7_input"]
+[ext_resource type="Resource" path="res://resources/levels/perfect_selfie.tres" id="8_settings"]
+[ext_resource type="Resource" path="res://resources/bots/troll.tres" id="9_troll"]
+[ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="10_appearance"]
+
+[node name="PerfectSelfie" type="Node3D"]
+script = ExtResource("1_script")
+settings = ExtResource("8_settings")
+bot_looks = Array[ExtResource("10_appearance")]([ExtResource("9_troll")])
+default_character = ExtResource("2_fire")
+
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("4_world")
+
+[node name="Actors" type="Node3D" parent="."]
+
+[node name="LevelInput" type="Node" parent="."]
+script = ExtResource("7_input")
+
+[node name="Hud" type="CanvasLayer" parent="."]
+script = ExtResource("5_hud")
+
+[node name="PauseMenu" parent="." instance=ExtResource("3_pause")]
+
+[node name="Help" type="CanvasLayer" parent="."]
+script = ExtResource("6_help")

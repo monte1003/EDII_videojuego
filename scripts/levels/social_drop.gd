@@ -1,88 +1,74 @@
 class_name SocialDrop
 extends RoundScene
 
-#SocialDrop: a platform of social media tiles. The giant screen spins through the icons and
-#stops on one; only the tiles with that icon stay, the rest drop. Near the end rockets cross
-#the rows too. Survive the time
+#SocialDrop, a memory game: nine cards show their app icons while the giant screens count down; then the cards turn into "?" and
+#the screens show the icon to find. Only the cards that had it stay, the rest drop. Round after round the board shows more
+#different icons and fewer cards with the one to find, until only a single card keeps it
 
 #FINAL: the last drop is over and there is no time for another round
-enum Phase { READY, GO, SPIN, REACT, REST, FINAL, ENDED }
+enum Phase { READY, GO, MEMORIZE, REACT, REST, FINAL, ENDED }
 
 const MINIGAME_ID := &"social_drop"
-const MIX_RATE := 22050
+#Each stage of the round: how many different icons the board shows (x) and on how many of the nine cards the icon to find is (y)
+const STAGES: Array[Vector2i] = [
+	Vector2i(2, 4), Vector2i(3, 4), Vector2i(3, 3), Vector2i(4, 3), Vector2i(4, 2), Vector2i(5, 2), Vector2i(6, 1),
+]
 
-#One per kind of tile; the name shown to the player comes from the file (SM-<Name>_Box.png)
+#One per kind of card; the name shown to the player comes from the file (assets/social_icons/<name>.png)
 @export var icons: Array[Texture2D] = []
 
 @export_group("Round")
 @export var time_limit := 80.0
-#"¿Listo?" and "¡Vamos!" on the screen before the first spin; the clock starts with "¡Vamos!"
-@export var ready_seconds := 1.6
+#"¿Listo?" and "¡Vamos!" on the screens before the first memory; the clock starts with "¡Vamos!"
+@export var ready_seconds := 3.0
 @export var go_seconds := 1.2
 #Below this height the player has fallen off the platform
 @export var fall_y := -2.5
-#The character looks bigger than usual so it reads well from the high camera
-@export var player_scale := 2.2
-#Height of the gold triangle that marks the player, over its feet
-@export var marker_height := 3.6
+#The camera of each player sits this far behind and this steeply above: a bit farther than in the other rounds, to see the cards ahead
+@export var camera_distance := 4.6
+@export var camera_pitch := -26.0
 
-@export_group("Spin")
-@export var spin_seconds := 2.6
-#Time between two images on the screen, at the start of the spin and right before it stops
-@export var spin_interval_start := 0.05
-@export var spin_interval_end := 0.34
-#Pitch of the tick at the start of the spin and right before it stops
-@export var tick_pitch_start := 0.8
-@export var tick_pitch_end := 2.4
+@export_group("Memory")
+#Seconds the icons stay face up while the screens count down; it shrinks from start to end over the round
+@export var memorize_start := 4.0
+@export var memorize_end := 3.0
+#Pitch of the tick of the countdown, from the first number to the last
+@export var tick_pitch_start := 0.9
+@export var tick_pitch_end := 1.8
 
 @export_group("Drop")
-#Time to reach a safe tile once the screen stops; it shrinks from start to end over the round,
+#Time to reach the card once the screens show the icon; it shrinks from start to end over the round,
 #slowly at first and faster near the end (reaction_curve > 1)
-@export var reaction_start := 3.0
-@export var reaction_end := 0.9
+@export var reaction_start := 3.6
+@export var reaction_end := 2.3
 @export var reaction_curve := 1.6
-#The tiles that will drop blink for this long right before they do
+#The cards that will drop blink for this long right before they do
 @export var warning_seconds := 0.6
-#Seconds from a drop to the next spin; the tiles come back drop_hold seconds after the drop
+#Seconds from a drop to the next round; the cards come back drop_hold seconds after the drop
 @export var rest_seconds := 3.0
 @export var drop_hold := 1.6
 
-@export_group("Rockets")
-#Rockets start flying across random rows once this many seconds are left
-@export var rocket_seconds_left := 40.0
-@export var rocket_interval_min := 2.2
-@export var rocket_interval_max := 4.0
-#The row blinks this long before the rocket comes out (it still needs a moment to arrive)
-@export var rocket_warning := 1.0
-@export var rocket_speed := 18.0
-#Shove of a rocket that hits: far enough to throw the player off the platform
-@export var rocket_knockback := Vector3(30.0, 6.0, 0.0)
-
 @export_group("Victory")
 #Time between the end and the results, to see the jump or the fall
-@export var end_delay := 1.2
+@export var end_delay := 1.5
 
 var phase := Phase.READY
 var elapsed := 0.0
 
-var _player: Player
+var _players: Array[Player] = []
+var _local: Player
+#Each player that fell, with the second of the round at which it did
+var _fallen: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 var _phase_timer := 0.0
-var _spin_time := 0.0
-var _next_change := 0.0
-var _shown_icon := -1
+var _memory_total := 1.0
+var _countdown_shown := 0
 var _chosen := -1
 var _warned := false
 var _restored := false
 var _drops_survived := 0
 var _hud_timer := 0.0
-var _rockets_on := false
-var _rocket_timer := 0.5
-var _last_rocket_row := -1
-var _hit_by_rocket := false
 var _tick_sound: AudioStreamPlayer
-var _rocket_sound: AudioStreamPlayer
-var _boom_sound: AudioStreamPlayer
 var _stop_sound: AudioStreamPlayer
 var _drop_sound: AudioStreamPlayer
 
@@ -96,25 +82,23 @@ func _ready() -> void:
 		ScreenFlow.mark_current(MINIGAME_ID)
 	_rng.randomize()
 	_world.build(icons, _rng)
-	_spawn_player()
-	_tick_sound = _make_sound(_tone(1046.0, 0.05), -8.0)
-	_stop_sound = _make_sound(_tone(1568.0, 0.55), -4.0)
-	_drop_sound = _make_sound(_tone(220.0, 0.7, -140.0), -2.0)
-	_rocket_sound = _make_sound(_tone(330.0, 0.9, 500.0), -6.0)
-	_boom_sound = _make_sound(_tone(130.0, 0.6, -90.0), 0.0)
+	_spawn_players()
+	_tick_sound = _make_sound(SynthSound.tone(1046.0, 0.08), -8.0)
+	_stop_sound = _make_sound(SynthSound.tone(1568.0, 0.55), -4.0)
+	_drop_sound = _make_sound(SynthSound.tone(220.0, 0.7, -140.0), -2.0)
 
 	_help.setup(HelpPages.social_drop({
 		"time_limit": time_limit, "rest_seconds": rest_seconds, "columns": SocialDropWorld.COLUMNS,
-		"rows": SocialDropWorld.ROWS, "rocket_seconds_left": rocket_seconds_left,
+		"rows": SocialDropWorld.ROWS, "memorize_seconds": memorize_start,
+		"first_copies": STAGES[0].y, "icons": icons.size(),
 	}))
 	_hud.retry_requested.connect(_retry)
 	_hud.menu_requested.connect(GameSession.abandon)
-	var move_keys := " ".join([InputHints.key_markup(&"move_forward"), InputHints.key_markup(&"move_left"),
-		InputHints.key_markup(&"move_back"), InputHints.key_markup(&"move_right")])
-	_hud.set_hint("%s para moverte · %s salta · Quédate en el ícono que salga en la pantalla" % [
-		move_keys, InputHints.key_markup(&"jump")])
+	var move_keys := " ".join([InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
+		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
+	_hud.show_mission("Memoriza los íconos y pisa el que aparezca", [
+		"%s|mover" % move_keys, "%s|saltar" % InputHints.key_label(&"jump")], 4.0)
 	_hud.set_time(time_limit)
-	_hud.set_round(0)
 
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_phase_timer = ready_seconds
@@ -125,40 +109,33 @@ func _help_allowed() -> bool:
 	return phase != Phase.ENDED
 
 
-func _spawn_player() -> void:
-	var slot := participants[0]
-	_player = PLAYER_SCENE.instantiate() as Player
-	_player.player_id = slot.player_id
-	_actors.add_child(_player)
-	_player.global_position = _world.spawn_point()
-	if slot.character != null:
-		_player.set_character(slot.character)
-	_player.set_model_scale(player_scale)
-	_player.lock_camera()
-	_player.set_input_enabled(false)
-	_world.camera.make_current()
+#Everybody stands on the platform at once, each with its own id and camera; this screen controls the first one
+func _spawn_players() -> void:
+	_players = spawn_players(_actors, _world.spawn_points())
+	_local = _players[0]
+	for player in _players:
+		player.set_input_enabled(false)
+		player.frame_camera(camera_distance, camera_pitch)
+		player.landed.connect(_on_player_landed.bind(player))
+	_local.view_camera().make_current()
 
 
 func _physics_process(delta: float) -> void:
-	#The tiles move with tweens of the world: they stop with the pause and the help too
+	#The cards move with tweens of the world: they stop with the pause and the help too
 	_world.process_mode = Node.PROCESS_MODE_DISABLED if paused else Node.PROCESS_MODE_INHERIT
-	_world.follow_player(_player.global_position, marker_height)
 	if paused or phase == Phase.ENDED:
 		return
 	_phase_timer -= delta
 	if phase == Phase.READY:
 		if _phase_timer <= 0.0:
 			_go()
+		else:
+			_hud.tick_countdown(_phase_timer)
 		return
 
 	elapsed += delta
-	if _player.global_position.y < fall_y:
-		if _hit_by_rocket:
-			_finish(false, "¡Te derribó un cohete!",
-				"Aguantaste %d s. Cuando una fila parpadea en rojo, sal de ella o salta justo cuando pase el cohete." % floori(elapsed))
-		else:
-			_finish(false, "¡Te caíste!",
-				"Aguantaste %d s. Mira bien la pantalla y busca la casilla más cercana antes de que se detenga." % floori(elapsed))
+	_check_falls()
+	if phase == Phase.ENDED:
 		return
 	if elapsed >= time_limit:
 		_hud.set_time(0.0)
@@ -169,14 +146,13 @@ func _physics_process(delta: float) -> void:
 	match phase:
 		Phase.GO:
 			if _phase_timer <= 0.0:
-				_start_spin()
-		Phase.SPIN:
-			_update_spin(delta)
+				_start_memorize()
+		Phase.MEMORIZE:
+			_update_memorize()
 		Phase.REACT:
 			_update_react()
 		Phase.REST:
 			_update_rest()
-	_update_rockets(delta)
 
 	_hud_timer += delta
 	if _hud_timer >= 0.1:
@@ -184,50 +160,80 @@ func _physics_process(delta: float) -> void:
 		_hud.set_time(time_limit - elapsed)
 
 
+#A player that goes under the platform is out of the round; when it is the one at this screen, the round is over
+func _check_falls() -> void:
+	for player in _players:
+		if _fallen.has(player.player_id) or player.global_position.y >= fall_y:
+			continue
+		_fallen[player.player_id] = elapsed
+		if player == _local:
+			_finish(false, "¡Te caíste!",
+				"Aguantaste %d s. Memoriza dónde está cada ícono: cuando las cartas se tapan ya no hay segunda mirada." % floori(elapsed))
+			return
+		player.set_physics_process(false)
+		player.hide()
+
+
 func _go() -> void:
 	phase = Phase.GO
 	_phase_timer = go_seconds
 	_world.screen_text("¡Vamos!", Palette.TEAL)
-	_player.set_input_enabled(true)
-	_hud.toast("¡Párate en el ícono que elija la pantalla!")
+	_hud.show_go()
+	_local.set_input_enabled(true)
 
 
-func _start_spin() -> void:
-	phase = Phase.SPIN
-	_spin_time = 0.0
-	_next_change = 0.0
+#The board is dealt for the stage of the round, the cards turn face up and the screens count down while everybody looks for a good place
+func _start_memorize() -> void:
+	phase = Phase.MEMORIZE
+	_memory_total = _memorize_time(elapsed)
+	_phase_timer = _memory_total
+	_countdown_shown = 0
 	_chosen = _other_icon(_chosen)
-	_hud.set_round(_drops_survived + 1)
-	_hud.set_status("¡Mira la pantalla!")
+	var stage := _stage_at(elapsed)
+	_world.deal(_rng, _chosen, stage.x, stage.y)
+	_world.set_stage(STAGES.find(stage))
+	_hud.show_stage(STAGES.find(stage) + 1, STAGES.size())
+	_hud.hide_target()
+	_world.show_icons(true)
 
 
-#The screen changes faster at the start and slower near the end, and every change ticks a
-#little higher, so the sound tells the spin is about to stop
-func _update_spin(delta: float) -> void:
-	_spin_time += delta
-	if _spin_time >= spin_seconds:
-		_stop_spin()
+#The stage of the round that starts at "start": it moves on with the clock, and the very last round is always the hardest
+func _stage_at(start: float) -> Vector2i:
+	if _is_last_round(start):
+		return STAGES[STAGES.size() - 1]
+	var progress := clampf(start / time_limit, 0.0, 1.0)
+	return STAGES[mini(int(progress * STAGES.size()), STAGES.size() - 1)]
+
+
+#Whether no other round fits after the one that starts at "start"
+func _is_last_round(start: float) -> bool:
+	var memorize := _memorize_time(start)
+	return not _round_fits(start + memorize + _reaction_time(start + memorize) + rest_seconds)
+
+
+#One number per second on the screens, each tick a little higher; at zero the cards hide their icons
+func _update_memorize() -> void:
+	if _phase_timer <= 0.0:
+		_reveal_target()
 		return
-	_next_change -= delta
-	if _next_change > 0.0:
+	var shown := ceili(_phase_timer)
+	if shown == _countdown_shown:
 		return
-	var progress := _spin_time / spin_seconds
-	_shown_icon = _other_icon(_shown_icon)
-	_world.screen_icon(_shown_icon, false)
-	_tick_sound.pitch_scale = lerpf(tick_pitch_start, tick_pitch_end, pow(progress, 1.5))
+	_countdown_shown = shown
+	_world.screen_text(str(shown), Palette.PAPER)
+	_tick_sound.pitch_scale = lerpf(tick_pitch_end, tick_pitch_start, clampf(float(shown) / _memory_total, 0.0, 1.0))
 	_tick_sound.play()
-	_next_change = lerpf(spin_interval_start, spin_interval_end, progress * progress)
 
 
-func _stop_spin() -> void:
+#The cards turn into "?" and the screens show the icon that has to be stepped on
+func _reveal_target() -> void:
 	phase = Phase.REACT
 	_phase_timer = _reaction_time(elapsed)
 	_warned = false
-	_shown_icon = _chosen
+	_world.show_icons(false)
 	_world.screen_icon(_chosen, true)
 	_stop_sound.play()
-	_hud.warn("¡Muévete!")
-	_hud.set_status("¡Ve a %s!" % _icon_name(_chosen))
+	_hud.show_target(icons[_chosen], _icon_name(_chosen))
 
 
 func _update_react() -> void:
@@ -240,31 +246,34 @@ func _update_react() -> void:
 		_restored = false
 		_world.drop(_chosen)
 		_drop_sound.play()
-		_hud.set_status("¡Aguanta!")
+		_hud.hide_target()
 
 
 func _update_rest() -> void:
 	if not _restored and _phase_timer <= rest_seconds - drop_hold:
 		_restored = true
 		_drops_survived += 1
-		_world.restore(_rng)
+		_world.restore()
 		if _round_fits(elapsed + _phase_timer):
 			_world.screen_text("¡Otra vez!", Palette.GOLD)
-			_hud.set_status("Nuevo tablero")
 		else:
 			_world.screen_text("¡Casi!", Palette.TEAL)
-			_hud.set_status("¡Ya casi terminas!")
 	if _phase_timer <= 0.0:
 		if _round_fits(elapsed):
-			_start_spin()
+			_start_memorize()
 		else:
 			#No round starts that the clock would cut: the last seconds just run out
 			phase = Phase.FINAL
 
 
-#Whether a spin starting at "start" reaches its drop before the time runs out
+#Whether a round starting at "start" reaches its drop before the time runs out
 func _round_fits(start: float) -> bool:
-	return start + spin_seconds + _reaction_time(start + spin_seconds) <= time_limit
+	var memorize := _memorize_time(start)
+	return start + memorize + _reaction_time(start + memorize) <= time_limit
+
+
+func _memorize_time(at: float) -> float:
+	return lerpf(memorize_start, memorize_end, clampf(at / time_limit, 0.0, 1.0))
 
 
 func _reaction_time(at: float) -> float:
@@ -272,51 +281,31 @@ func _reaction_time(at: float) -> float:
 	return lerpf(reaction_start, reaction_end, progress)
 
 
-#In the last rocket_seconds_left seconds a rocket crosses a random row every few seconds; one
-#that runs into the player throws it off the platform
-func _update_rockets(delta: float) -> void:
-	if not _hit_by_rocket:
-		var direction := _world.rocket_hit(_player.global_position, 0.35)
-		if direction != 0.0:
-			_hit_by_rocket = true
-			_player.set_input_enabled(false)
-			_player.apply_push(Vector3(rocket_knockback.x * direction, rocket_knockback.y, 0.0))
-			_boom_sound.play()
-			_hud.warn("¡Cohete!")
-	if time_limit - elapsed > rocket_seconds_left:
-		return
-	if not _rockets_on:
-		_rockets_on = true
-		_hud.toast("¡Cuidado! Ahora pasan cohetes por las filas")
-	_rocket_timer -= delta
-	#The last rocket must cross before the time is up
-	if _rocket_timer > 0.0 or time_limit - elapsed < rocket_warning + 1.0:
-		return
-	_rocket_timer = _rng.randf_range(rocket_interval_min, rocket_interval_max)
-	var row := _rng.randi() % SocialDropWorld.ROWS
-	if row == _last_rocket_row:
-		row = (row + 1 + _rng.randi() % (SocialDropWorld.ROWS - 1)) % SocialDropWorld.ROWS
-	_last_rocket_row = row
-	_world.launch_rocket(row, 1.0 if _rng.randf() < 0.5 else -1.0, rocket_warning, rocket_speed)
-	_rocket_sound.play()
+#Every landing of the player of this screen and the hard ones of the rest
+func _on_player_landed(at: Vector3, hard: bool, player: Player) -> void:
+	_world.press_tile(at)
+	if hard or player == _local:
+		ImpactFx.landing(self, player, hard, _rng)
 
 
 func _finish(victory: bool, title: String, message: String) -> void:
 	if phase == Phase.ENDED:
 		return
 	phase = Phase.ENDED
-	_player.set_input_enabled(false)
+	_local.set_input_enabled(false)
 	#A late Esc press must not open the pause menu over the final panel
 	_pause_menu.set_process_unhandled_input(false)
-	_hud.set_status("")
+	_hud.hide_target()
+	_hud.hide_mission()
 	if victory:
 		_world.screen_text("¡Ganaste!", Palette.TEAL)
-		_player.jump_requested = true
+		_world.celebrate()
+		_local.victory_hop()
+		_hud.show_banner("¡SOBREVIVISTE!", "%d s" % int(time_limit))
 	else:
 		_world.screen_text("¡Te caíste!", Palette.CORAL)
-	var tween := create_tween()
-	tween.tween_interval(end_delay)
-	tween.tween_callback(_end_round.bind(victory, title, message))
+		_hud.show_banner("TE CAÍSTE", "%d s" % floori(elapsed), Palette.GOLD)
+	get_tree().create_timer(end_delay).timeout.connect(_end_round.bind(victory, title, message))
 
 
 #Inside a session the results screen takes over; on its own the HUD shows the end panel
@@ -325,7 +314,13 @@ func _end_round(victory: bool, title: String, message: String) -> void:
 		["Aguantaste", "%d s" % floori(minf(elapsed, time_limit))],
 		["Caídas esquivadas", str(_drops_survived)],
 	]
-	if not finish_round(RoundResult.make(MINIGAME_ID, victory, title, message, lines)):
+	var sheet := GameSession.score_sheet
+	var points: Dictionary = {}
+	for player in _players:
+		var held: float = _fallen.get(player.player_id, minf(elapsed, time_limit))
+		points[player.player_id] = sheet.drop_points(held / time_limit * sheet.drop_seconds)
+	var score := RoundScore.make(sheet, points[_local.player_id], "Aguantaste %d de %d s" % [floori(minf(elapsed, time_limit)), int(time_limit)])
+	if not finish_round(RoundResult.make(MINIGAME_ID, victory, title, message, lines).with_score(score, points)):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_hud.show_end(title, message, victory)
 
@@ -347,9 +342,10 @@ func _other_icon(current: int) -> int:
 	return index
 
 
-#"SM-Facebook_Box.png" -> "Facebook"
+#"me_gusta.png" -> "Me gusta"
 func _icon_name(index: int) -> String:
-	return icons[index].resource_path.get_file().get_basename().trim_prefix("SM-").trim_suffix("_Box")
+	var words := icons[index].resource_path.get_file().get_basename().replace("_", " ")
+	return words.substr(0, 1).to_upper() + words.substr(1)
 
 
 func _make_sound(stream: AudioStream, volume: float) -> AudioStreamPlayer:
@@ -359,23 +355,3 @@ func _make_sound(stream: AudioStream, volume: float) -> AudioStreamPlayer:
 	sound.max_polyphony = 4
 	add_child(sound)
 	return sound
-
-
-#A short synthesized beep that fades out; "sweep" slides its frequency (in Hz) over its length
-static func _tone(frequency: float, length: float, sweep := 0.0) -> AudioStreamWAV:
-	var count := int(MIX_RATE * length)
-	var data := PackedByteArray()
-	data.resize(count * 2)
-	var phase_angle := 0.0
-	for index in count:
-		var progress := float(index) / count
-		phase_angle += TAU * (frequency + sweep * progress) / MIX_RATE
-		var attack := minf(index / (MIX_RATE * 0.004), 1.0)
-		var envelope := attack * pow(1.0 - progress, 2.0)
-		var sample := (sin(phase_angle) + 0.3 * sin(phase_angle * 2.0)) * envelope * 0.55
-		data.encode_s16(index * 2, int(clampf(sample, -1.0, 1.0) * 32767.0))
-	var wav := AudioStreamWAV.new()
-	wav.format = AudioStreamWAV.FORMAT_16_BITS
-	wav.mix_rate = MIX_RATE
-	wav.data = data
-	return wav

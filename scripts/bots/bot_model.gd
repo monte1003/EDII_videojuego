@@ -69,7 +69,7 @@ func _on_animation_finished(animation_name: StringName) -> void:
 		_refresh()
 
 
-#Meshy animations can scale the hips, which changes the character size
+#Some animations scale the hips, which changes the character size
 func _prepare(animation_name: StringName, loop: Animation.LoopMode) -> void:
 	var animation := _animation_player.get_animation(animation_name)
 	if animation == null:

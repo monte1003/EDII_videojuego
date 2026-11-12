@@ -111,7 +111,8 @@ var _obstacles: Array[StreetObstacle] = []
 var _rng := RandomNumberGenerator.new()
 var _clock := 0.0
 var _phase_timer := 0.0
-var _countdown_shown := 0
+#Hits the runner took in the round; the score counts them
+var hits_taken := 0
 #After a victory the whole street stops
 var _frozen := false
 #A tank was drawn but has not found room yet
@@ -147,8 +148,7 @@ func _ready() -> void:
 
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_phase_timer = countdown_seconds
-	_countdown_shown = ceili(_phase_timer)
-	_hud.show_countdown(str(_countdown_shown))
+	_hud.tick_countdown(_phase_timer)
 
 
 func _help_allowed() -> bool:
@@ -190,10 +190,7 @@ func _physics_process(delta: float) -> void:
 			if _phase_timer <= 0.0:
 				_begin_round()
 			else:
-				var shown := ceili(_phase_timer)
-				if shown != _countdown_shown:
-					_countdown_shown = shown
-					_hud.show_countdown(str(shown))
+				_hud.tick_countdown(_phase_timer)
 		Phase.RUNNING:
 			_update_running(delta)
 	#The street keeps flowing during the countdown and after a defeat
@@ -204,7 +201,7 @@ func _physics_process(delta: float) -> void:
 func _begin_round() -> void:
 	phase = Phase.RUNNING
 	elapsed = 0.0
-	_hud.hide_countdown()
+	_hud.show_go()
 	_runner.set_input_enabled(true)
 
 
@@ -305,9 +302,22 @@ func _clear_view(camera_position: Vector3) -> void:
 #Inside a session the results screen takes over; on its own the HUD shows the end panel
 func _end_round(victory: bool, title: String, message: String) -> void:
 	var lines: Array[Array] = [["Aguantaste", "%d s" % floori(elapsed)], ["Objetivo", "%d s" % int(time_limit)]]
-	if not finish_round(RoundResult.make(SCREEN_ID, victory, title, message, lines)):
+	var result := RoundResult.make(SCREEN_ID, victory, title, message, lines)
+	var score := _score(victory)
+	if not finish_round(result.with_score(score, {_runner.player_id: score.points})):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_hud.show_end(title, message, victory)
+
+
+#Points for the seconds held and, when the whole round was held, for the hits that were not taken
+func _score(victory: bool) -> RoundScore:
+	var sheet := GameSession.score_sheet
+	var seconds := sheet.street_seconds if victory else minf(elapsed / time_limit, 0.999) * sheet.street_seconds
+	var points := sheet.street_points(seconds, hits_taken)
+	if not victory:
+		return RoundScore.make(sheet, points, "Aguantaste %d de %d s" % [floori(elapsed), int(time_limit)])
+	return RoundScore.make(sheet, points, "Aguantaste con %d %s" % [hits_taken, "golpe" if hits_taken == 1 else "golpes"], [
+		["Aguantar", "+%d" % sheet.street_survive], ["Sin golpes", "+%d" % (points - sheet.street_survive)]])
 
 
 func _retry() -> void:
@@ -482,6 +492,7 @@ func _check_hits() -> void:
 	hit.flips = hit_by.flips
 	hit.strength = hit_by.strength
 	_runner.take_hit(hit)
+	hits_taken += 1
 	hit_by.react()
 	if hit_by.kind in [StreetObstacle.Kind.CAR, StreetObstacle.Kind.TANK] and _rng.randf() < 0.5:
 		SynthSound.play(self, SynthSound.honk(), -8.0, _rng.randf_range(0.9, 1.1))

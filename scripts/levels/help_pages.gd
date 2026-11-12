@@ -119,29 +119,110 @@ Pausa: %s · Esta ayuda: %s" % [
 
 static func social_drop(config: Dictionary) -> Array[Dictionary]:
 	var key := InputHints.markup
-	var keys := "%s %s %s %s" % [
-		InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
-		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")]
 	return [
 		{
 			"title": "Tu misión",
-			"body": "Estás sobre una plataforma de %dx%d casillas, cada una con el ícono de una red social. Frente a ti hay una pantalla gigante.\n\nAguanta %d segundos sin caerte para ganar." % [
+			"body": "Estás sobre una plataforma de %dx%d cartas, cada una con el ícono de una app. A cada lado hay una pantalla gigante.
+
+Aguanta %d segundos sin caerte para ganar." % [
 				config["columns"], config["rows"], int(config["time_limit"])],
 		},
 		{
-			"title": "La pantalla",
-			"body": "La pantalla cambia de ícono muy rápido. Cuando el sonido se vuelve más agudo está por detenerse.\n\nEl ícono en el que se detiene es el que se queda: corre a una casilla con ese ícono, %s. Las que van a caer parpadean en rojo justo antes.\n\n%d segundos después vuelven todas en otro orden y se repite. Cada vez tienes menos tiempo para moverte." % [
-				key.call("las demás desaparecen"), int(config["rest_seconds"])],
+			"title": "Memoriza",
+			"body": "Al empezar cada ronda las cartas muestran su ícono y las pantallas cuentan hacia atrás desde %d.
+
+Cuando llegan a cero las cartas se voltean y quedan tapadas con un %s. La pantalla muestra el ícono que tienes que pisar: corre a la carta que lo tenía, %s." % [
+				int(config["memorize_seconds"]), key.call("?"), key.call("las demás caen")],
 		},
 		{
-			"title": "Cohetes",
-			"body": "Cuando quedan %d segundos empiezan a pasar cohetes de lado a lado, cada uno por una de las %d filas.\n\nAntes de que salga, su fila %s. Si el cohete te alcanza, te derriba de la plataforma: cámbiate de fila o salta justo cuando pase." % [
-				int(config["rocket_seconds_left"]), config["rows"], key.call("parpadea en rojo")],
+			"title": "Cae el resto",
+			"body": "Las cartas que van a caer parpadean en rojo justo antes. Las que tienen el ícono que sale se voltean y lo muestran: pisa cualquiera de ellas.
+
+%d segundos después vuelven todas, con los íconos en otro lugar, y se repite. Cada vez tienes menos tiempo para memorizar y para correr." % int(config["rest_seconds"]),
+		},
+		{
+			"title": "Cada ronda cuesta más",
+			"body": "Al principio el tablero solo tiene dos o tres íconos distintos y casi la mitad de las cartas (%d de %d) llevan el que sale.
+
+Con el tiempo aparecen más íconos distintos y menos cartas buenas, hasta que en la última ronda hay %d íconos y solo una carta se salva. Mira bien dónde está cada uno." % [
+				config["first_copies"], config["columns"] * config["rows"], config["icons"]],
 		},
 		{
 			"title": "Cómo se maneja",
-			"body": "Moverte: %s\nSaltar: %s\nPausa: %s · Esta ayuda: %s\n\nLa cámara está fija: ves todo el tablero desde arriba." % [
-				key.call(keys), InputHints.key_markup(&"jump"),
+			"body": "Moverte: %s
+Mirar: %s
+Saltar: %s
+Pausa: %s · Esta ayuda: %s" % [
+				InputHints.move_markup(), key.call("MOUSE"), InputHints.key_markup(&"jump"),
+				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
+		},
+	]
+
+
+static func trend_war(settings: TrendSettings) -> Array[Dictionary]:
+	var key := InputHints.markup
+	var count := mini(settings.limits.size(), settings.lengths.size())
+	return [
+		{
+			"title": "Tu misión",
+			"body": "Por toda la plaza flotan burbujas con algo dentro. Cada tendencia es una fila de íconos: atrapa una burbuja de cada uno antes de que se acabe su reloj.
+
+Son %d tendencias. Cuanto antes completes cada una, más puntos; si el reloj llega a cero sin completarla, esa no suma." % count,
+		},
+		{
+			"title": "En orden",
+			"body": "Las burbujas se atrapan en el orden de la fila, de izquierda a derecha. La que te toca brilla con su color sobre un aro y un haz de luz; las demás quedan apagadas.
+
+Tocar una burbuja que no te toca no castiga: solo rebota. Cada tendencia trae más íconos y la plaza se mueve más: barras, trampolines, cintas y bloques.",
+		},
+		{
+			"title": "Empujar",
+			"body": "Con %s empujas a quien tengas delante. Quien recibe el golpe suelta lo último que atrapó: sale volando unos segundos y lo puede tomar quien lo necesite.
+
+Después de un golpe hay un momento de gracia para que nadie quede encadenado." % InputHints.key_markup(&"shove"),
+		},
+		{
+			"title": "Haters",
+			"body": "Los haters te siguen por los puentes. Si te alcanzan, pasa lo mismo que con un empujón: pierdes lo último que atrapaste. No compiten ni suman puntos, solo estorban.
+
+Moverte: %s · Saltar: %s · Mirar: %s
+Pausa: %s · Esta ayuda: %s" % [
+				InputHints.move_markup(), InputHints.key_markup(&"jump"), key.call("MOUSE"),
+				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
+		},
+	]
+
+
+static func perfect_selfie(settings: SelfieSettings, sheet: ScoreSheet) -> Array[Dictionary]:
+	var key := InputHints.markup
+	return [
+		{
+			"title": "Tu misión",
+			"body": "Un dron recorre el estudio y toma %d fotos, cada una en un lugar distinto. Sigue su haz de luz y métete en el marco que dibuja en el piso antes del disparo.
+
+Cada foto en la que sales te da seguidores. Si estás en el aire o fuera del marco cuando dispara, no sales." % settings.photo_count,
+		},
+		{
+			"title": "Marco y centro",
+			"body": "El marco se mueve y cambia de tamaño; cuando queda fijo parpadea tres veces y dispara. Con cada foto es más pequeño y más inquieto.
+
+Salir vale %d seguidores y estar en el círculo del centro suma %d. Una foto para ti solo vale más que una con mucha gente: los fotobombers también cuentan." % [
+				sheet.selfie_inside, sheet.selfie_center],
+		},
+		{
+			"title": "Pose y empujón",
+			"body": "Mantén %s para posar: te quedas quieto y, si llevas un momento posando al disparo, sumas %d seguidores más. Centro y pose a la vez dan un extra.
+
+Posando no te mueves ni saltas, y un empujón te lleva más lejos. Con %s empujas a quien tengas delante." % [
+				InputHints.key_markup(&"interact"), sheet.selfie_pose, InputHints.key_markup(&"shove")],
+		},
+		{
+			"title": "Potenciadores",
+			"body": "En los pedestales aparecen cristales: la flecha te hace saltar más alto, el rayo te hace correr más rápido y el escudo bloquea el siguiente golpe.
+
+Moverte: %s · Saltar: %s · Mirar: %s
+Pausa: %s · Esta ayuda: %s" % [
+				InputHints.move_markup(), InputHints.key_markup(&"jump"), key.call("MOUSE"),
 				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
 		},
 	]

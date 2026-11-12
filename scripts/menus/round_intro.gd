@@ -4,7 +4,11 @@ extends Screen
 
 const CARD_SIZE := Vector2(540, 206)
 const CARD_GAP := 28.0
-const WINDOW_SIZE := Vector2(640, 322)
+const WINDOW_SIZE := Vector2(640, 300)
+#Seconds from the landing of the title to the goal line, between one piece of the summary and the next, and with all of it in view
+const LAND_TIME := 0.45
+const BRIEF_STEP := 0.25
+const BRIEF_HOLD := 2.0
 const HEART := preload("res://assets/ui/icons/heart.svg")
 const COMMENT := preload("res://assets/ui/icons/comment.svg")
 const GLYPHS: Array[Texture2D] = [
@@ -22,6 +26,8 @@ var _target_card := 0
 var _title_box: VBoxContainer
 var _scroll: Tween
 var _revealed := false
+#The goal line and each key of the summary, in the order they come in
+var _brief_items: Array[Control] = []
 var _last_nearest := -1
 
 
@@ -37,17 +43,9 @@ func _ready() -> void:
 	_play()
 
 
-#Enter or a click jumps to the end of the draw
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("menu_confirm"):
-		get_viewport().set_input_as_handled()
-		_skip()
-
-
-func _gui_input(event: InputEvent) -> void:
-	var click := event as InputEventMouseButton
-	if click != null and click.pressed:
-		_skip()
+#The draw always plays whole: no key or click moves it on, and there is no way back from it
+func _unhandled_input(_event: InputEvent) -> void:
+	pass
 
 
 func _process(_delta: float) -> void:
@@ -98,7 +96,7 @@ func _build_layout() -> void:
 	column.add_child(middle)
 	var stack := VBoxContainer.new()
 	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stack.add_theme_constant_override("separation", 14)
+	stack.add_theme_constant_override("separation", 10)
 	middle.add_child(stack)
 	_window = Control.new()
 	_window.custom_minimum_size = WINDOW_SIZE
@@ -113,12 +111,36 @@ func _build_layout() -> void:
 	var title := UiKit.heading(_info.title.to_upper(), 58, _info.accent)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_title_box.add_child(title)
-	var tagline := UiKit.body(_info.tagline, 22)
-	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_box.add_child(tagline)
+	_build_brief(stack)
 
 	if not GameSession.practice:
 		column.add_child(_build_progress())
+
+
+#One line with the goal and up to three keys with one word each, taken from the minigame; they stay hidden until the title lands
+func _build_brief(stack: VBoxContainer) -> void:
+	var goal := UiKit.body(_info.brief if _info.brief != "" else _info.tagline, 24, Palette.INK)
+	goal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	goal.modulate.a = 0.0
+	stack.add_child(goal)
+	_brief_items.append(goal)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 26)
+	row.custom_minimum_size = Vector2(0, 36)
+	stack.add_child(row)
+	for index in mini(_info.keys.size(), 3):
+		var parts := _info.keys[index].split("|")
+		var pair := HBoxContainer.new()
+		pair.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pair.add_theme_constant_override("separation", 8)
+		pair.modulate.a = 0.0
+		pair.add_child(UiKit.key_chip(InputHints.entry_label(parts[0]), 18))
+		if parts.size() > 1:
+			pair.add_child(UiKit.body(parts[1], 20, Palette.INK))
+		row.add_child(pair)
+		_brief_items.append(pair)
 
 
 func _round_text() -> String:
@@ -270,42 +292,38 @@ func _play() -> void:
 	var target := -_target_card * (CARD_SIZE.y + CARD_GAP)
 	_scroll = create_tween()
 	_scroll.tween_property(_reel, "position:y", target + 18.0, seconds).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_scroll.tween_property(_reel, "position:y", target, 0.16).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_scroll.tween_property(_reel, "position:y", target, 0.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	_scroll.tween_callback(_reveal)
 
 
-func _skip() -> void:
-	if _reel == null:
-		return
-	if _revealed:
-		_finish_soon(0.1)
-		return
-	if _scroll != null:
-		_scroll.kill()
-	_reel.position.y = -_target_card * (CARD_SIZE.y + CARD_GAP)
-	_reveal(true)
-
-
-#The chosen post gets its like, the rest fade and the name lands
-func _reveal(fast := false) -> void:
+#The chosen post gets its like, the rest fade, the name lands and under it come the goal and the keys, one after the other
+func _reveal() -> void:
 	if _revealed:
 		return
 	_revealed = true
-	var span := 0.15 if fast else 0.3
 	for index in _cards.size():
 		var card := _cards[index]
 		if index == _target_card:
-			create_tween().tween_property(card, "scale", Vector2.ONE * 1.07, span).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			create_tween().tween_property(card, "scale", Vector2.ONE * 1.07, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			card.modulate.a = 1.0
 			_like(card)
 		else:
-			create_tween().tween_property(card, "modulate:a", 0.12, span)
+			create_tween().tween_property(card, "modulate:a", 0.12, 0.3)
 	_title_box.scale = Vector2.ONE * 1.5
 	var land := create_tween().set_parallel().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	land.tween_property(_title_box, "modulate:a", 1.0, span)
-	land.tween_property(_title_box, "scale", Vector2.ONE, span * 1.4)
+	land.tween_property(_title_box, "modulate:a", 1.0, 0.3)
+	land.tween_property(_title_box, "scale", Vector2.ONE, 0.42)
 	UiSound.play_click()
-	_finish_soon(0.9 if not fast else 0.3)
+	SynthSound.play(self, SynthSound.thump(0.22), -9.0, 1.15)
+	var wait := LAND_TIME
+	for item in _brief_items:
+		var enter := create_tween()
+		enter.tween_interval(wait)
+		enter.tween_property(item, "modulate:a", 1.0, 0.2)
+		item.position.y += 10.0
+		enter.parallel().tween_property(item, "position:y", item.position.y - 10.0, 0.25).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		wait += BRIEF_STEP
+	get_tree().create_timer(wait + BRIEF_HOLD).timeout.connect(GameSession.begin_round)
 
 
 func _like(card: Control) -> void:
@@ -324,8 +342,3 @@ func _like(card: Control) -> void:
 		rise.tween_property(spark, "global_position", spark.global_position + Vector2(randf_range(-40.0, 40.0), -randf_range(70.0, 130.0)), 0.8)
 		rise.tween_property(spark, "modulate:a", 0.0, 0.8)
 		rise.chain().tween_callback(spark.queue_free)
-
-
-func _finish_soon(delay: float) -> void:
-	var timer := get_tree().create_timer(delay)
-	timer.timeout.connect(GameSession.begin_round)

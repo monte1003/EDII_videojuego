@@ -168,10 +168,10 @@ func _physics_process(delta: float) -> void:
 			if _phase_timer <= 0.0:
 				_begin_round()
 			else:
+				_hud.tick_countdown(_phase_timer)
 				var shown := ceili(_phase_timer)
 				if shown != _countdown_shown:
 					_countdown_shown = shown
-					_hud.show_countdown(str(shown))
 					_world.set_start_lights(shown, false)
 		Phase.RUNNING:
 			_update_running(delta)
@@ -279,7 +279,7 @@ func _begin_countdown() -> void:
 	phase = Phase.COUNTDOWN
 	_phase_timer = settings.countdown_seconds
 	_countdown_shown = ceili(_phase_timer)
-	_hud.show_countdown(str(_countdown_shown))
+	_hud.tick_countdown(_phase_timer)
 	_world.set_start_lights(_countdown_shown, false)
 	var move_keys := " ".join([InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
 		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
@@ -292,8 +292,7 @@ func _begin_round() -> void:
 	phase = Phase.RUNNING
 	for id: int in _players:
 		(_players[id] as Player).set_input_enabled(id == _local_id)
-	_hud.hide_countdown()
-	_hud.warn("¡CORRE!")
+	_hud.show_go()
 	_world.set_start_lights(3, true)
 	_world.cheer(2.4)
 
@@ -878,7 +877,40 @@ func _finish(title: String, message: String) -> void:
 	if victory:
 		banner = "¡META!" if rules.racers_in_race() == 1 else "¡%s!" % ("PRIMERO" if state.place == 1 else "LLEGASTE %s" % _ordinal(state.place))
 	_hud.show_banner(banner, "%d s" % ceili(state.finish_time) if victory else "", Palette.PAPER if victory else Palette.GOLD)
-	get_tree().create_timer(1.8).timeout.connect(_report.bind(RoundResult.make(SCREEN_ID, victory, title, message, lines), victory))
+	var result := RoundResult.make(SCREEN_ID, victory, title, message, lines).with_score(_score_of(state), _points_of_everybody())
+	get_tree().create_timer(1.8).timeout.connect(_report.bind(result, victory))
+
+
+#Share of the course a racer covered, from 0 at the start to 1 at the goal
+func _covered(state: Level01Rules.PlayerState) -> float:
+	var whole: float = _cost_to_goal.get(Level01Layout.START, 0.0)
+	if state.reached_goal():
+		return 1.0
+	if whole <= 0.0 or state.progress == INF:
+		return 0.0
+	return clampf(1.0 - state.progress / whole, 0.0, 1.0)
+
+
+func _points_of(state: Level01Rules.PlayerState) -> int:
+	return GameSession.score_sheet.race_points(state.reached_goal(), state.finish_time, state.attempts_left, _covered(state))
+
+
+func _points_of_everybody() -> Dictionary:
+	var points: Dictionary = {}
+	for other: Level01Rules.PlayerState in rules.players.values():
+		points[other.id] = _points_of(other)
+	return points
+
+
+#The score of a racer with how it adds up: arriving, the time and the attempts kept
+func _score_of(state: Level01Rules.PlayerState) -> RoundScore:
+	var sheet := GameSession.score_sheet
+	var points := _points_of(state)
+	if not state.reached_goal():
+		return RoundScore.make(sheet, points, "Recorriste el %d %% del camino" % roundi(_covered(state) * 100.0))
+	var kept := sheet.race_attempt_points * clampi(state.attempts_left, 0, sheet.race_attempts)
+	return RoundScore.make(sheet, points, "Llegaste en %d s" % ceili(state.finish_time), [
+		["Llegar", "+%d" % sheet.race_finish], ["Tiempo", "+%d" % (points - sheet.race_finish - kept)], ["Intentos", "+%d" % kept]])
 
 
 func _report(result: RoundResult, victory: bool) -> void:

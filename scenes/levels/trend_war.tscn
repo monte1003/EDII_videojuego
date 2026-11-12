@@ -1,0 +1,36 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/levels/trend/trend_war.gd" id="1_script"]
+[ext_resource type="Resource" path="res://resources/characters/fire.tres" id="2_fire"]
+[ext_resource type="PackedScene" path="res://scenes/menus/pause_menu.tscn" id="3_pause"]
+[ext_resource type="Script" path="res://scripts/levels/arena/arena_world.gd" id="4_world"]
+[ext_resource type="Script" path="res://scripts/levels/trend/trend_hud.gd" id="5_hud"]
+[ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="6_help"]
+[ext_resource type="Script" path="res://scripts/levels/level_input.gd" id="7_input"]
+[ext_resource type="Resource" path="res://resources/levels/trend_war.tres" id="8_settings"]
+[ext_resource type="Resource" path="res://resources/bots/troll.tres" id="9_troll"]
+[ext_resource type="Resource" path="res://resources/bots/spam.tres" id="10_spam"]
+[ext_resource type="Resource" path="res://resources/bots/hoax.tres" id="11_hoax"]
+[ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="12_appearance"]
+
+[node name="TrendWar" type="Node3D"]
+script = ExtResource("1_script")
+settings = ExtResource("8_settings")
+bot_looks = Array[ExtResource("12_appearance")]([ExtResource("9_troll"), ExtResource("10_spam"), ExtResource("11_hoax")])
+default_character = ExtResource("2_fire")
+
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("4_world")
+
+[node name="Actors" type="Node3D" parent="."]
+
+[node name="LevelInput" type="Node" parent="."]
+script = ExtResource("7_input")
+
+[node name="Hud" type="CanvasLayer" parent="."]
+script = ExtResource("5_hud")
+
+[node name="PauseMenu" parent="." instance=ExtResource("3_pause")]
+
+[node name="Help" type="CanvasLayer" parent="."]
+script = ExtResource("6_help")

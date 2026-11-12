@@ -21,6 +21,12 @@ var results: Array[RoundResult] = []
 #A practice is one minigame played on its own from the lobby
 var practice := false
 
+#The numbers of the scoring and the best scores kept on this computer
+var score_sheet: ScoreSheet = preload("res://resources/score_sheet.tres")
+var score_book := ScoreBook.new()
+#Whether the total of the game that just ended beat the best one kept
+var session_record := false
+
 var _rng := RandomNumberGenerator.new()
 
 
@@ -100,6 +106,9 @@ func begin_round() -> void:
 func report_result(result: RoundResult) -> bool:
 	if phase != Phase.PLAYING:
 		return false
+	if result.score == null:
+		result.score = RoundScore.make(score_sheet, 0, "")
+	result.score.record = score_book.submit_round(result.minigame_id, result.score.points)
 	results.append(result)
 	_set_phase(Phase.ROUND_RESULTS)
 	round_finished.emit(result)
@@ -118,11 +127,52 @@ func advance() -> void:
 		_set_phase(Phase.LOBBY)
 		ScreenFlow.open(&"lobby")
 	elif is_last_round():
+		session_record = score_book.submit_session(total_of(GameState.PLAYER_ONE))
 		_set_phase(Phase.FINISHED)
 		session_finished.emit(results)
 		ScreenFlow.open(&"session_results")
 	else:
 		_select_next_round()
+
+
+#Points a player has added up over the rounds played so far
+func total_of(player_id: int) -> int:
+	var total := 0
+	for result in results:
+		total += result.points_of(player_id)
+	return total
+
+
+#The best single round of a player: what breaks a tie of totals
+func best_round_of(player_id: int) -> int:
+	var best := 0
+	for result in results:
+		best = maxi(best, result.points_of(player_id))
+	return best
+
+
+#The players from the first to the last: an AVL tree ordered by total, best round and player id, walked from its greatest key down
+func standings() -> Array[AVLTree.AVLNode]:
+	return _ranking().standings()
+
+
+#Place of each player by id; players with the same total and the same best round share it
+func places() -> Dictionary:
+	return _ranking().places()
+
+
+#The medal of a whole game: the average of its rounds against the same thresholds
+func session_medal(player_id: int) -> ScoreSheet.Medal:
+	if results.is_empty():
+		return ScoreSheet.Medal.NONE
+	return score_sheet.medal_for(roundi(float(total_of(player_id)) / results.size()))
+
+
+func _ranking() -> AVLTree:
+	var tree := AVLTree.new()
+	for slot in participants():
+		tree.insert(total_of(slot.player_id), slot.player_id, best_round_of(slot.player_id))
+	return tree
 
 
 func restart_round() -> void:
@@ -148,6 +198,7 @@ func reset() -> void:
 	results.clear()
 	round_index = -1
 	practice = false
+	session_record = false
 	lobby.clear()
 	_set_phase(Phase.IDLE)
 
