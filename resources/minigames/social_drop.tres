@@ -10,3 +10,5 @@ tagline = "Quédate en la casilla del ícono que elija la pantalla gigante y no 
 scene_path = "res://scenes/levels/social_drop.tscn"
 accent = Color(0.482, 0.424, 0.965, 1)
 ready = true
+brief = "Memoriza y pisa el ícono"
+keys = PackedStringArray("move|mover", "jump|saltar")

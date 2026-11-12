@@ -45,7 +45,7 @@ func _is_landing() -> bool:
 	return _animation_player.assigned_animation == land_animation and _animation_player.is_playing()
 
 
-#Meshy animations can scale the hips, which changes the character size
+#Some animations scale the hips, which changes the character size
 func _prepare(animation_name: StringName, loop: Animation.LoopMode) -> void:
 	var animation := _animation_player.get_animation(animation_name)
 	if animation == null:

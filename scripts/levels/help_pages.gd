@@ -157,3 +157,72 @@ Pausa: %s · Esta ayuda: %s" % [
 				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
 		},
 	]
+
+
+static func trend_war(settings: TrendSettings) -> Array[Dictionary]:
+	var key := InputHints.markup
+	var count := mini(settings.limits.size(), settings.lengths.size())
+	return [
+		{
+			"title": "Tu misión",
+			"body": "Por toda la plaza flotan burbujas con algo dentro. Cada tendencia es una fila de íconos: atrapa una burbuja de cada uno antes de que se acabe su reloj.
+
+Son %d tendencias. Cuanto antes completes cada una, más puntos; si el reloj llega a cero sin completarla, esa no suma." % count,
+		},
+		{
+			"title": "En orden",
+			"body": "Las burbujas se atrapan en el orden de la fila, de izquierda a derecha. La que te toca brilla con su color sobre un aro y un haz de luz; las demás quedan apagadas.
+
+Tocar una burbuja que no te toca no castiga: solo rebota. Cada tendencia trae más íconos y la plaza se mueve más: barras, trampolines, cintas y bloques.",
+		},
+		{
+			"title": "Empujar",
+			"body": "Con %s empujas a quien tengas delante. Quien recibe el golpe suelta lo último que atrapó: sale volando unos segundos y lo puede tomar quien lo necesite.
+
+Después de un golpe hay un momento de gracia para que nadie quede encadenado." % InputHints.key_markup(&"shove"),
+		},
+		{
+			"title": "Haters",
+			"body": "Los haters te siguen por los puentes. Si te alcanzan, pasa lo mismo que con un empujón: pierdes lo último que atrapaste. No compiten ni suman puntos, solo estorban.
+
+Moverte: %s · Saltar: %s · Mirar: %s
+Pausa: %s · Esta ayuda: %s" % [
+				InputHints.move_markup(), InputHints.key_markup(&"jump"), key.call("MOUSE"),
+				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
+		},
+	]
+
+
+static func perfect_selfie(settings: SelfieSettings, sheet: ScoreSheet) -> Array[Dictionary]:
+	var key := InputHints.markup
+	return [
+		{
+			"title": "Tu misión",
+			"body": "Un dron recorre el estudio y toma %d fotos, cada una en un lugar distinto. Sigue su haz de luz y métete en el marco que dibuja en el piso antes del disparo.
+
+Cada foto en la que sales te da seguidores. Si estás en el aire o fuera del marco cuando dispara, no sales." % settings.photo_count,
+		},
+		{
+			"title": "Marco y centro",
+			"body": "El marco se mueve y cambia de tamaño; cuando queda fijo parpadea tres veces y dispara. Con cada foto es más pequeño y más inquieto.
+
+Salir vale %d seguidores y estar en el círculo del centro suma %d. Una foto para ti solo vale más que una con mucha gente: los fotobombers también cuentan." % [
+				sheet.selfie_inside, sheet.selfie_center],
+		},
+		{
+			"title": "Pose y empujón",
+			"body": "Mantén %s para posar: te quedas quieto y, si llevas un momento posando al disparo, sumas %d seguidores más. Centro y pose a la vez dan un extra.
+
+Posando no te mueves ni saltas, y un empujón te lleva más lejos. Con %s empujas a quien tengas delante." % [
+				InputHints.key_markup(&"interact"), sheet.selfie_pose, InputHints.key_markup(&"shove")],
+		},
+		{
+			"title": "Potenciadores",
+			"body": "En los pedestales aparecen cristales: la flecha te hace saltar más alto, el rayo te hace correr más rápido y el escudo bloquea el siguiente golpe.
+
+Moverte: %s · Saltar: %s · Mirar: %s
+Pausa: %s · Esta ayuda: %s" % [
+				InputHints.move_markup(), InputHints.key_markup(&"jump"), key.call("MOUSE"),
+				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
+		},
+	]

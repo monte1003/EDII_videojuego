@@ -20,7 +20,7 @@ const STAGES: Array[Vector2i] = [
 @export_group("Round")
 @export var time_limit := 80.0
 #"¿Listo?" and "¡Vamos!" on the screens before the first memory; the clock starts with "¡Vamos!"
-@export var ready_seconds := 1.6
+@export var ready_seconds := 3.0
 @export var go_seconds := 1.2
 #Below this height the player has fallen off the platform
 @export var fall_y := -2.5
@@ -129,6 +129,8 @@ func _physics_process(delta: float) -> void:
 	if phase == Phase.READY:
 		if _phase_timer <= 0.0:
 			_go()
+		else:
+			_hud.tick_countdown(_phase_timer)
 		return
 
 	elapsed += delta
@@ -176,6 +178,7 @@ func _go() -> void:
 	phase = Phase.GO
 	_phase_timer = go_seconds
 	_world.screen_text("¡Vamos!", Palette.TEAL)
+	_hud.show_go()
 	_local.set_input_enabled(true)
 
 
@@ -311,7 +314,13 @@ func _end_round(victory: bool, title: String, message: String) -> void:
 		["Aguantaste", "%d s" % floori(minf(elapsed, time_limit))],
 		["Caídas esquivadas", str(_drops_survived)],
 	]
-	if not finish_round(RoundResult.make(MINIGAME_ID, victory, title, message, lines)):
+	var sheet := GameSession.score_sheet
+	var points: Dictionary = {}
+	for player in _players:
+		var held: float = _fallen.get(player.player_id, minf(elapsed, time_limit))
+		points[player.player_id] = sheet.drop_points(held / time_limit * sheet.drop_seconds)
+	var score := RoundScore.make(sheet, points[_local.player_id], "Aguantaste %d de %d s" % [floori(minf(elapsed, time_limit)), int(time_limit)])
+	if not finish_round(RoundResult.make(MINIGAME_ID, victory, title, message, lines).with_score(score, points)):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_hud.show_end(title, message, victory)
 

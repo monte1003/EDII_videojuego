@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="MinigameInfo" format=3]
+
+[ext_resource type="Script" path="res://scripts/session/minigame_info.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/ui/cards/trend_war.png" id="2_art"]
+
+[resource]
+script = ExtResource("1_script")
+id = &"trend_war"
+title = "Guerra de Tendencias"
+tagline = "Atrapa las burbujas en el orden de cada tendencia antes de que se acabe su reloj"
+scene_path = "res://scenes/levels/trend_war.tscn"
+accent = Color(0.541, 0.388, 0.961, 1)
+ready = true
+card_art = ExtResource("2_art")
+brief = "Atrapa en orden lo que es tendencia"
+keys = PackedStringArray("move|mover", "jump|saltar", "shove|empujar")

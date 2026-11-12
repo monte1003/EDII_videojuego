@@ -7,7 +7,9 @@ const ROWS := [
 ]
 #Keys that only work inside the levels; they follow the Input Map
 const ACTION_ROWS := [
-	["Interactuar", &"interact"],
+	["Usar o posar", &"interact"],
+	["Empujar", &"shove"],
+	["Estoy listo", &"ready"],
 	["Ayuda", &"help"],
 	["Ver el grafo", &"toggle_debug"],
 	["Demostrar la ruta", &"demo_route"],

@@ -1,0 +1,465 @@
+class_name ArenaRound
+extends RoundScene
+
+#What the two arena rounds share: the players on the map, the countdown, the shoves, the blows of what moves, the falls that put you
+#back on an island, the bots that get in the way and how the round ends. Each round adds its own rules on top
+
+enum Phase { COUNTDOWN, RUNNING, ENDED }
+
+const BOT_SCENE := preload("res://scenes/bots/chaser_bot.tscn")
+#Seconds between falling off and standing on an island again
+const RESPAWN_TIME := 1.2
+#How far under its last island a player counts as fallen
+const FALL_DEPTH := 5.0
+const SHOVE_PUSH := 9.0
+const SHOVE_STUN := 0.35
+const HAZARD_PUSH := 11.0
+const HAZARD_STUN := 0.5
+#Seconds a piece that just appeared takes before it can hit, so it is seen first
+const STAGE_GRACE := 1.0
+const CAMERA_DISTANCE := 4.2
+const CAMERA_PITCH := -24.0
+
+@export var bot_looks: Array[BotAppearance] = []
+@export var countdown_seconds := 3.0
+#Off, nothing on the map hits and no bot comes out: to learn the map or to time it
+@export var hazards_enabled := true
+@export var bots_enabled := true
+#Speed of the bots as a share of a player's
+@export var bot_speed_ratio := 0.64
+#A bot warns for this long before it pushes, rests this long between pushes and stands still this long after one lands
+@export var bot_windup := 0.8
+@export var bot_cooldown := 3.6
+@export var bot_gloat := 2.2
+
+var layout: ArenaLayout
+var phase := Phase.COUNTDOWN
+#Seconds since "¡YA!"
+var clock := 0.0
+var stage := 0
+var brawl := ArenaBrawl.new()
+#Player id -> Player, and its locator
+var players: Dictionary = {}
+var locators: Dictionary = {}
+var bots: Array[ChaserBot] = []
+var local_id := 0
+var context := ChaseContext.new()
+var rng := RandomNumberGenerator.new()
+
+var _falling: Dictionary = {}
+var _stage_since := 0.0
+var _phase_timer := 0.0
+var _stage_set: ArenaStage
+
+@onready var world: ArenaWorld = $World
+@onready var hud: RoundHud = $Hud
+@onready var keys: LevelInput = $LevelInput
+
+
+#Builds the map and its set, puts the players on it and starts the countdown
+func setup_arena(arena: ArenaLayout, set_radius: float, top_height: float) -> void:
+	layout = arena
+	rng.randomize()
+	world.build(layout)
+	_stage_set = ArenaStage.new()
+	world.add_child(_stage_set)
+	_stage_set.build(set_radius, 47, top_height)
+	context.graph = layout.build_graph(false)
+	for id: StringName in layout.islands:
+		context.positions[id] = layout.position_of(id)
+		context.radii[id] = layout.radius_of(id)
+	_spawn_players()
+	keys.shove_pressed.connect(_on_shove_key)
+	hud.retry_requested.connect(_retry)
+	hud.menu_requested.connect(GameSession.abandon)
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_phase_timer = countdown_seconds
+	hud.tick_countdown(_phase_timer)
+
+
+func local_player() -> Player:
+	return players[local_id]
+
+
+func _any_player() -> Player:
+	return local_player()
+
+
+func cheer(power: float) -> void:
+	_stage_set.cheer(power)
+
+
+func set_stage(value: int) -> void:
+	stage = value
+	_stage_since = clock
+	world.set_stage(value)
+
+
+#A player asks to shove whoever is in front of it; true when the shove went out (it may still hit nobody)
+func request_shove(player_id: int) -> bool:
+	if phase != Phase.RUNNING or not players.has(player_id) or _falling.has(player_id):
+		return false
+	var player: Player = players[player_id]
+	if player.is_down() or not _can_shove(player_id) or not brawl.use_shove(player_id):
+		return false
+	var facing := player.look_direction()
+	player.squash(4.0)
+	player.apply_push(facing * 2.5)
+	SynthSound.play(self, SynthSound.tone(300.0, 0.14, -160.0, 0.5), -9.0, rng.randf_range(0.95, 1.1))
+	var others: Dictionary = {}
+	for id: int in players:
+		if id != player_id and not _falling.has(id):
+			others[id] = (players[id] as Player).global_position
+	var victim := brawl.pick_victim(player.global_position, facing, others)
+	if victim >= 0:
+		var away := (others[victim] as Vector3) - player.global_position
+		away.y = 0.0
+		strike(victim, away.normalized() * SHOVE_PUSH * _shove_scale(victim), 0.35)
+	return true
+
+
+#A blow from another player or from a bot: the shield takes it, the grace ignores it, and otherwise it pushes and the round decides what it costs
+func strike(player_id: int, push: Vector3, strength: float) -> bool:
+	var player: Player = players[player_id]
+	if _falling.has(player_id) or not player.can_be_hit():
+		return false
+	match brawl.strike(player_id):
+		ArenaBrawl.Outcome.IGNORED:
+			return false
+		ArenaBrawl.Outcome.BLOCKED:
+			_on_shield_broken(player_id)
+			return false
+	_on_struck(player_id, true, push)
+	_hit(player, push, strength, SHOVE_STUN, false)
+	return true
+
+
+#One more bot on the map, as far from the players as it can start
+func add_bot() -> void:
+	if bot_looks.is_empty() or not bots_enabled:
+		return
+	var bot := BOT_SCENE.instantiate() as ChaserBot
+	_actors.add_child(bot)
+	bot.setup(context, bot_looks[bots.size() % bot_looks.size()], _far_island())
+	bot.move_speed = local_player().move_speed * bot_speed_ratio
+	bot.push_windup = bot_windup
+	bot.push_cooldown = bot_cooldown
+	bot.push_landed.connect(_on_bot_push)
+	bot.push_announced.connect(_on_bot_warning)
+	bots.append(bot)
+	_on_bot_added(bot)
+	var nearest := _nearest_locator(bot.global_position)
+	bot.activate(nearest.vertex if nearest != null else layout.spawn_island)
+
+
+func _physics_process(delta: float) -> void:
+	world.process_mode = Node.PROCESS_MODE_DISABLED if paused else Node.PROCESS_MODE_INHERIT
+	if paused:
+		return
+	match phase:
+		Phase.COUNTDOWN:
+			_phase_timer -= delta
+			if _phase_timer <= 0.0:
+				_begin()
+			else:
+				hud.tick_countdown(_phase_timer)
+		Phase.RUNNING:
+			clock += delta
+			brawl.tick(delta)
+			world.update(clock)
+			_apply_hazards()
+			_check_falls(delta)
+			_tick_round(delta)
+
+
+func _help_allowed() -> bool:
+	return phase != Phase.ENDED
+
+
+func _begin() -> void:
+	phase = Phase.RUNNING
+	hud.show_go()
+	local_player().set_input_enabled(true)
+	cheer(2.2)
+	_on_round_started()
+
+
+#Each round fills these in
+func _on_round_started() -> void:
+	pass
+
+
+func _tick_round(_delta: float) -> void:
+	pass
+
+
+#What a blow costs in this round (an item, a pose); "by_rival" tells a shove or a bot from a bar or a block
+func _on_struck(_player_id: int, _by_rival: bool, _push: Vector3) -> void:
+	pass
+
+
+func _on_respawned(_player_id: int) -> void:
+	pass
+
+
+func _on_bot_added(_bot: ChaserBot) -> void:
+	pass
+
+
+func _can_shove(_player_id: int) -> bool:
+	return true
+
+
+#How much harder a shove pushes this victim
+func _shove_scale(_victim_id: int) -> float:
+	return 1.0
+
+
+func _on_shield_broken(player_id: int) -> void:
+	var player: Player = players[player_id]
+	ImpactFx.stars(self, player.global_position + Vector3(0.0, 0.9, 0.0), 6)
+	SynthSound.play(self, SynthSound.tone(1200.0, 0.25, -500.0, 0.4), -8.0)
+
+
+func _spawn_players() -> void:
+	var centre := layout.position_of(layout.spawn_island)
+	var points: Array[Vector3] = []
+	for index in participants.size():
+		#On a ring around the middle, which may hold a podium
+		var angle := PI / 2.0 + TAU * index / maxf(participants.size(), 1.0)
+		var away := layout.radius_of(layout.spawn_island) * 0.62
+		points.append(centre + Vector3(cos(angle) * away, 0.05, sin(angle) * away))
+	var spawned := spawn_players(_actors, points)
+	local_id = spawned[0].player_id
+	for player in spawned:
+		players[player.player_id] = player
+		player.set_input_enabled(false)
+		player.frame_camera(CAMERA_DISTANCE, CAMERA_PITCH)
+		player.hit_taken.connect(_on_player_hit.bind(player))
+		player.landed.connect(_on_player_landed.bind(player))
+		brawl.add(player.player_id)
+		var locator := PlayerLocator.new()
+		locator.player_id = player.player_id
+		add_child(locator)
+		world.watch(locator)
+		locator.force_vertex(layout.spawn_island)
+		locators[player.player_id] = locator
+		var target := ChaseTarget.new()
+		target.player_id = player.player_id
+		target.node = player
+		target.locator = locator
+		target.detection_radius = 200.0
+		context.targets.append(target)
+	spawned[0].view_camera().make_current()
+
+
+#The bars, the blocks, the trampolines and the belts act on every player; a piece that just appeared waits a moment first
+func _apply_hazards() -> void:
+	var live := clock - _stage_since >= STAGE_GRACE
+	for id: int in players:
+		var player: Player = players[id]
+		var at := player.global_position
+		var drift := Vector3.ZERO
+		if _falling.has(id):
+			player.external_velocity = drift
+			continue
+		for bridge in layout.bridges:
+			if bridge.kind == ArenaLayout.BELT and player.is_on_floor() and ArenaHazards.on_bridge(layout, bridge, at):
+				drift = ArenaHazards.belt_drift(layout, bridge, stage, clock)
+		player.external_velocity = drift
+		for island: StringName in layout.pads:
+			if ArenaLayout.is_on(layout.pads[island], stage) and player.velocity.y <= 0.5 and ArenaHazards.pad_hits(layout, island, at):
+				player.apply_push(ArenaHazards.pad_launch(layout, island))
+				world.bounce_pad(island)
+				SynthSound.play(self, SynthSound.tone(240.0, 0.3, 520.0, 0.5), -8.0, rng.randf_range(0.95, 1.08))
+		if not hazards_enabled or not player.can_be_hit():
+			continue
+		for island: StringName in layout.spinners:
+			var spinner: Dictionary = layout.spinners[island]
+			var centre := layout.position_of(island)
+			if _hazard_on(spinner, live) and layout.is_over(island, at, -0.3) \
+					and Level01Hazards.hits(centre, spinner, clock, at, at.y - centre.y):
+				_hazard_hit(id, Level01Hazards.push_direction(centre, spinner, at))
+		for sweeper in layout.sweepers:
+			if _hazard_on(sweeper, live) and ArenaHazards.block_hits(layout, sweeper, clock, at):
+				_hazard_hit(id, (ArenaHazards.block_heading(layout, sweeper, clock) + Vector3(0.0, 0.0, 0.001)).normalized())
+
+
+func _hazard_on(entry: Dictionary, live: bool) -> bool:
+	var from := int(entry.get("from", 0))
+	return stage > from or (stage == from and (live or from == 0))
+
+
+#A bar or a block hits: a shield takes it, otherwise the player flies
+func _hazard_hit(player_id: int, direction: Vector3) -> void:
+	var player: Player = players[player_id]
+	if brawl.has_shield(player_id):
+		brawl.give_shield(player_id, 0.0)
+		_on_shield_broken(player_id)
+		player.apply_push(direction * 4.0)
+		return
+	_on_struck(player_id, false, direction * HAZARD_PUSH)
+	_hit(player, direction * HAZARD_PUSH, 0.7, HAZARD_STUN, true)
+
+
+func _hit(player: Player, push: Vector3, strength: float, stun: float, flips: bool) -> void:
+	var hit := Player.Hit.new()
+	hit.push = push
+	hit.strength = strength
+	hit.stun = stun
+	hit.flips = flips
+	player.take_hit(hit)
+
+
+#Whoever drops under its island waits a moment and comes back on the closest one, keeping what it had
+func _check_falls(delta: float) -> void:
+	for id: int in players:
+		var player: Player = players[id]
+		if _falling.has(id):
+			_falling[id] = float(_falling[id]) - delta
+			if float(_falling[id]) <= 0.0:
+				_falling.erase(id)
+				_respawn(id)
+			continue
+		var floor_y := layout.position_of(layout.nearest_island(player.global_position)).y
+		if player.global_position.y < floor_y - FALL_DEPTH:
+			_falling[id] = RESPAWN_TIME
+			if id == local_id:
+				hud.flash(Palette.CORAL, 0.5, 0.6)
+				SynthSound.play(self, SynthSound.tone(420.0, 0.5, -300.0, 0.45), -8.0)
+
+
+func is_falling(player_id: int) -> bool:
+	return _falling.has(player_id)
+
+
+func _respawn(player_id: int) -> void:
+	var player: Player = players[player_id]
+	var island := layout.nearest_island(player.global_position)
+	var angle := rng.randf() * TAU
+	player.global_position = layout.position_of(island) + Vector3(cos(angle), 0.0, sin(angle)) * layout.radius_of(island) * 0.62 + Vector3(0.0, 0.1, 0.0)
+	player.clear_motion()
+	player.set_input_enabled(player_id == local_id and phase == Phase.RUNNING)
+	(locators[player_id] as PlayerLocator).force_vertex(island)
+	ImpactFx.dust(self, player.global_position, ImpactFx.DUST_COLOR, 10)
+	_on_respawned(player_id)
+
+
+func _on_shove_key() -> void:
+	request_shove(local_id)
+
+
+#The bot shows its warning mark; a short rising note says it too
+func _on_bot_warning(bot: ChaserBot) -> void:
+	if bot.global_position.distance_to(local_player().global_position) < 6.0:
+		SynthSound.play(self, SynthSound.tone(300.0, 0.35, 380.0, 0.35), -12.0)
+
+
+#A push that lands: the bot stays where it is for a moment, pleased with itself, so its victim can get away
+func _on_bot_push(bot: ChaserBot, direction: Vector3, player_id: int) -> void:
+	if phase != Phase.RUNNING or not players.has(player_id):
+		return
+	if strike(player_id, direction * SHOVE_PUSH, 0.45):
+		bot.hold_movement = true
+		get_tree().create_timer(bot_gloat).timeout.connect(_release_bot.bind(bot))
+
+
+func _release_bot(bot: ChaserBot) -> void:
+	if is_instance_valid(bot):
+		bot.hold_movement = false
+
+
+func _on_player_hit(hit: Player.Hit, player: Player) -> void:
+	ImpactFx.blow(self, player, hit, rng, player.player_id == local_id)
+	if player.player_id == local_id:
+		hud.flash(Palette.CORAL, 0.3 + 0.3 * hit.strength, 0.45)
+
+
+func _on_player_landed(_at: Vector3, hard: bool, player: Player) -> void:
+	if hard or player.player_id == local_id:
+		ImpactFx.landing(self, player, hard, rng)
+
+
+#The island with no player on it that is farthest from all of them
+func _far_island() -> StringName:
+	var best := layout.spawn_island
+	var best_distance := -1.0
+	for id: StringName in layout.islands:
+		var nearest := INF
+		for player: Player in players.values():
+			nearest = minf(nearest, player.global_position.distance_to(layout.position_of(id)))
+		for bot in bots:
+			nearest = minf(nearest, bot.global_position.distance_to(layout.position_of(id)) * 2.0)
+		if nearest > best_distance:
+			best_distance = nearest
+			best = id
+	return best
+
+
+func _nearest_locator(point: Vector3) -> PlayerLocator:
+	var best: PlayerLocator = null
+	var best_distance := INF
+	for id: int in players:
+		var distance := (players[id] as Player).global_position.distance_to(point)
+		if distance < best_distance:
+			best_distance = distance
+			best = locators[id]
+	return best
+
+
+#A word or a number that pops over a head, rises and fades
+func pop_text(at: Vector3, text: String, color: Color, size := 96, rise := 1.2) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.font = UiKit.HEADING_FONT
+	label.font_size = size
+	label.pixel_size = 0.008
+	label.outline_size = 26
+	label.modulate = color
+	label.outline_modulate = Palette.EDGE
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	add_child(label)
+	label.global_position = at
+	label.scale = Vector3.ONE * 0.2
+	var tween := create_tween()
+	tween.tween_property(label, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_interval(0.55)
+	tween.tween_property(label, "global_position", at + Vector3(0.0, rise, 0.0), 0.6)
+	tween.parallel().tween_property(label, "modulate:a", 0.0, 0.6)
+	tween.parallel().tween_property(label, "outline_modulate:a", 0.0, 0.6)
+	tween.tween_callback(label.queue_free)
+
+
+#The round is over: nobody moves, the banner shows for a moment and then the results take over
+func end_round(result: RoundResult, banner: String, fact: String, celebrate: bool) -> void:
+	if phase == Phase.ENDED:
+		return
+	phase = Phase.ENDED
+	for player: Player in players.values():
+		player.set_input_enabled(false)
+		player.posing = false
+		player.external_velocity = Vector3.ZERO
+	for bot in bots:
+		bot.deactivate()
+	_pause_menu.set_process_unhandled_input(false)
+	hud.hide_mission()
+	hud.set_danger(0.0)
+	hud.show_banner(banner, fact, Palette.PAPER if celebrate else Palette.GOLD)
+	if celebrate:
+		local_player().victory_hop()
+		cheer(3.0)
+	get_tree().create_timer(1.8).timeout.connect(_report.bind(result))
+
+
+func _report(result: RoundResult) -> void:
+	if not finish_round(result):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		hud.show_end(result.headline, result.detail, result.won)
+
+
+func _retry() -> void:
+	if GameSession.is_playing_round():
+		GameSession.restart_round()
+	else:
+		ScreenFlow.reload_current()

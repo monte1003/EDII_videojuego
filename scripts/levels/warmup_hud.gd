@@ -17,7 +17,7 @@ func _ready() -> void:
 	_vote_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_vote_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_vote_row.add_theme_constant_override("separation", 10)
-	_vote_row.add_child(UiKit.key_chip(InputHints.key_label(&"menu_confirm"), 18))
+	_vote_row.add_child(UiKit.key_chip(InputHints.key_label(&"ready"), 18))
 	_vote_text = _text("ESTOY LISTO", UiKit.BUTTON_FONT, 18)
 	_vote_row.add_child(_vote_text)
 	_count_label = _text("0/1", UiKit.BODY_FONT, 20)

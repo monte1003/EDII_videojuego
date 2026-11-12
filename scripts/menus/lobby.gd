@@ -218,7 +218,7 @@ func _on_name_changed(new_text: String) -> void:
 
 func _toggle_ready() -> void:
 	var slot := GameSession.lobby.find(_local_id)
-	if slot == null:
+	if slot == null or not accepts_confirm():
 		return
 	GameSession.lobby.set_ready(_local_id, not slot.ready)
 	if slot.ready:
