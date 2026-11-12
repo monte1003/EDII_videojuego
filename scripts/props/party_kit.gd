@@ -22,6 +22,8 @@ const PALETTE: Array[Color] = [PINK, YELLOW, CYAN, VIOLET, GREEN, ORANGE]
 const STAND_STEP := 0.9
 const STAND_DEPTH := 1.3
 const FAN_SPACING := 1.3
+#How far the rope of the bunting stands from the plane of its flags
+const ROPE_LIFT := 0.02
 
 static var _cache: Dictionary = {}
 
@@ -89,9 +91,11 @@ static func bunting(from: Vector3, to: Vector3, sag: float, flags: int, size: fl
 		var tip := (a + b) / 2.0 + Vector3(0.0, -size, 0.0)
 		var flag := colors[index % colors.size()]
 		_triangle(tool, a, tip, b, Color(flag, 0.0), Color(flag, 1.0), Color(flag, 0.0))
+		#The rope is a ribbon in front of and behind the flags, so it never shares their plane
 		var thick := Vector3(0.0, 0.05, 0.0)
-		_triangle(tool, a + thick, b + thick, a - thick, rope, rope, rope)
-		_triangle(tool, b + thick, b - thick, a - thick, rope, rope, rope)
+		for lift: Vector3 in [Vector3(0.0, 0.0, ROPE_LIFT), Vector3(0.0, 0.0, -ROPE_LIFT)]:
+			_triangle(tool, a + thick + lift, b + thick + lift, a - thick + lift, rope, rope, rope)
+			_triangle(tool, b + thick + lift, b - thick + lift, a - thick + lift, rope, rope, rope)
 	var instance := MeshInstance3D.new()
 	instance.mesh = tool.commit()
 	instance.material_override = _bunting_material()
@@ -220,8 +224,8 @@ static func rainbow(radius: float, band: float, colors: Array[Color]) -> MeshIns
 	return instance
 
 
-#Little round lights in one draw call; each phase says when its light is on
-static func bulbs(spots: Array[Transform3D], colors: Array[Color], phases: Array[float]) -> MultiMeshInstance3D:
+#Little round lights, one draw call per stretch of the course so the engine skips the ones out of view; each phase says when its light is on
+static func bulbs(spots: Array[Transform3D], colors: Array[Color], phases: Array[float]) -> Node3D:
 	var ball := SphereMesh.new()
 	ball.radius = 0.13
 	ball.height = 0.26
@@ -230,20 +234,75 @@ static func bulbs(spots: Array[Transform3D], colors: Array[Color], phases: Array
 	var material := ShaderMaterial.new()
 	material.shader = BULB
 	ball.material = material
-	var multi := MultiMesh.new()
-	multi.transform_format = MultiMesh.TRANSFORM_3D
-	multi.use_colors = true
-	multi.use_custom_data = true
-	multi.mesh = ball
-	multi.instance_count = spots.size()
-	for index in spots.size():
-		multi.set_instance_transform(index, spots[index])
-		multi.set_instance_color(index, colors[index])
-		multi.set_instance_custom_data(index, Color(phases[index], 0.0, 0.0, 0.0))
-	var instance := MultiMeshInstance3D.new()
-	instance.multimesh = multi
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return instance
+	var places: Array[Vector3] = []
+	for spot in spots:
+		places.append(spot.origin)
+	var root := Node3D.new()
+	var groups := MeshMerger.cells(places)
+	for cell: int in groups:
+		var members: Array[int] = groups[cell]
+		var multi := MultiMesh.new()
+		multi.transform_format = MultiMesh.TRANSFORM_3D
+		multi.use_colors = true
+		multi.use_custom_data = true
+		multi.mesh = ball
+		multi.instance_count = members.size()
+		for slot in members.size():
+			var index := members[slot]
+			multi.set_instance_transform(slot, spots[index])
+			multi.set_instance_color(slot, colors[index])
+			multi.set_instance_custom_data(slot, Color(phases[index], 0.0, 0.0, 0.0))
+		var instance := MultiMeshInstance3D.new()
+		instance.multimesh = multi
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(instance)
+	return root
+
+
+#Adds to "tool" a candy tube along an arc of a circle on the XZ plane, for the bumper of an island that has gaps where the bridges come in.
+#"radius" is the middle of the tube and the angles go from +X toward +Z; the stripes run along u = angle / TAU like those of a full torus
+static func add_arc_tube(tool: SurfaceTool, radius: float, tube: float, from: float, to: float, steps: int, sides: int) -> void:
+	for step in steps:
+		var angle_a := lerpf(from, to, float(step) / steps)
+		var angle_b := lerpf(from, to, float(step + 1) / steps)
+		for side in sides:
+			var turn_a := TAU * side / sides
+			var turn_b := TAU * (side + 1) / sides
+			var c0 := _tube_point(radius, tube, angle_a, turn_a)
+			var c1 := _tube_point(radius, tube, angle_b, turn_a)
+			var c2 := _tube_point(radius, tube, angle_b, turn_b)
+			var c3 := _tube_point(radius, tube, angle_a, turn_b)
+			_tube_triangle(tool, c0, c1, c2)
+			_tube_triangle(tool, c0, c2, c3)
+	for end_angle: float in [from, to]:
+		var tangent := Vector3(-sin(end_angle), 0.0, cos(end_angle)) * (-1.0 if end_angle == from else 1.0)
+		var hub := {"at": Vector3(cos(end_angle), 0.0, sin(end_angle)) * radius, "normal": tangent, "uv": Vector2(end_angle / TAU, 0.0)}
+		for side in sides:
+			var first := _tube_point(radius, tube, end_angle, TAU * side / sides)
+			var second := _tube_point(radius, tube, end_angle, TAU * (side + 1) / sides)
+			first["normal"] = tangent
+			second["normal"] = tangent
+			_tube_triangle(tool, hub, first, second, tangent)
+
+
+static func _tube_point(radius: float, tube: float, angle: float, turn: float) -> Dictionary:
+	var out := Vector3(cos(angle), 0.0, sin(angle))
+	var normal := out * cos(turn) + Vector3.UP * sin(turn)
+	return {"at": out * radius + normal * tube, "normal": normal, "uv": Vector2(angle / TAU, turn / TAU)}
+
+
+#Adds a triangle whose front side looks along "facing" (the average of its normals when it is not given)
+static func _tube_triangle(tool: SurfaceTool, a: Dictionary, b: Dictionary, c: Dictionary, facing := Vector3.ZERO) -> void:
+	var wanted := facing
+	if wanted == Vector3.ZERO:
+		wanted = ((a["normal"] as Vector3) + (b["normal"] as Vector3) + (c["normal"] as Vector3)).normalized()
+	var flat := ((c["at"] as Vector3) - (a["at"] as Vector3)).cross((b["at"] as Vector3) - (a["at"] as Vector3))
+	var corners: Array[Dictionary] = []
+	corners.assign([a, b, c] if flat.dot(wanted) >= 0.0 else [a, c, b])
+	for corner in corners:
+		tool.set_normal(corner["normal"] as Vector3)
+		tool.set_uv(corner["uv"] as Vector2)
+		tool.add_vertex(corner["at"] as Vector3)
 
 
 #A slow drift of little coloured stars inside a box, so the air is never empty; the box is centred on the node
@@ -290,6 +349,48 @@ static func sparkles(extents: Vector3, amount: int) -> CPUParticles3D:
 	sparks.mesh = quad
 	sparks.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return sparks
+
+
+#Little hearts that float up slowly inside a box and fade, like the likes of a crowd; the box is centred on the node
+static func hearts(extents: Vector3, amount: int) -> CPUParticles3D:
+	var rising := CPUParticles3D.new()
+	rising.amount = amount
+	rising.lifetime = 9.0
+	rising.preprocess = 9.0
+	rising.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	rising.emission_box_extents = extents
+	rising.direction = Vector3.UP
+	rising.spread = 12.0
+	rising.initial_velocity_min = 0.8
+	rising.initial_velocity_max = 1.6
+	rising.gravity = Vector3.ZERO
+	rising.scale_amount_min = 0.7
+	rising.scale_amount_max = 1.4
+	var fade := Curve.new()
+	fade.add_point(Vector2(0.0, 0.0))
+	fade.add_point(Vector2(0.15, 1.0))
+	fade.add_point(Vector2(0.85, 1.0))
+	fade.add_point(Vector2(1.0, 0.0))
+	rising.scale_amount_curve = fade
+	var tones := Gradient.new()
+	tones.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	tones.colors = PackedColorArray([Color("ff7aa8"), Color("ffd6e5"), Color("ffb347")])
+	rising.color_initial_ramp = tones
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE * 0.9
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	material.vertex_color_use_as_albedo = true
+	material.albedo_texture = ImpactFx.heart_texture()
+	material.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+	material.distance_fade_min_distance = 3.0
+	material.distance_fade_max_distance = 9.0
+	quad.material = material
+	rising.mesh = quad
+	rising.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return rising
 
 
 #Grandstand tiers facing +Z of "place": stepped blocks in one mesh with a fan on every step, added to "crowd"

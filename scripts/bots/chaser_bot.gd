@@ -244,6 +244,9 @@ func _nearest_noticed() -> ChaseTarget:
 
 #The player this bot pays attention to now; the closest one if it has not noticed anybody yet
 func _watched() -> ChaseTarget:
+	#A racer that left the course is freed with its node and its locator
+	if _focus != null and not (is_instance_valid(_focus.node) and is_instance_valid(_focus.locator)):
+		_focus = null
 	if _focus != null:
 		return _focus
 	var best: ChaseTarget = null
@@ -379,7 +382,7 @@ func _to_player_flat() -> Vector3:
 	if _ctx == null:
 		return Vector3.ZERO
 	var watched := _watched()
-	if watched == null:
+	if watched == null or not is_instance_valid(watched.node):
 		return Vector3.ZERO
 	return _flat(watched.node.global_position - global_position)
 

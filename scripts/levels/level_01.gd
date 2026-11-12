@@ -16,6 +16,16 @@ const SPINNER_STRENGTH := 0.9
 const SPINNER_STUN := 0.6
 const BOT_STRENGTH := 0.65
 const BOT_STUN := 0.5
+#A rolling ball hits a bit softer than a bar: its share of the push of a bar, and how hard it feels
+const BALL_PUSH_SHARE := 0.75
+const BALL_STRENGTH := 0.75
+const BALL_STUN := 0.5
+#Seconds before the same trampoline can throw the same racer again
+const PAD_REST := 1.2
+#How far under its feet a body still sticks to the ground, so it follows a slide down instead of skipping over it
+const SLIDE_SNAP := 0.6
+#How much of the flow of a slide a racer keeps when it leaves it
+const SLIDE_CARRY := 0.8
 
 #Tuning numbers of the round; leave empty to use the defaults
 @export var settings: Level01Settings
@@ -23,7 +33,9 @@ const BOT_STUN := 0.5
 @export var bot_appearances: Array[BotAppearance] = []
 
 var phase := Phase.COUNTDOWN
+#The course as the racers can go through it, cannons included; the bots walk the same course without them (they cannot be thrown)
 var graph: WeightedGraph
+var bot_graph: WeightedGraph
 var rules: Level01Rules
 var events: Level01Events
 #The second feed, when the settings ask for one
@@ -49,6 +61,14 @@ var _release_schedule: Array[Dictionary] = []
 #The graph with every bridge open: the distance to the goal of the standings does not jump when the feed takes one down
 var _cost_to_goal: Dictionary = {}
 var _debug: Level01Debug
+#Whether each belt that turns around flows the way it was built, by its index in Level01Layout.TURNS, and whether it is about to turn
+var _belt_forward: Dictionary = {}
+var _belt_warned: Dictionary = {}
+#When each trampoline may throw again, by racer id and island: a racer does not bounce twice in the same jump
+var _pad_ready: Dictionary = {}
+#The flow of the slide each racer just left, by id: it keeps sliding a little over the island
+var _slide_carry: Dictionary = {}
+var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
 @onready var _world: Level01World = $World
 @onready var _level_input: LevelInput = $LevelInput
@@ -67,6 +87,7 @@ func _ready() -> void:
 		_rng.randomize()
 
 	graph = Level01Layout.build_graph()
+	bot_graph = Level01Layout.build_graph(true, false)
 	_measure_the_course()
 	var human_ids: Array[int] = []
 	for slot in participants:
@@ -122,6 +143,7 @@ func make_bot(appearance: BotAppearance, vertex: StringName) -> ChaserBot:
 	_actors.add_child(bot)
 	bot.setup(_context, appearance, vertex)
 	bot.move_speed = _any_player().move_speed * settings.bot_speed_ratio
+	bot.floor_snap_length = SLIDE_SNAP
 	bot.recalc_interval = settings.bot_recalc_interval
 	bot.lose_time = settings.bot_lose_time
 	bot.push_announced.connect(_on_push_announced)
@@ -132,6 +154,7 @@ func make_bot(appearance: BotAppearance, vertex: StringName) -> ChaserBot:
 #Closes or opens the bridge Bloquear works on for the bots; it stays walkable for the players
 func set_bridge_closed(closed: bool) -> void:
 	graph.set_edge_enabled(Level01Layout.BLOCK_EDGE[0], Level01Layout.BLOCK_EDGE[1], not closed)
+	bot_graph.set_edge_enabled(Level01Layout.BLOCK_EDGE[0], Level01Layout.BLOCK_EDGE[1], not closed)
 	_world.set_block_visual(closed)
 
 
@@ -197,6 +220,7 @@ func _register_racer(player: Player, shown_name: String, id: int) -> void:
 	locator.force_vertex(Level01Layout.START)
 	player.hit_taken.connect(_on_racer_hit.bind(player))
 	player.landed.connect(_on_racer_landed.bind(player))
+	player.floor_snap_length = SLIDE_SNAP
 
 
 func _locator_list() -> Array[PlayerLocator]:
@@ -211,7 +235,7 @@ func _any_player() -> Player:
 
 
 func _setup_context() -> void:
-	_context.graph = graph
+	_context.graph = bot_graph
 	_context.positions = Level01Layout.POSITIONS
 	var radii: Dictionary = {}
 	for id: StringName in Level01Layout.POSITIONS:
@@ -301,8 +325,13 @@ func _update_running(delta: float) -> void:
 			if phase != Phase.RUNNING:
 				return
 	_walk_finished()
+	_apply_turns()
 	_apply_belts()
 	_apply_hazards()
+	_apply_blocks()
+	_apply_balls()
+	_apply_pads()
+	_apply_launches()
 	_update_progress()
 	_update_context()
 	_update_prompt()
@@ -334,18 +363,29 @@ func _walk_finished() -> void:
 		player.move_input = Vector2(local.x, local.z)
 
 
-#A conveyor bridge drags whoever is on it, racers and bots alike
+#A conveyor bridge drags whoever is on it, racers and bots alike, and a slide carries them down much faster
 func _apply_belts() -> void:
 	for id: int in _players:
 		var player := _players[id] as Player
 		var locator := _locators[id] as PlayerLocator
 		var flow := Vector3.ZERO
 		if locator.on_bridge and player.is_on_floor():
-			flow = Level01Layout.belt_flow(locator.bridge_a, locator.bridge_b) * settings.belt_speed
+			flow = Level01Layout.drift(locator.bridge_a, locator.bridge_b, rules.elapsed, settings.belt_speed)
 		player.external_velocity = flow
+		_carry_slide(id, player, flow)
 	for bot in bots:
 		var pair := bot.crossing_pair()
-		bot.external_velocity = Level01Layout.belt_flow(pair[0], pair[1]) * settings.belt_speed if pair.size() == 2 else Vector3.ZERO
+		bot.external_velocity = Level01Layout.drift(pair[0], pair[1], rules.elapsed, settings.belt_speed) if pair.size() == 2 else Vector3.ZERO
+
+
+#Whoever comes off the end of a slide does not stop dead: the speed it had fades out over the island
+func _carry_slide(id: int, player: Player, flow: Vector3) -> void:
+	if flow.length() > settings.belt_speed + 0.5:
+		_slide_carry[id] = flow
+	elif _slide_carry.has(id):
+		if player.is_on_floor():
+			player.push_velocity = (_slide_carry[id] as Vector3) * SLIDE_CARRY
+		_slide_carry.erase(id)
 
 
 #The bars turn and whoever they touch is thrown; a jump goes over them
@@ -366,6 +406,109 @@ func _apply_hazards() -> void:
 		_hit_racer(player, direction * settings.spinner_push, SPINNER_STRENGTH, SPINNER_STUN)
 		if id == _local_id:
 			_hud.warn("¡Barra!")
+			_hud.flash(Palette.CORAL, 0.35, 0.4)
+
+
+#The belts turn around by the clock: the graph costs change and the arrows blink first
+func _apply_turns() -> void:
+	for index in Level01Layout.TURNS.size():
+		var turn: Dictionary = Level01Layout.TURNS[index]
+		var edge: Array = turn["edge"]
+		var warning := Level01Layout.belt_warning(turn, rules.elapsed)
+		if warning != _belt_warned.get(index, false):
+			_belt_warned[index] = warning
+			_world.warn_belt(edge[0], edge[1], warning)
+		var forward := Level01Layout.belt_forward(turn, rules.elapsed)
+		if forward == _belt_forward.get(index, true):
+			continue
+		_belt_forward[index] = forward
+		for listed in Level01Layout.EDGES:
+			if listed[0] == edge[0] and listed[1] == edge[1]:
+				var costs := Level01Layout.belt_costs(listed, forward)
+				graph.set_weights(edge[0], edge[1], costs.x, costs.y)
+				bot_graph.set_weights(edge[0], edge[1], costs.x, costs.y)
+		_world.set_belt_direction(edge[0], edge[1], forward)
+		_hint_once(&"turn", "Las cintas cambian de sentido")
+
+
+#A ball that rolls across an island throws whoever it touches; a jump goes over it
+func _apply_balls() -> void:
+	for id: int in _players:
+		var locator := _locators[id] as PlayerLocator
+		if locator.on_bridge:
+			continue
+		var player := _players[id] as Player
+		for ball: Dictionary in Level01Layout.BALLS:
+			if ball["island"] != locator.vertex:
+				continue
+			var floor_y: float = (Level01Layout.POSITIONS[ball["island"]] as Vector3).y
+			if not Level01Hazards.ball_hits(ball, rules.elapsed, player.global_position, player.global_position.y - floor_y):
+				continue
+			if not rules.register_hit(id):
+				continue
+			var push := Level01Hazards.ball_push(ball, rules.elapsed, player.global_position)
+			_hit_racer(player, push * settings.spinner_push * BALL_PUSH_SHARE, BALL_STRENGTH, BALL_STUN)
+			if id == _local_id:
+				_hud.warn("¡Bola!")
+				_hud.flash(Palette.CORAL, 0.35, 0.4)
+
+
+#A trampoline throws up whoever steps on it
+func _apply_pads() -> void:
+	var now := rules.elapsed
+	for id: int in _players:
+		var locator := _locators[id] as PlayerLocator
+		if locator.on_bridge or not Level01Layout.PADS.has(locator.vertex):
+			continue
+		var player := _players[id] as Player
+		var key := "%d|%s" % [id, locator.vertex]
+		if now < _pad_ready.get(key, 0.0) or not Level01Hazards.pad_hits(locator.vertex, player.global_position):
+			continue
+		_pad_ready[key] = now + PAD_REST
+		player.apply_push(Level01Hazards.pad_launch(locator.vertex, player.global_position))
+		_world.bounce_pad(locator.vertex)
+
+
+#A cannon throws whoever steps on its pad along the arc to its island
+func _apply_launches() -> void:
+	var now := rules.elapsed
+	for id: int in _players:
+		var locator := _locators[id] as PlayerLocator
+		var player := _players[id] as Player
+		if locator.flight_to != &"" and not player.is_flying():
+			locator.flight_to = &""
+		if locator.on_bridge or player.is_flying() or player.is_down():
+			continue
+		for launch in Level01Layout.launches_from(locator.vertex):
+			var key := "%d|%s>%s" % [id, launch["from"], launch["to"]]
+			if now < _pad_ready.get(key, 0.0) or not Level01Hazards.launch_hits(launch, player.global_position):
+				continue
+			_pad_ready[key] = now + PAD_REST
+			player.launch(Level01Hazards.launch_velocity(launch, _gravity))
+			locator.begin_flight(launch["to"])
+			_world.fire_cannon(launch)
+			if id == _local_id:
+				_hint_once(&"cannon", "¡Cañón! Vuelas hasta la isla %s" % launch["to"])
+
+
+#The blocks that sweep some bridges throw whoever they touch off to the side; a jump goes over them
+func _apply_blocks() -> void:
+	for id: int in _players:
+		var locator := _locators[id] as PlayerLocator
+		if not locator.on_bridge:
+			continue
+		var pusher := Level01Layout.pusher_of(locator.bridge_a, locator.bridge_b)
+		if pusher.is_empty():
+			continue
+		var player := _players[id] as Player
+		if not Level01Hazards.block_hits(pusher, rules.elapsed, player.global_position):
+			continue
+		if not rules.register_hit(id):
+			continue
+		_world.pulse_block(pusher)
+		_hit_racer(player, Level01Hazards.block_heading(pusher, rules.elapsed) * settings.spinner_push, SPINNER_STRENGTH, SPINNER_STUN)
+		if id == _local_id:
+			_hud.warn("¡Bloque!")
 			_hud.flash(Palette.CORAL, 0.35, 0.4)
 
 
@@ -481,16 +624,24 @@ func _on_place_changed(player_id: int) -> void:
 		return
 	var locator := _locators[player_id] as PlayerLocator
 	if locator.on_bridge:
+		if player_id == _local_id and Level01Layout.kind_of(locator.bridge_a, locator.bridge_b) == Level01Layout.SLIDE:
+			_hint_once(&"slide", "Tobogán: te lleva rápido, pero solo se baja")
 		return
 	var vertex := locator.vertex
 	if vertex == Level01Layout.GOAL:
 		rules.reach_goal(player_id)
-	elif vertex == Level01Layout.CHECKPOINT and rules.reach_checkpoint(player_id, vertex):
+	elif Level01Layout.CHECKPOINTS.has(vertex) and _is_further(vertex, player_id) and rules.reach_checkpoint(player_id, vertex):
+		ImpactFx.confetti(self, (Level01Layout.POSITIONS[vertex] as Vector3) + Vector3(0.0, 3.2, 0.0), 50, 70.0, 6.0)
 		if player_id == _local_id:
-			_world.set_checkpoint_active(true)
+			_world.set_checkpoint_active(vertex, true)
 			_hud.toast("Checkpoint guardado")
 	elif player_id == _local_id:
 		_station_hint(vertex)
+
+
+#Whether "vertex" is closer to the goal than the checkpoint that racer has saved, so going back never takes a checkpoint away
+func _is_further(vertex: StringName, player_id: int) -> bool:
+	return _cost_to_goal.get(vertex, INF) < _cost_to_goal.get(rules.state_of(player_id).checkpoint, INF)
 
 
 #Each station explains itself the first time the player reaches its island
@@ -504,6 +655,8 @@ func _station_hint(vertex: StringName) -> void:
 		text = "%s junto a la campana: los bots te ven menos %d s" % [InputHints.key_label(&"interact"), int(settings.silence_duration)]
 	elif vertex == stations[&"refuge"]:
 		text = "Entra a la burbuja y pulsa %s: nadie te empuja" % InputHints.key_label(&"interact")
+	elif not Level01Layout.launches_from(vertex).is_empty():
+		text = "Pisa el cañón del borde: te lanza por el aire a otra isla"
 	elif Level01Layout.SPINNERS.has(vertex):
 		text = "Una barra gira: salta sobre ella o rodéala"
 	if text != "":
@@ -552,6 +705,7 @@ func _retire(player_id: int) -> void:
 func _on_racer_finished(player_id: int, place: int) -> void:
 	_cheering[player_id] = Level01Layout.POSITIONS[Level01Layout.GOAL] + Vector3(_rng.randf_range(-2.5, 2.5), 0.0, _rng.randf_range(-2.5, 2.5))
 	var total := rules.racers_in_race()
+	(_players[player_id] as Player).victory_hop()
 	_world.celebrate_finish()
 	if player_id == _local_id:
 		var player := _players[player_id] as Player
@@ -595,6 +749,7 @@ func _on_feed_warned(a: StringName, b: StringName, seconds: float) -> void:
 
 func _on_feed_closed(a: StringName, b: StringName) -> void:
 	graph.set_edge_enabled(a, b, false)
+	bot_graph.set_edge_enabled(a, b, false)
 	_world.flash_bridge(a, b, false)
 	_world.set_bridge_open(a, b, false)
 	_world.cheer(1.8)
@@ -603,6 +758,7 @@ func _on_feed_closed(a: StringName, b: StringName) -> void:
 
 func _on_feed_reopened(a: StringName, b: StringName) -> void:
 	graph.set_edge_enabled(a, b, true)
+	bot_graph.set_edge_enabled(a, b, true)
 	_world.set_bridge_open(a, b, true)
 
 

@@ -10,6 +10,7 @@ const SIDE := 1.1
 var _radius := 12.0
 var _speed := 0.1
 var _turn := 0.0
+var _clock := 0.0
 var _hub_height := 0.0
 var _wheel: Node3D
 var _cabins: MultiMesh
@@ -41,7 +42,8 @@ func build(radius: float, colors: Array[Color]) -> void:
 
 
 func _process(delta: float) -> void:
-	_turn += _speed * delta
+	_clock += delta
+	_turn = _speed * _clock
 	_wheel.rotation.z = _turn
 	_place_cabins()
 

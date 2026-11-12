@@ -7,6 +7,7 @@ const STAR_SIZE := 64
 const STAR_POINTS := 5
 const DUST_COLOR := Color("f1e6ff")
 
+static var _heart: ImageTexture
 static var _star: ImageTexture
 static var _fade: Curve
 
@@ -142,6 +143,27 @@ static func confetti(parent: Node3D, at: Vector3, amount := 90, spread := 50.0, 
 	burst.mesh = mesh
 	burst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_release(parent, burst, at, burst.lifetime)
+
+
+#A plump heart with soft edges, white so a particle can tint it, drawn once
+static func heart_texture() -> ImageTexture:
+	if _heart != null:
+		return _heart
+	var image := Image.create(STAR_SIZE, STAR_SIZE, false, Image.FORMAT_RGBA8)
+	var samples := 4
+	for y in STAR_SIZE:
+		for x in STAR_SIZE:
+			var covered := 0
+			for sy in samples:
+				for sx in samples:
+					#The implicit curve of a heart, in a square that goes from -1.3 to 1.3
+					var px := ((x + (sx + 0.5) / samples) / STAR_SIZE - 0.5) * 2.6
+					var py := (0.5 - (y + (sy + 0.5) / samples) / STAR_SIZE) * 2.6 + 0.1
+					if pow(px * px + py * py - 1.0, 3.0) - px * px * py * py * py <= 0.0:
+						covered += 1
+			image.set_pixel(x, y, Color(1.0, 1.0, 1.0, float(covered) / (samples * samples)))
+	_heart = ImageTexture.create_from_image(image)
+	return _heart
 
 
 #A five-pointed star with soft edges, drawn once

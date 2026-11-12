@@ -54,6 +54,7 @@ func celebrate(point: Vector3) -> void:
 	reset_hit_state()
 	var to_point := point - global_position
 	_forced_yaw = atan2(to_point.x, to_point.z)
+	victory_hop()
 
 
 func _physics_process(delta: float) -> void:

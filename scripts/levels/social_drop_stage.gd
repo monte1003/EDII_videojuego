@@ -13,7 +13,7 @@ const STAND_WIDTH := 14.0
 const STAND_TIERS := 4
 const STAND_HEIGHT := -1.6
 #Where the cannons and the balloons stand: the four corners of the board, outside the screens
-const CORNER := Vector2(9.2, 7.1)
+const CORNER := Vector2(9.0, 9.0)
 const SEA_COUNT := 30
 const SEA_AREA := Rect2(-60.0, -45.0, 120.0, 80.0)
 const SEA_DEPTH := Vector2(-20.0, -9.0)
@@ -21,6 +21,21 @@ const SEA_COLORS: Array[Color] = [Color("ffffff"), Color("f3ecff"), Color("fde8f
 const HORIZON_COUNT := 14
 const FLOATING_ICONS := 10
 const CHEER_TIME := 1.6
+#Giant toy props on floating pedestals around the board; the speakers beat with the music, the others just float and turn a little
+const BEAT := 0.52
+const PROPS: Array[Dictionary] = [
+	{"id": &"speaker", "height": 6.5, "at": Vector3(17.5, -1.5, 8.5), "beat": true},
+	{"id": &"speaker", "height": 6.5, "at": Vector3(-17.5, -1.5, 8.5), "beat": true},
+	{"id": &"speaker", "height": 6.5, "at": Vector3(17.5, -1.5, -8.5), "beat": true},
+	{"id": &"speaker", "height": 6.5, "at": Vector3(-17.5, -1.5, -8.5), "beat": true},
+	{"id": &"trophy", "height": 8.0, "at": Vector3(0.0, -1.0, -21.0), "beat": false},
+	{"id": &"like_hand", "height": 6.0, "at": Vector3(20.0, -0.5, 17.0), "beat": false},
+	{"id": &"like_hand", "height": 6.0, "at": Vector3(-20.0, -0.5, 17.0), "beat": false},
+	{"id": &"camera", "height": 5.0, "at": Vector3(23.0, 0.0, -15.0), "beat": false},
+	{"id": &"camera", "height": 5.0, "at": Vector3(-23.0, 0.0, -15.0), "beat": false},
+	{"id": &"clapper", "height": 5.0, "at": Vector3(9.5, -1.0, 23.0), "beat": false},
+	{"id": &"clapper", "height": 5.0, "at": Vector3(-9.5, -1.0, 23.0), "beat": false},
+]
 
 var _rng := RandomNumberGenerator.new()
 var _crowd: CrowdField
@@ -30,6 +45,9 @@ var _floaters: Array[Dictionary] = []
 var _cards: Array[Node3D] = []
 var _cheer: Tween
 var _clock := 0.0
+#The props that float (holder, height they float at, phase) and the ones that beat (holder, glow ring)
+var _bobbers: Array[Dictionary] = []
+var _speakers: Array[Dictionary] = []
 
 
 func build(icons: Array[Texture2D]) -> void:
@@ -41,7 +59,11 @@ func build(icons: Array[Texture2D]) -> void:
 	_build_corners()
 	_build_backdrop()
 	_build_floating_icons(icons)
+	_build_props()
 	add_child(PartyKit.sparkles(Vector3(36.0, 10.0, 36.0), 70))
+	var likes := PartyKit.hearts(Vector3(26.0, 5.0, 26.0), 26)
+	likes.position = Vector3(0.0, 2.0, 0.0)
+	add_child(likes)
 
 
 #The crowd jumps higher for a moment, as when a drop is survived
@@ -63,6 +85,15 @@ func celebrate() -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
+	#The speakers throb on the beat and the pedestals of the props rock gently
+	var pulse := pow(1.0 - fposmod(_clock, BEAT) / BEAT, 4.0)
+	for entry in _speakers:
+		(entry["model"] as Node3D).scale = Vector3.ONE * (1.0 + 0.08 * pulse)
+		var ring := entry["ring"] as StandardMaterial3D
+		ring.emission_energy_multiplier = 0.8 + 2.4 * pulse
+	for entry in _bobbers:
+		var holder: Node3D = entry["holder"]
+		holder.position.y = entry["base_y"] + sin(_clock * 0.9 + entry["phase"]) * 0.45
 	for entry in _beams:
 		var pivot: Node3D = entry["pivot"]
 		var wave: float = _clock * entry["speed"] + entry["phase"]
@@ -226,6 +257,45 @@ func _build_backdrop() -> void:
 		item.rotation.y = atan2(-at.x, -at.z)
 		add_child(item)
 		_floaters.append({"node": item, "base_y": at.y, "yaw": item.rotation.y, "phase": _rng.randf() * TAU, "speed": _rng.randf_range(0.35, 0.8)})
+
+
+#The giant toy props: each one stands on a candy pedestal with a ring of light under it, floats a little and looks at the board
+func _build_props() -> void:
+	for spec in PROPS:
+		var at: Vector3 = spec["at"]
+		var holder := Node3D.new()
+		holder.position = at
+		holder.rotation.y = atan2(-at.x, -at.z)
+		add_child(holder)
+		var color := PartyKit.PALETTE[_rng.randi() % PartyKit.PALETTE.size()]
+		var base := CylinderMesh.new()
+		base.top_radius = 2.5
+		base.bottom_radius = 1.7
+		base.height = 1.3
+		base.radial_segments = 28
+		base.rings = 1
+		var pedestal := MeshInstance3D.new()
+		pedestal.mesh = base
+		pedestal.material_override = PartyKit.candy(PartyKit.WHITE, color, 14.0, 0.0, 0.1)
+		pedestal.position.y = -0.65
+		holder.add_child(pedestal)
+		var halo := TorusMesh.new()
+		halo.outer_radius = 1.95
+		halo.inner_radius = 1.65
+		halo.rings = 32
+		halo.ring_segments = 6
+		var glow := PartyKit.paint(color, 1.4, 0.4).duplicate() as StandardMaterial3D
+		var ring := MeshInstance3D.new()
+		ring.mesh = halo
+		ring.material_override = glow
+		ring.position.y = -1.4
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		holder.add_child(ring)
+		var model := PropKit.make_tall(spec["id"], spec["height"], Color.WHITE, false)
+		holder.add_child(model)
+		_bobbers.append({"holder": holder, "base_y": at.y, "phase": _rng.randf() * TAU})
+		if spec["beat"]:
+			_speakers.append({"model": model, "ring": glow})
 
 
 #Big app icons far around the set, turning slowly
