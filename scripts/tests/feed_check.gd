@@ -1,6 +1,7 @@
 extends SceneTree
 
-#Checks the tables of level 1, the feed events and the spinners with no scene; run: godot --headless --path . --script res://scripts/tests/feed_check.gd
+#Checks the tables of level 1, the feed events, the spinners, the turning belts, the slides, the cannons, the rolling balls and the trampolines with no scene;
+#run: godot --headless --path . --script res://scripts/tests/feed_check.gd
 
 var _failures := 0
 var _log: Array[String] = []
@@ -8,10 +9,18 @@ var _log: Array[String] = []
 
 func _initialize() -> void:
 	_check_layout()
+	_check_crossings()
 	_check_connectivity()
 	_check_routes()
 	_check_events()
+	_check_blocks()
 	_check_spinners()
+	_check_turns()
+	_check_balls()
+	_check_pads()
+	_check_slides()
+	_check_cannons()
+	_check_lanes()
 	print("feed_check: %s" % ("OK" if _failures == 0 else "%d FALLOS" % _failures))
 	quit(1 if _failures > 0 else 0)
 
@@ -25,21 +34,36 @@ func _expect(condition: bool, label: String) -> void:
 func _check_layout() -> void:
 	var graph := Level01Layout.build_graph()
 	var fragile := Level01Layout.fragile_edges()
-	_expect(fragile.size() == 4, "hay cuatro puentes frágiles")
+	_expect(fragile.size() == 5, "hay cinco puentes frágiles")
 	var disjoint := true
 	for edge in fragile:
 		var is_block: bool = (edge[0] == Level01Layout.BLOCK_EDGE[0] and edge[1] == Level01Layout.BLOCK_EDGE[1]) \
 			or (edge[1] == Level01Layout.BLOCK_EDGE[0] and edge[0] == Level01Layout.BLOCK_EDGE[1])
 		disjoint = disjoint and not is_block and graph.has_edge(edge[0], edge[1])
 	_expect(disjoint, "los puentes frágiles existen y ninguno es el que cierra Bloquear")
-	_expect(Level01Layout.kind_of(&"C", &"G") == Level01Layout.BELT and Level01Layout.kind_of(&"G", &"C") == Level01Layout.BELT, "C-G es una cinta, en los dos sentidos de la pregunta")
-	_expect(Level01Layout.kind_of(&"S", &"B") == Level01Layout.WALK and Level01Layout.kind_of(&"S", &"Z") == &"", "un puente común es común y uno que no existe no tiene tipo")
-	var flow := Level01Layout.belt_flow(&"J", &"L")
-	var toward_l: Vector3 = (Level01Layout.POSITIONS[&"L"] - Level01Layout.POSITIONS[&"J"])
-	toward_l.y = 0.0
-	_expect(flow.dot(toward_l.normalized()) > 0.99 and Level01Layout.belt_flow(&"L", &"J") == flow, "la cinta J-L fluye de J hacia L pregunte quien pregunte")
+	_expect(Level01Layout.kind_of(&"I", &"E") == Level01Layout.BELT and Level01Layout.kind_of(&"E", &"I") == Level01Layout.BELT, "I-E es una cinta, en los dos sentidos de la pregunta")
+	_expect(Level01Layout.kind_of(&"U", &"X") == Level01Layout.SLIDE and Level01Layout.kind_of(&"X", &"U") == Level01Layout.SLIDE, "U-X es un tobogán, en los dos sentidos de la pregunta")
+	_expect(Level01Layout.kind_of(&"S", &"B") == Level01Layout.WALK and Level01Layout.kind_of(&"S", &"M") == &"", "un puente común es común y uno que no existe no tiene tipo")
+	_expect(Level01Layout.kind_of(&"N", &"Q") == Level01Layout.NARROW and Level01Layout.width_of(Level01Layout.NARROW) < Level01Layout.width_of(Level01Layout.WALK),
+		"N-Q es un atajo angosto y los angostos miden menos que los comunes")
+	var flow := Level01Layout.belt_flow(&"I", &"E")
+	var toward_e: Vector3 = (Level01Layout.POSITIONS[&"E"] - Level01Layout.POSITIONS[&"I"])
+	toward_e.y = 0.0
+	_expect(flow.dot(toward_e.normalized()) > 0.99 and Level01Layout.belt_flow(&"E", &"I") == flow, "la cinta I-E fluye de I hacia E pregunte quien pregunte")
 	_expect(Level01Layout.belt_flow(&"S", &"B") == Vector3.ZERO, "un puente común no arrastra")
-	_expect(Level01Layout.STATIONS.size() == 3 and Level01Layout.POSITIONS.has(Level01Layout.CHECKPOINT), "tres estaciones y un checkpoint que existe")
+	var checkpoints_exist := Level01Layout.CHECKPOINTS.size() == 2
+	for vertex in Level01Layout.CHECKPOINTS:
+		checkpoints_exist = checkpoints_exist and Level01Layout.POSITIONS.has(vertex)
+	_expect(Level01Layout.STATIONS.size() == 3 and checkpoints_exist, "tres estaciones y dos checkpoints que existen")
+	var climbs := Level01Layout.POSITIONS[Level01Layout.START].y < Level01Layout.POSITIONS[&"S"].y and Level01Layout.POSITIONS[&"S"].y < Level01Layout.POSITIONS[Level01Layout.GOAL].y
+	_expect(climbs, "el recorrido sube de la salida a la meta")
+	var gentle := true
+	for edge in Level01Layout.EDGES:
+		var from: Vector3 = Level01Layout.POSITIONS[edge[0]]
+		var to: Vector3 = Level01Layout.POSITIONS[edge[1]]
+		var run := Vector2(to.x - from.x, to.z - from.z).length() - Level01Layout.radius_of(edge[0]) - Level01Layout.radius_of(edge[1])
+		gentle = gentle and absf(to.y - from.y) / run < tan(deg_to_rad(20.0))
+	_expect(gentle, "ninguna rampa pasa de 20 grados")
 	var apart := true
 	for id: StringName in Level01Layout.POSITIONS:
 		for other: StringName in Level01Layout.POSITIONS:
@@ -75,7 +99,7 @@ func _check_routes() -> void:
 	var best := graph.shortest_path(Level01Layout.START, Level01Layout.GOAL).cost
 	var found: Array[Array] = []
 	_walk(graph, Level01Layout.START, [Level01Layout.START], 0.0, best + 2.0, found)
-	_expect(found.size() >= 6, "hay %d caminos a menos de 2 del mejor: la carrera no tiene un solo camino" % found.size())
+	_expect(found.size() >= 4, "hay %d caminos a menos de 2 del mejor: la carrera no tiene un solo camino" % found.size())
 	var first_edges := {}
 	for route in found:
 		first_edges[route[2]] = true
@@ -134,6 +158,22 @@ func _check_events() -> void:
 	_expect(only_one.size() >= 3, "con el tiempo el feed tumba puentes distintos: %d" % only_one.size())
 
 
+func _check_blocks() -> void:
+	var pusher := Level01Layout.pusher_of(&"W", &"U")
+	_expect(not pusher.is_empty() and Level01Layout.pusher_of(&"U", &"W") == pusher, "el puente U-W tiene un bloque, se pregunte en el orden que se pregunte")
+	_expect(Level01Layout.pusher_of(&"S", &"B").is_empty(), "un puente sin bloque no lo tiene")
+	var start := Level01Hazards.block_center(pusher, 0.0)
+	var quarter := Level01Hazards.block_center(pusher, float(pusher["period"]) / 4.0)
+	_expect(start.distance_to(quarter) > 0.8, "el bloque cruza el puente de un lado a otro")
+	_expect(Level01Hazards.block_hits(pusher, 0.0, start), "quien está dentro del bloque recibe el golpe")
+	_expect(not Level01Hazards.block_hits(pusher, 0.0, start + Vector3(0.0, 1.5, 0.0)), "quien salta por encima no lo recibe")
+	_expect(not Level01Hazards.block_hits(pusher, 0.0, start + Vector3(0.0, 0.0, 6.0)), "lejos del bloque se está a salvo")
+	var heading := Level01Hazards.block_heading(pusher, 0.0)
+	_expect(absf(heading.length() - 1.0) < 0.01 and absf(heading.y) < 0.001, "el bloque empuja hacia un lado del puente")
+	var coming := Level01Hazards.block_time_to_hit(pusher, 0.0, start + Vector3(0.0, 0.0, 6.0), Vector3.ZERO, 0.0, 2.0)
+	_expect(coming == -1.0 or coming >= 0.0, "predecir el golpe de quien espera siempre da un tiempo o -1")
+
+
 func _check_spinners() -> void:
 	var spinner: Dictionary = {"arm": 4.4, "speed": 1.3, "phase": 0.0}
 	var centre := Vector3(10.0, 0.0, -20.0)
@@ -152,5 +192,316 @@ func _check_spinners() -> void:
 	var coming := Level01Hazards.time_to_hit(centre, spinner, 0.0, across, 2.0)
 	_expect(coming > 0.9 and coming < 1.3, "el tiempo hasta el golpe de quien espera de lado ronda lo que tarda un cuarto de vuelta: %.2f" % coming)
 	_expect(Level01Hazards.time_to_hit(centre, spinner, 0.0, across, 0.3) == -1.0, "si no llega dentro del plazo, devuelve -1")
-	_expect(Level01Hazards.angle_at(Level01Layout.SPINNERS[&"G"], 1.0) < Level01Layout.SPINNERS[&"G"]["phase"],
-		"la barra de la isla G gira al revés que la de la isla E")
+	_expect(Level01Hazards.angle_at(Level01Layout.SPINNERS[&"X"], 1.0) < Level01Layout.SPINNERS[&"X"]["phase"],
+		"la barra de la isla X gira al revés que la de la isla E")
+
+
+func _check_turns() -> void:
+	var good := Level01Layout.TURNS.size() == 1
+	var swaps := true
+	var warns := true
+	for turn: Dictionary in Level01Layout.TURNS:
+		var edge: Array = turn["edge"]
+		var phase: float = turn["phase"]
+		var period: float = turn["period"]
+		good = good and Level01Layout.kind_of(edge[0], edge[1]) == Level01Layout.BELT and period > Level01Layout.TURN_WARNING * 3.0
+		swaps = swaps and Level01Layout.belt_forward(turn, 0.0) and Level01Layout.belt_forward(turn, phase - 0.01)
+		swaps = swaps and not Level01Layout.belt_forward(turn, phase + 0.01) and Level01Layout.belt_forward(turn, phase + period + 0.01)
+		swaps = swaps and not Level01Layout.belt_forward(turn, phase + 2.0 * period + 0.01)
+		var before := Level01Layout.belt_flow(edge[0], edge[1], phase - 0.01)
+		var after := Level01Layout.belt_flow(edge[0], edge[1], phase + 0.01)
+		swaps = swaps and before.dot(after) < -0.99
+		warns = warns and Level01Layout.belt_warning(turn, phase - 1.0) and not Level01Layout.belt_warning(turn, phase - 3.0)
+		warns = warns and not Level01Layout.belt_warning(turn, phase + 1.0) and Level01Layout.belt_warning(turn, phase + period - 1.0)
+	_expect(good, "las cintas que giran son cintas y su periodo es mucho mayor que el aviso")
+	_expect(swaps, "cada cinta fluye al derecho, se invierte en su fase, vuelve a su periodo y su flujo se niega")
+	_expect(warns, "las flechas avisan en el segundo y medio antes de cada cambio y no después")
+	var graph := Level01Layout.build_graph()
+	var version := graph.version
+	var edge: Array = [&"I", &"E", 2.5, 5.5, Level01Layout.BELT]
+	var flipped := Level01Layout.belt_costs(edge, false)
+	_expect(Level01Layout.belt_costs(edge, true) == Vector2(2.5, 5.5) and flipped == Vector2(5.5, 2.5), "al invertirse la cinta los dos costes se intercambian")
+	var before := graph.shortest_path(&"I", &"E").cost
+	_expect(graph.set_weights(&"I", &"E", flipped.x, flipped.y) and graph.version > version, "cambiar los costes sube la versión del grafo")
+	_expect(graph.weight_of(&"I", &"E") == 5.5 and graph.weight_of(&"E", &"I") == 2.5, "I-E ahora cuesta 5,5 y E-I 2,5")
+	_expect(graph.shortest_path(&"I", &"E").cost >= before, "ir de I a E cuesta lo mismo o más con la cinta en contra")
+	var same := graph.version
+	graph.set_weights(&"I", &"E", flipped.x, flipped.y)
+	_expect(graph.version == same and not graph.set_weights(&"J", &"M", 1.0, 1.0), "repetir los mismos costes no cambia la versión y un puente que no existe se rechaza")
+
+
+func _check_balls() -> void:
+	var placed := true
+	var motion := true
+	var hits := true
+	var busy := _busy_islands()
+	for ball: Dictionary in Level01Layout.BALLS:
+		var island: StringName = ball["island"]
+		var half := Level01Hazards.ball_half_lane(ball)
+		var period: float = ball["period"]
+		placed = placed and Level01Layout.POSITIONS.has(island) and not busy.has(island) and half >= 2.0
+		placed = placed and half + Level01Layout.BALL_RADIUS <= Level01Layout.radius_of(island)
+		#Over one period the ball reaches both ends of its diameter, passes the middle and turns around
+		var low := 0.0
+		var high := 0.0
+		var turns := 0
+		var last := Level01Hazards.ball_heading(ball, 0.0)
+		var time := 0.0
+		while time < period:
+			var share := Level01Hazards.ball_share(ball, time)
+			low = minf(low, share)
+			high = maxf(high, share)
+			var heading := Level01Hazards.ball_heading(ball, time)
+			if heading.dot(last) < 0.0:
+				turns += 1
+			last = heading
+			time += 0.01
+		motion = motion and period >= 3.0 and period <= 8.0 and low < -0.99 and high > 0.99 and turns == 2
+		var middle := _middle_time(ball)
+		var centre := Level01Hazards.ball_center(ball, middle)
+		var floor_y: float = (Level01Layout.POSITIONS[island] as Vector3).y
+		var on_floor := centre - Vector3(0.0, Level01Layout.BALL_RADIUS, 0.0)
+		hits = hits and Level01Hazards.ball_hits(ball, middle, on_floor, 0.0)
+		hits = hits and not Level01Hazards.ball_hits(ball, middle, on_floor, Level01Hazards.BALL_CLEAR + 0.2)
+		hits = hits and not Level01Hazards.ball_hits(ball, middle, on_floor + Vector3(3.0, 0.0, 0.0).rotated(Vector3.UP, float(ball["angle"]) + PI / 2.0), 0.0)
+		hits = hits and absf(centre.y - floor_y - Level01Layout.BALL_RADIUS) < 0.001
+	_expect(placed, "cada bola rueda por una isla sin barra, estación ni checkpoint y su diámetro cabe en la isla")
+	_expect(motion, "cada bola va y viene sin parar por su diámetro: llega a los dos extremos y da la vuelta dos veces por periodo")
+	_expect(hits, "la bola golpea a quien está en su camino, no a quien salta ni a quien está a un lado")
+
+
+func _check_pads() -> void:
+	var placed := true
+	var apart := true
+	var launch := true
+	var busy := _busy_islands()
+	for ball: Dictionary in Level01Layout.BALLS:
+		busy.append(ball["island"])
+	for id in Level01Layout.PADS:
+		placed = placed and Level01Layout.POSITIONS.has(id) and not busy.has(id)
+		var centre: Vector3 = Level01Layout.POSITIONS[id]
+		var spot := Level01Layout.pad_position(id)
+		placed = placed and Vector2(spot.x - centre.x, spot.z - centre.z).length() + 1.5 <= Level01Layout.radius_of(id)
+		for edge in Level01Layout.EDGES:
+			if edge[0] != id and edge[1] != id:
+				continue
+			var other: StringName = edge[1] if edge[0] == id else edge[0]
+			var toward: Vector3 = Level01Layout.POSITIONS[other] - centre
+			var away := spot - centre
+			apart = apart and absf(Vector2(toward.x, toward.z).angle_to(Vector2(away.x, away.z))) > 0.5
+		launch = launch and Level01Hazards.pad_hits(id, spot) and not Level01Hazards.pad_hits(id, spot + Vector3(2.5, 0.0, 0.0))
+		launch = launch and not Level01Hazards.pad_hits(id, spot + Vector3(0.0, 1.5, 0.0))
+		launch = launch and absf(Level01Hazards.pad_launch(id, spot + Vector3(0.5, 0.0, 0.0)).y - Level01Hazards.PAD_LIFT) < 0.001
+	_expect(placed, "cada trampolín está en una isla sin barra, bola ni estación, a distancia del centro y dentro de la isla")
+	_expect(apart, "ningún trampolín queda en la línea de un puente: está en la parte quieta del borde")
+	_expect(launch, "el trampolín lanza hacia arriba a quien lo pisa y no a quien está lejos ni a quien ya va por el aire")
+	var surge_ok := true
+	var surged := 0
+	for id: StringName in Level01Layout.SPINNERS:
+		var spinner: Dictionary = Level01Layout.SPINNERS[id]
+		if not spinner.has("surge"):
+			continue
+		surged += 1
+		var slowest := INF
+		var fastest := 0.0
+		var time := 0.0
+		while time < 40.0:
+			var speed := (Level01Hazards.angle_at(spinner, time + 0.05) - Level01Hazards.angle_at(spinner, time)) / 0.05
+			surge_ok = surge_ok and speed * float(spinner["speed"]) > 0.0
+			slowest = minf(slowest, absf(speed))
+			fastest = maxf(fastest, absf(speed))
+			time += 0.05
+		surge_ok = surge_ok and fastest / slowest > 1.8
+	_expect(surged == 3 and surge_ok, "tres barras tienen arranques: nunca se paran ni dan marcha atrás y su velocidad cambia al menos al doble")
+
+
+#A slide only goes down: it leaves a high island for a lower one, carries along its direction and has no arc back in the graph
+func _check_slides() -> void:
+	var graph := Level01Layout.build_graph()
+	var count := 0
+	var downhill := true
+	var carries := true
+	var one_way := true
+	for edge in Level01Layout.EDGES:
+		if edge[4] != Level01Layout.SLIDE:
+			continue
+		count += 1
+		var from: Vector3 = Level01Layout.POSITIONS[edge[0]]
+		var to: Vector3 = Level01Layout.POSITIONS[edge[1]]
+		downhill = downhill and from.y - to.y >= 4.0
+		var flow := Level01Layout.drift(edge[0], edge[1], 0.0, 3.4)
+		var toward := Vector3(to.x - from.x, 0.0, to.z - from.z).normalized()
+		carries = carries and flow.dot(toward) > Level01Layout.SLIDE_SPEED * 0.99 and Level01Layout.drift(edge[1], edge[0], 0.0, 3.4) == flow
+		one_way = one_way and graph.has_edge(edge[0], edge[1]) and not graph.has_edge(edge[1], edge[0])
+	_expect(count == 2, "hay dos toboganes")
+	_expect(downhill, "cada tobogán baja al menos 4 m")
+	_expect(carries, "el tobogán arrastra hacia abajo a la velocidad de su tabla, se pregunte en el orden que se pregunte")
+	_expect(one_way, "el grafo solo tiene el arco de bajada de cada tobogán")
+	_expect(Level01Layout.drift(&"S", &"B", 0.0, 3.4) == Vector3.ZERO and is_equal_approx(Level01Layout.drift(&"R", &"U", 0.0, 3.4).length(), 3.4),
+		"un puente común no arrastra y una cinta arrastra a la velocidad de la cinta")
+
+
+#A cannon: a pad on its island, away from the bridges, that throws along an arc that ends in the middle of the island it lands on, over everything else
+func _check_cannons() -> void:
+	var gravity := 9.8
+	var placed := true
+	var apart := true
+	var lands := true
+	var clear := true
+	var hits := true
+	var graph := Level01Layout.build_graph()
+	var arcs := true
+	var busy: Array[StringName] = []
+	busy.append_array(Level01Layout.SPINNERS.keys())
+	for ball: Dictionary in Level01Layout.BALLS:
+		busy.append(ball["island"])
+	for launch: Dictionary in Level01Layout.LAUNCHES:
+		var from: StringName = launch["from"]
+		var to: StringName = launch["to"]
+		var centre: Vector3 = Level01Layout.POSITIONS[from]
+		var spot := Level01Layout.launch_pad(launch)
+		placed = placed and Level01Layout.POSITIONS.has(from) and Level01Layout.POSITIONS.has(to) and not busy.has(to)
+		placed = placed and Vector2(spot.x - centre.x, spot.z - centre.z).length() + Level01Hazards.LAUNCH_REACH <= Level01Layout.radius_of(from)
+		placed = placed and Level01Layout.launch_of(from, to) == launch and Level01Layout.launch_of(to, from).is_empty()
+		for edge in Level01Layout.EDGES:
+			if edge[0] != from and edge[1] != from:
+				continue
+			var other: StringName = edge[1] if edge[0] == from else edge[0]
+			var toward: Vector3 = Level01Layout.POSITIONS[other] - centre
+			apart = apart and absf(Vector2(toward.x, toward.z).angle_to(Vector2(spot.x - centre.x, spot.z - centre.z))) > 0.5
+		arcs = arcs and graph.has_edge(from, to) and not graph.has_edge(to, from) and graph.weight_of(from, to) == launch["cost"]
+		#The same steps the body takes: gravity first, then the move
+		var velocity := Level01Hazards.launch_velocity(launch, gravity)
+		var point := spot
+		var time := 0.0
+		var step := 1.0 / 60.0
+		var top := spot.y
+		while time < float(launch["time"]) - step / 2.0:
+			velocity.y -= gravity * step
+			point += velocity * step
+			time += step
+			top = maxf(top, point.y)
+			if not _over_the_course(point, from, to):
+				clear = false
+				print("  arco de %s a %s a %.2f s en %s" % [from, to, time, point])
+		var landing := Level01Layout.launch_landing(launch)
+		lands = lands and Vector2(point.x - landing.x, point.z - landing.z).length() < 1.0 and absf(point.y - landing.y) < 0.6 and top > maxf(spot.y, landing.y) + 1.0
+		hits = hits and Level01Hazards.launch_hits(launch, spot) and not Level01Hazards.launch_hits(launch, spot + Vector3(2.5, 0.0, 0.0))
+		hits = hits and not Level01Hazards.launch_hits(launch, spot + Vector3(0.0, 1.5, 0.0))
+	_expect(Level01Layout.LAUNCHES.size() == 3, "hay tres cañones")
+	_expect(placed and arcs, "cada cañón está en una isla, a distancia del centro, y aterriza en una isla sin barra ni bola; en el grafo solo va en un sentido")
+	_expect(apart, "ningún cañón queda en la línea de un puente")
+	_expect(lands, "el arco termina a menos de 1 m del centro de la isla de llegada, a su altura, y pasa más de 1 m por encima de las dos islas")
+	_expect(clear, "durante el vuelo el arco pasa 3 m por encima de toda isla y puente que sobrevuela")
+	_expect(hits, "el cañón lanza a quien pisa su base y no a quien está lejos ni a quien ya va por el aire")
+
+
+#Whether a point of a flight is at least 3 m over every island and bridge that lies under it, apart from the islands it leaves and lands on
+func _over_the_course(point: Vector3, from: StringName, to: StringName) -> bool:
+	var flat := Vector2(point.x, point.z)
+	#Near the two islands the arc is taking off or coming down onto them
+	var start: Vector3 = Level01Layout.POSITIONS[from]
+	var end: Vector3 = Level01Layout.POSITIONS[to]
+	if flat.distance_to(Vector2(start.x, start.z)) < Level01Layout.radius_of(from) + 3.0 or flat.distance_to(Vector2(end.x, end.z)) < Level01Layout.radius_of(to) + 6.0:
+		return true
+	for id: StringName in Level01Layout.POSITIONS:
+		if id == from or id == to:
+			continue
+		var centre: Vector3 = Level01Layout.POSITIONS[id]
+		if flat.distance_to(Vector2(centre.x, centre.z)) < Level01Layout.radius_of(id) + 1.0 and point.y < centre.y + 3.0:
+			return false
+	for edge in Level01Layout.EDGES:
+		var line := _bridge_line(edge)
+		var near := Geometry2D.get_closest_point_to_segment(flat, line[0], line[1])
+		var higher := maxf((Level01Layout.POSITIONS[edge[0]] as Vector3).y, (Level01Layout.POSITIONS[edge[1]] as Vector3).y)
+		if near.distance_to(flat) < Level01Layout.width_of(edge[4]) / 2.0 + 1.0 and point.y < higher + 3.0 + Level01Layout.SLIDE_RAIL:
+			return false
+	return true
+
+
+#The three ways of each part take about the same: their costs in the graph are within a couple of units of each other
+func _check_lanes() -> void:
+	var graph := Level01Layout.build_graph()
+	var parts := {
+		"primera parte": [[&"N", &"Q", &"W", &"Z", &"S"], [&"N", &"O", &"R", &"U", &"X", &"Z", &"S"], [&"N", &"P", &"T", &"Y", &"Z", &"S"]],
+		"segunda parte": [[&"S", &"B", &"I", &"L", &"M"], [&"S", &"A", &"D", &"K", &"M"], [&"S", &"C", &"G", &"J", &"L", &"M"]],
+	}
+	for part: String in parts:
+		var lowest := INF
+		var highest := 0.0
+		for lane: Array in parts[part]:
+			var cost := 0.0
+			for index in range(1, lane.size()):
+				cost += graph.weight_of(lane[index - 1], lane[index])
+			lowest = minf(lowest, cost)
+			highest = maxf(highest, cost)
+		_expect(highest - lowest <= 2.5, "los tres caminos de la %s cuestan casi lo mismo: de %.1f a %.1f" % [part, lowest, highest])
+
+
+#The islands that already have something to do
+func _busy_islands() -> Array[StringName]:
+	var busy: Array[StringName] = []
+	busy.append_array(Level01Layout.SPINNERS.keys())
+	busy.append_array(Level01Layout.STATIONS.values())
+	busy.append_array(Level01Layout.CHECKPOINTS)
+	busy.append_array([Level01Layout.START, Level01Layout.GOAL])
+	return busy
+
+
+#A moment in which the ball passes through the middle of the island
+func _middle_time(ball: Dictionary) -> float:
+	var time := 0.0
+	while absf(Level01Hazards.ball_share(ball, time)) > 0.02:
+		time += 0.005
+	return time
+
+
+#No two bridges cross or overlap, and no bridge goes through an island that is not its end: bodies that share a place trap a racer
+func _check_crossings() -> void:
+	var crossings := 0
+	var through := 0
+	var tight := 0
+	var edges: Array = Level01Layout.EDGES
+	for first in edges.size():
+		var line_a := _bridge_line(edges[first])
+		for second in range(first + 1, edges.size()):
+			var shares: bool = edges[first][0] == edges[second][0] or edges[first][0] == edges[second][1] 				or edges[first][1] == edges[second][0] or edges[first][1] == edges[second][1]
+			if shares:
+				continue
+			var line_b := _bridge_line(edges[second])
+			if Geometry2D.segment_intersects_segment(line_a[0], line_a[1], line_b[0], line_b[1]) != null:
+				crossings += 1
+		for id: StringName in Level01Layout.POSITIONS:
+			if id == edges[first][0] or id == edges[first][1]:
+				continue
+			var centre := Vector2(Level01Layout.POSITIONS[id].x, Level01Layout.POSITIONS[id].z)
+			var near := Geometry2D.get_closest_point_to_segment(centre, line_a[0], line_a[1])
+			if near.distance_to(centre) < Level01Layout.radius_of(id) + Level01Layout.width_of(edges[first][4]) / 2.0 + 0.5:
+				through += 1
+	for id: StringName in Level01Layout.POSITIONS:
+		var centre: Vector3 = Level01Layout.POSITIONS[id]
+		var angles: Array[float] = []
+		var widths: Array[float] = []
+		for edge in edges:
+			if edge[0] == id or edge[1] == id:
+				var other: Vector3 = Level01Layout.POSITIONS[edge[1] if edge[0] == id else edge[0]]
+				angles.append(atan2(other.z - centre.z, other.x - centre.x))
+				widths.append(Level01Layout.width_of(edge[4]))
+		for a in angles.size():
+			for b in range(a + 1, angles.size()):
+				var clearance := 2.0 * Level01Layout.radius_of(id) * sin(absf(angle_difference(angles[a], angles[b])) / 2.0)
+				if clearance < (widths[a] + widths[b]) / 2.0 + 0.1:
+					tight += 1
+	_expect(crossings == 0, "ningún puente cruza a otro en planta (%d cruces)" % crossings)
+	_expect(through == 0, "ningún puente pasa por una isla que no es la suya (%d)" % through)
+	_expect(tight == 0, "los puentes de una isla salen con espacio entre ellos y no se montan (%d pares justos)" % tight)
+
+
+#The bridge as a segment on the ground, from the rim of one island to the rim of the other
+func _bridge_line(edge: Array) -> Array[Vector2]:
+	var from: Vector3 = Level01Layout.POSITIONS[edge[0]]
+	var to: Vector3 = Level01Layout.POSITIONS[edge[1]]
+	var start := Vector2(from.x, from.z)
+	var finish := Vector2(to.x, to.z)
+	var along := (finish - start).normalized()
+	return [start + along * Level01Layout.radius_of(edge[0]), finish - along * Level01Layout.radius_of(edge[1])]

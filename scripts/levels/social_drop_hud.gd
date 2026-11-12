@@ -1,46 +1,49 @@
 class_name SocialDropHud
 extends RoundHud
 
-#The SocialDrop screen: the clock and, when the screens stop, the icon to stand on
+#The SocialDrop screen: time left, the round and what to do now, and the controls
 
-const ICON_SIZE := 68.0
-
-var _target: VBoxContainer
-var _target_icon: TextureRect
-var _target_name: Label
+var _round_label: Label
+var _status_label: Label
+var _hint_label: RichTextLabel
 
 
 func _ready() -> void:
-	toast_hold = 2.0
+	toast_hold = 2.6
 	warn_delay = 0.4
+	warn_fade = 0.6
+	low_time_seconds = 10
+	low_time_color = Palette.TEAL
 	super()
-	_target = VBoxContainer.new()
-	_target.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_target.add_theme_constant_override("separation", 2)
-	_target.modulate.a = 0.0
-	_top.add_child(_target)
-	_top.move_child(_target, 1)
-	_target_icon = TextureRect.new()
-	_target_icon.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
-	_target_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_target_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_target_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_target_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_target.add_child(_target_icon)
-	_target_name = _text("", UiKit.BUTTON_FONT, 13)
-	_target_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_target.add_child(_target_name)
+	_round_label = _text("RONDA –", UiKit.BODY_FONT, 18)
+	_round_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_top.add_child(_round_label)
+	_top.move_child(_round_label, 1)
+	_status_label = _text("", UiKit.BUTTON_FONT, 24)
+	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_top.add_child(_status_label)
+	_top.move_child(_status_label, 2)
+	_hint_label = RichTextLabel.new()
+	_hint_label.bbcode_enabled = true
+	_hint_label.fit_content = true
+	_hint_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_hint_label.scroll_active = false
+	_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hint_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_hint_label.add_theme_font_override("normal_font", UiKit.BUTTON_FONT)
+	_hint_label.add_theme_font_size_override("normal_font_size", 22)
+	_hint_label.add_theme_color_override("default_color", Palette.PAPER)
+	_bottom.add_child(_hint_label)
 
 
-#The icon that stays, shown from the moment the screens stop until the tiles fall
-func show_target(texture: Texture2D, shown_name: String) -> void:
-	_target_icon.texture = texture
-	_target_name.text = shown_name.to_upper()
-	_target_icon.pivot_offset = Vector2.ONE * ICON_SIZE / 2.0
-	_target_icon.scale = Vector2.ONE * 1.35
-	_target.modulate.a = 1.0
-	create_tween().tween_property(_target_icon, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+func set_hint(markup: String) -> void:
+	_hint_label.text = markup
 
 
-func hide_target() -> void:
-	create_tween().tween_property(_target, "modulate:a", 0.0, 0.25)
+#0 before the first spin
+func set_round(number: int) -> void:
+	_round_label.text = "RONDA %d" % number if number > 0 else "RONDA –"
+
+
+func set_status(text: String) -> void:
+	_status_label.text = text

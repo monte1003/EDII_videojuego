@@ -16,7 +16,7 @@ static func level_one(settings: Level01Settings, bots: Array[BotAppearance]) -> 
 	return [
 		{
 			"title": "Tu misión",
-			"body": "Cruza las islas flotantes hasta la isla %s, la del arco. Si juegan varios, gana quien llega primero.
+			"body": "Sube por las islas flotantes y cruza todo el recorrido hasta la isla %s, la del arco. Si juegan varios, gana quien llega primero.
 
 Cuando alguien llega, la meta se cierra en %d segundos. El tiempo máximo es %s. Si caes al vacío pierdes 1 de tus %d intentos y vuelves a la salida, o al checkpoint si ya pasaste por él." % [
 				key.call(Level01Layout.GOAL), int(settings.finish_window), minutes, settings.attempts],
@@ -25,14 +25,34 @@ Cuando alguien llega, la meta se cierra en %d segundos. El tiempo máximo es %s.
 			"title": "El feed cambia",
 			"body": "Los puentes color coral son frágiles: cada cierto tiempo uno parpadea y %d segundos después cae por unos %d. Pasados %d segundos del inicio puede haber dos caídos a la vez. Si estás encima, caes con él.
 
-Hay siete caminos casi igual de buenos: cuando uno se cierra, los bots calculan otro, y tú también." % [
+Casi siempre hay varios caminos parecidos: cuando uno se cierra, los bots calculan otro, y tú también." % [
 				int(settings.feed_warning), int(settings.feed_duration), int(settings.feed_first + settings.feed_extra_delay)],
+		},
+		{
+			"title": "Tres caminos",
+			"body": "En cada parte del recorrido hay tres caminos. El del medio es el más recto, pero tiene puentes angostos y barras que giran.
+
+Los de los lados dan más vueltas y lo compensan: un tobogán azul te baja rápido pero solo en ese sentido, y un cañón dorado en el borde de una isla (sigue las flechas del piso) te lanza por el aire, a través de los aros, hasta otra isla. Los tres tardan casi lo mismo: elige el que mejor te salga.",
 		},
 		{
 			"title": "Cintas y barras",
 			"body": "Las cintas de flechas te arrastran: a favor van rápido y en contra cuestan el doble. El costo de cada puente que ves en F3 lo cuenta.
 
 En las islas con el borde rosado gira una barra por todo el piso. Salta sobre ella cuando se acerque o rodéala por el borde, sin caerte.",
+		},
+		{
+			"title": "Atajos y bloques",
+			"body": "Los puentes angostos son atajos: acortan mucho el camino, pero casi no dejan espacio para un empujón.
+
+En algunos puentes anchos va y viene un bloque de rayas. Si te toca, te lanza al vacío: pasa cuando se aleje o salta sobre él.",
+		},
+		{
+			"title": "Todo se mueve",
+			"body": "Una cinta cambia de sentido cada cierto tiempo y sus flechas parpadean un instante antes: el costo de ese puente cambia con ella.
+
+En algunas islas rueda una bola de caramelo por una franja rosada que se enciende antes de que salga; salta cuando llegue. Algunas barras aceleran y frenan.
+
+Los trampolines de colores, en la parte quieta del borde de algunas islas, te lanzan al aire: sirven para ver el camino o para esquivar.",
 		},
 		{
 			"title": "Los bots molestos",
@@ -62,9 +82,9 @@ Mirar: %s
 Usar una estación: %s
 Pausa: %s · Esta ayuda: %s
 
-Sobre cada lugar importante flota su nombre. Al pasar por la isla %s (%s) se guarda tu progreso. A la derecha ves quién va primero." % [
+Sobre cada lugar importante flota su nombre. Al pasar por las islas %s (%s) se guarda tu progreso. A la derecha ves quién va primero." % [
 				keys, InputHints.key_markup(&"jump"), key.call("MOUSE"), key.call(interact),
-				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help"), key.call(Level01Layout.CHECKPOINT), key.call("CHECKPOINT")],
+				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help"), " y ".join(Level01Layout.CHECKPOINTS), key.call("CHECKPOINT")],
 		},
 	]
 
@@ -99,41 +119,29 @@ Pausa: %s · Esta ayuda: %s" % [
 
 static func social_drop(config: Dictionary) -> Array[Dictionary]:
 	var key := InputHints.markup
+	var keys := "%s %s %s %s" % [
+		InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
+		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")]
 	return [
 		{
 			"title": "Tu misión",
-			"body": "Estás sobre una plataforma de %dx%d cartas, cada una con el ícono de una app. A cada lado hay una pantalla gigante.
-
-Aguanta %d segundos sin caerte para ganar." % [
+			"body": "Estás sobre una plataforma de %dx%d casillas, cada una con el ícono de una red social. Frente a ti hay una pantalla gigante.\n\nAguanta %d segundos sin caerte para ganar." % [
 				config["columns"], config["rows"], int(config["time_limit"])],
 		},
 		{
-			"title": "Memoriza",
-			"body": "Al empezar cada ronda las cartas muestran su ícono y las pantallas cuentan hacia atrás desde %d.
-
-Cuando llegan a cero las cartas se voltean y quedan tapadas con un %s. La pantalla muestra el ícono que tienes que pisar: corre a la carta que lo tenía, %s." % [
-				int(config["memorize_seconds"]), key.call("?"), key.call("las demás caen")],
-		},
-		{
-			"title": "Cae el resto",
-			"body": "Las cartas que van a caer parpadean en rojo justo antes. La tuya se voltea y muestra su ícono.
-
-%d segundos después vuelven todas, en otro orden, y se repite. Cada vez tienes menos tiempo para memorizar y para correr." % int(config["rest_seconds"]),
+			"title": "La pantalla",
+			"body": "La pantalla cambia de ícono muy rápido. Cuando el sonido se vuelve más agudo está por detenerse.\n\nEl ícono en el que se detiene es el que se queda: corre a una casilla con ese ícono, %s. Las que van a caer parpadean en rojo justo antes.\n\n%d segundos después vuelven todas en otro orden y se repite. Cada vez tienes menos tiempo para moverte." % [
+				key.call("las demás desaparecen"), int(config["rest_seconds"])],
 		},
 		{
 			"title": "Cohetes",
-			"body": "Cuando quedan %d segundos empiezan a pasar cohetes de lado a lado, cada uno por una de las %d filas.
-
-Antes de que salga, su fila %s. Si el cohete te alcanza, te derriba de la plataforma: cámbiate de fila o salta justo cuando pase." % [
+			"body": "Cuando quedan %d segundos empiezan a pasar cohetes de lado a lado, cada uno por una de las %d filas.\n\nAntes de que salga, su fila %s. Si el cohete te alcanza, te derriba de la plataforma: cámbiate de fila o salta justo cuando pase." % [
 				int(config["rocket_seconds_left"]), config["rows"], key.call("parpadea en rojo")],
 		},
 		{
 			"title": "Cómo se maneja",
-			"body": "Moverte: %s
-Mirar: %s
-Saltar: %s
-Pausa: %s · Esta ayuda: %s" % [
-				InputHints.move_markup(), key.call("MOUSE"), InputHints.key_markup(&"jump"),
+			"body": "Moverte: %s\nSaltar: %s\nPausa: %s · Esta ayuda: %s\n\nLa cámara está fija: ves todo el tablero desde arriba." % [
+				key.call(keys), InputHints.key_markup(&"jump"),
 				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
 		},
 	]

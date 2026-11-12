@@ -139,6 +139,10 @@ func advance(delta: float, flow: float) -> void:
 
 
 #True when a body standing at "point" (its feet) with a round footprint of "radius" and "body_height" touches the hit box
+#Circle (the body footprint) against box on the ground plane: the gap from the box to the circle centre on each
+#axis (0 when inside) is compared with the radius, both squared so there is no square root. Same idea as the
+#sphere-vs-AABB test in C. Ericson, "Real-Time Collision Detection", ch. 5, plus a height check. Adapted and
+#written by the team; Godot does not take part here
 func contact(point: Vector3, radius: float, body_height: float) -> bool:
 	if point.y >= position.y + height - 0.05 or point.y + body_height <= position.y + 0.02:
 		return false

@@ -17,12 +17,15 @@ const REFUGE_OFFSET := Vector3(-2.2, 0.0, 0.0)
 const PEDESTAL_HEIGHT := 0.8
 
 var station_positions: Dictionary = {}
+#Where each checkpoint is, by vertex
+var checkpoint_positions: Dictionary = {}
 var refuge_center := Vector3.ZERO
 
 #Station id -> [materials, resting energy]; it glows stronger while its effect lasts
 var _glow: Dictionary = {}
-var _heart_materials: Array[StandardMaterial3D] = []
-var _ring_material: StandardMaterial3D
+#Vertex of a checkpoint -> the materials of its heart and of its ring
+var _heart_materials: Dictionary = {}
+var _ring_materials: Dictionary = {}
 var _bubble_material: StandardMaterial3D
 
 
@@ -32,7 +35,8 @@ func build(refuge_radius: float) -> void:
 	_block_sign(station_positions[&"block"])
 	_muted_bell(station_positions[&"silence"])
 	_refuge(refuge_radius)
-	_checkpoint()
+	for vertex in Level01Layout.CHECKPOINTS:
+		_checkpoint(vertex)
 	_goal()
 
 
@@ -48,15 +52,18 @@ func set_active(id: StringName, active: bool) -> void:
 
 
 #The heart is grey-lilac until the progress is saved and then lights up
-func set_checkpoint_active(active: bool) -> void:
-	for material in _heart_materials:
+func set_checkpoint_active(vertex: StringName, active: bool) -> void:
+	if not _heart_materials.has(vertex):
+		return
+	for material: StandardMaterial3D in _heart_materials[vertex]:
 		material.albedo_color = Color.WHITE if active else Color(0.74, 0.7, 0.9)
 		material.emission_enabled = active
 		material.emission = MAGENTA
 		material.emission_energy_multiplier = 0.5
 	var ring := AMBER if active else CYAN
-	_ring_material.albedo_color = ring
-	_ring_material.emission = ring
+	var ring_material: StandardMaterial3D = _ring_materials[vertex]
+	ring_material.albedo_color = ring
+	ring_material.emission = ring
 
 
 func _station(id: StringName, offset: Vector3, color: Color) -> void:
@@ -168,20 +175,21 @@ func _refuge(radius: float) -> void:
 
 
 #Checkpoint: a flag pole with a heart; it lights up once the player has saved the progress
-func _checkpoint() -> void:
-	var centre: Vector3 = Level01Layout.POSITIONS[Level01Layout.CHECKPOINT]
-	station_positions[&"checkpoint"] = centre
+func _checkpoint(vertex: StringName) -> void:
+	var centre: Vector3 = Level01Layout.POSITIONS[vertex]
+	checkpoint_positions[vertex] = centre
 	var ring := CylinderMesh.new()
 	ring.top_radius = 1.5
 	ring.bottom_radius = 1.5
 	ring.height = 0.04
 	ring.radial_segments = 32
-	_ring_material = StandardMaterial3D.new()
-	_ring_material.albedo_color = CYAN
-	_ring_material.emission_enabled = true
-	_ring_material.emission = CYAN
-	_ring_material.emission_energy_multiplier = 1.4
-	_add(ring, _ring_material, centre + Vector3(0, 0.03, 0))
+	var ring_material := StandardMaterial3D.new()
+	ring_material.albedo_color = CYAN
+	ring_material.emission_enabled = true
+	ring_material.emission = CYAN
+	ring_material.emission_energy_multiplier = 1.4
+	_ring_materials[vertex] = ring_material
+	_add(ring, ring_material, centre + Vector3(0, 0.03, 0))
 	var pole := CylinderMesh.new()
 	pole.top_radius = 0.06
 	pole.bottom_radius = 0.08
@@ -194,8 +202,8 @@ func _checkpoint() -> void:
 	var model := PropKit.make(&"heart", Vector3(0.0, 1.5, 0.0))
 	model.position.y = -0.75
 	heart.add_child(model)
-	_heart_materials = PropKit.own_materials(model)
-	set_checkpoint_active(false)
+	_heart_materials[vertex] = PropKit.own_materials(model)
+	set_checkpoint_active(vertex, false)
 	var bob := create_tween().set_loops().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	bob.tween_property(heart, "position:y", centre.y + 3.7, 1.1).from(centre.y + 3.5)
 	bob.tween_property(heart, "position:y", centre.y + 3.5, 1.1)
