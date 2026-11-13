@@ -26,6 +26,8 @@ const PAD_REST := 1.2
 const SLIDE_SNAP := 0.6
 #How much of the flow of a slide a racer keeps when it leaves it
 const SLIDE_CARRY := 0.8
+#A comment pushes this much harder than a bot (a share of the push of the bots)
+const COMMENT_PUSH_SHARE := 1.4
 
 #Tuning numbers of the round; leave empty to use the defaults
 @export var settings: Level01Settings
@@ -68,6 +70,8 @@ var _belt_warned: Dictionary = {}
 var _pad_ready: Dictionary = {}
 #The flow of the slide each racer just left, by id: it keeps sliding a little over the island
 var _slide_carry: Dictionary = {}
+#The part of its cycle each comment was in the last time, to play its cues once
+var _comment_stage: Dictionary = {}
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
 @onready var _world: Level01World = $World
@@ -145,6 +149,8 @@ func make_bot(appearance: BotAppearance, vertex: StringName) -> ChaserBot:
 	bot.move_speed = _any_player().move_speed * settings.bot_speed_ratio
 	bot.floor_snap_length = SLIDE_SNAP
 	bot.recalc_interval = settings.bot_recalc_interval
+	bot.push_windup = settings.bot_windup
+	bot.push_cooldown = settings.bot_cooldown
 	bot.lose_time = settings.bot_lose_time
 	bot.push_announced.connect(_on_push_announced)
 	bot.push_landed.connect(_on_push_landed)
@@ -221,6 +227,7 @@ func _register_racer(player: Player, shown_name: String, id: int) -> void:
 	player.hit_taken.connect(_on_racer_hit.bind(player))
 	player.landed.connect(_on_racer_landed.bind(player))
 	player.floor_snap_length = SLIDE_SNAP
+	player.dive_enabled = true
 
 
 func _locator_list() -> Array[PlayerLocator]:
@@ -331,6 +338,8 @@ func _update_running(delta: float) -> void:
 	_apply_balls()
 	_apply_pads()
 	_apply_launches()
+	_apply_comments()
+	_apply_free_cannons()
 	_update_progress()
 	_update_context()
 	_update_prompt()
@@ -404,7 +413,6 @@ func _apply_hazards() -> void:
 		var direction := Level01Hazards.push_direction(centre, spinner, player.global_position)
 		_hit_racer(player, direction * settings.spinner_push, SPINNER_STRENGTH, SPINNER_STUN)
 		if id == _local_id:
-			_hud.warn("¡Barra!")
 			_hud.flash(Palette.CORAL, 0.35, 0.4)
 
 
@@ -448,7 +456,6 @@ func _apply_balls() -> void:
 			var push := Level01Hazards.ball_push(ball, rules.elapsed, player.global_position)
 			_hit_racer(player, push * settings.spinner_push * BALL_PUSH_SHARE, BALL_STRENGTH, BALL_STUN)
 			if id == _local_id:
-				_hud.warn("¡Bola!")
 				_hud.flash(Palette.CORAL, 0.35, 0.4)
 
 
@@ -487,7 +494,78 @@ func _apply_launches() -> void:
 			locator.begin_flight(launch["to"])
 			_world.fire_cannon(launch)
 			if id == _local_id:
-				_hint_once(&"cannon", "¡Cañón! Vuelas hasta la isla %s" % launch["to"])
+				_hint_once(&"cannon", "Cañón a la isla %s" % launch["to"])
+
+
+#Each comment bubble sweeps across its bridge after its warning and pushes whoever it reaches; a jump goes over it
+func _apply_comments() -> void:
+	for index in Level01Layout.COMMENTS.size():
+		var comment: Dictionary = Level01Layout.COMMENTS[index]
+		var stage := int(Level01Hazards.comment_state(comment, rules.elapsed)["stage"])
+		if stage != int(_comment_stage.get(index, -1)):
+			_comment_stage[index] = stage
+			_comment_cue(stage)
+		if stage != Level01Hazards.COMMENT_PUSHING:
+			continue
+		for id: int in _players:
+			var locator := _locators[id] as PlayerLocator
+			if not locator.on_bridge or Level01Layout.comment_of(locator.bridge_a, locator.bridge_b) != comment:
+				continue
+			var player := _players[id] as Player
+			if not Level01Hazards.comment_hits(comment, rules.elapsed, player.global_position) or not rules.register_hit(id):
+				continue
+			_hit_racer(player, Level01Hazards.comment_push(comment, rules.elapsed) * settings.push_speed * COMMENT_PUSH_SHARE, BOT_STRENGTH, BOT_STUN)
+			if id == _local_id:
+				_hud.flash(Palette.CORAL, 0.3, 0.4)
+				_hint_once(&"comment", "Un comentario empuja: salta o cruza por el otro lado")
+
+
+#The sound of a comment: ticks while it flashes and a swoosh when it pushes
+func _comment_cue(stage: int) -> void:
+	if stage == Level01Hazards.COMMENT_WARNING:
+		SynthSound.play(self, SynthSound.tone(660.0, 0.3, -240.0, 0.35), -12.0)
+	elif stage == Level01Hazards.COMMENT_PUSHING:
+		SynthSound.play(self, SynthSound.tone(220.0, 0.22, 320.0, 0.4), -10.0)
+
+
+#Whoever lands on a deck is lifted back to the island at the start of its bridge by the pad of the deck; the cannon of a ledge throws far ahead
+func _apply_free_cannons() -> void:
+	var now := rules.elapsed
+	var cannons: Array[Dictionary] = Level01Layout.deck_returns()
+	cannons.append_array(Level01Layout.hop_cannons())
+	for id: int in _players:
+		var player := _players[id] as Player
+		if id == _local_id:
+			for hop: Dictionary in Level01Layout.HOPS:
+				var ledge := Level01Layout.hop_ledge(hop)
+				var near := Vector2(player.global_position.x - ledge.x, player.global_position.z - ledge.z).length()
+				if near < float(hop["gap"]) + float(hop["radius"]) + 6.0 and absf(player.global_position.y - ledge.y) < 1.0:
+					_hint_once(&"hop", "Hueco largo: salto y barrido para cruzar")
+		if player.is_flying() or player.is_down():
+			continue
+		for launch: Dictionary in cannons:
+			var key := "%d|%s>%s" % [id, launch["from"], launch["to"]]
+			if now < _pad_ready.get(key, 0.0) or not Level01Hazards.launch_hits(launch, player.global_position):
+				continue
+			_pad_ready[key] = now + PAD_REST
+			if launch.has("deck"):
+				_lift_back(id, player, launch)
+				continue
+			player.launch(Level01Hazards.launch_velocity(launch, _gravity))
+			(_locators[id] as PlayerLocator).begin_flight(launch["to"])
+			_world.fire_cannon(launch)
+
+
+#The pad of a deck lifts whoever steps on it back to the middle of the island at the start of its bridge
+func _lift_back(id: int, player: Player, launch: Dictionary) -> void:
+	var to: StringName = launch["to"]
+	_world.fire_cannon(launch)
+	player.global_position = _spawn_position(to) + Vector3(_rng.randf_range(-1.5, 1.5), 0.0, _rng.randf_range(-1.5, 1.5))
+	player.clear_motion()
+	(_locators[id] as PlayerLocator).force_vertex(to)
+	ImpactFx.confetti(self, player.global_position + Vector3(0.0, 0.6, 0.0), 24, 55.0, 4.0)
+	if id == _local_id:
+		_hint_once(&"deck", "Plataforma de regreso a la isla %s" % to)
 
 
 #The blocks that sweep some bridges throw whoever they touch off to the side; a jump goes over them
@@ -507,7 +585,6 @@ func _apply_blocks() -> void:
 		_world.pulse_block(pusher)
 		_hit_racer(player, Level01Hazards.block_heading(pusher, rules.elapsed) * settings.spinner_push, SPINNER_STRENGTH, SPINNER_STUN)
 		if id == _local_id:
-			_hud.warn("¡Bloque!")
 			_hud.flash(Palette.CORAL, 0.35, 0.4)
 
 
@@ -684,7 +761,7 @@ func _on_player_fell(player_id: int, attempts_left: int) -> void:
 	(player.get_node("ModelPivot") as Node3D).rotation.y = PI
 	(_locators[player_id] as PlayerLocator).force_vertex(vertex)
 	if player_id == _local_id:
-		_hud.toast("Caíste · te quedan %d" % attempts_left)
+		_hud.toast("Caída · quedan %d" % attempts_left)
 		_hud.flash(Palette.CORAL, 0.4, 0.5)
 
 
@@ -709,7 +786,7 @@ func _on_racer_finished(player_id: int, place: int) -> void:
 	if player_id == _local_id:
 		var player := _players[player_id] as Player
 		player.set_input_enabled(false)
-		_hud.warn("¡META!" if total == 1 else "¡%s!" % _ordinal(place))
+		_hud.warn("META" if total == 1 else _ordinal(place))
 	else:
 		_hud.toast("%s llegó %s" % [_names.get(player_id, "Alguien"), _ordinal(place)])
 	_update_standings()
@@ -737,13 +814,13 @@ func _on_racer_landed(_at: Vector3, hard: bool, player: Player) -> void:
 
 func _on_window_opened(_seconds: float) -> void:
 	if _local_state().is_racing():
-		_hud.warn("¡Se cierra la meta!")
+		_hud.warn("La meta cierra")
 
 
 #The feed announces the bridge that is about to fall: it flashes
 func _on_feed_warned(a: StringName, b: StringName, seconds: float) -> void:
 	_world.flash_bridge(a, b, true)
-	_hud.toast("El puente %s-%s cae en %d s" % [a, b, int(seconds)])
+	_hint_once(&"saturated", "Ruta saturada: se cierra en %d s" % int(seconds))
 
 
 func _on_feed_closed(a: StringName, b: StringName) -> void:
@@ -752,7 +829,7 @@ func _on_feed_closed(a: StringName, b: StringName) -> void:
 	_world.flash_bridge(a, b, false)
 	_world.set_bridge_open(a, b, false)
 	_world.cheer(1.8)
-	_hint_once(&"feed", "Puente %s-%s caído: busca otro camino" % [a, b])
+	_hint_once(&"feed", "Ruta cerrada: hay otro camino")
 
 
 func _on_feed_reopened(a: StringName, b: StringName) -> void:
@@ -771,11 +848,15 @@ func _edge_threat(a: StringName, b: StringName) -> float:
 	return nearest
 
 
-#A bridge may fall only if every racer that is still running keeps a way to the goal, counting the bridges the feed is
-#about to drop as down too
+#A bridge may fall only if nobody is on it when it is chosen (whoever steps on it afterwards saw its sign) and every racer that is still
+#running keeps a way to the goal, counting the bridges the feed is about to drop as down too
 func _can_close(a: StringName, b: StringName) -> bool:
 	if not graph.is_edge_enabled(a, b) or _feed_holds(a, b):
 		return false
+	for id: int in _players:
+		var on := _locators[id] as PlayerLocator
+		if on.on_bridge and ((on.bridge_a == a and on.bridge_b == b) or (on.bridge_a == b and on.bridge_b == a)):
+			return false
 	var flashing: Array[Array] = []
 	for feed in [events, extra_events]:
 		if feed != null and feed.phase == Level01Events.Phase.WARNING:
@@ -807,7 +888,8 @@ func _feed_holds(a: StringName, b: StringName) -> bool:
 
 
 func _on_push_announced(bot: ChaserBot) -> void:
-	_hud.warn("¡Esquiva!")
+	_hud.flash(Palette.GOLD, 0.3, 0.35)
+	SynthSound.play(self, SynthSound.tone(330.0, 0.3, 360.0, 0.35), -12.0)
 	if bot.appearance.tip != "":
 		_hint_once(bot.appearance.id, bot.appearance.tip)
 
@@ -822,23 +904,20 @@ func _on_push_landed(_bot: ChaserBot, direction: Vector3, player_id: int) -> voi
 
 func _on_outcome(outcome: int) -> void:
 	var state := _local_state()
-	var total := rules.racers_in_race()
 	match outcome:
 		Level01Rules.Outcome.WON:
 			match state.place:
 				0:
-					_finish("Se cerró la meta", "Alguien llegó primero y no alcanzaste a tiempo. Busca la ruta de menor costo e inténtalo de nuevo.")
-				1:
-					_finish("¡Primero en desconectarte!", "Llegaste antes que todos. Cuidar tu atención también es ganar.")
+					_finish("Meta cerrada", "")
 				_:
-					_finish("¡Llegaste %s!" % _ordinal(state.place), "Cada puesto cuenta: respirar y retomar también es avanzar. De %d corredores, llegaste en el puesto %d." % [total, state.place])
+					_finish("%s" % _ordinal(state.place) if rules.racers_in_race() > 1 else "Meta", "")
 		Level01Rules.Outcome.LOST_TIME:
 			if rules.window_left == 0.0:
-				_finish("Se cerró la meta", "Alguien llegó primero y no alcanzaste a tiempo. Busca la ruta de menor costo e inténtalo de nuevo.")
+				_finish("Meta cerrada", "")
 			else:
-				_finish("Se acabó el tiempo", "Ir sin pausa agota. Respirar y retomar también cuenta: inténtalo de nuevo.")
+				_finish("Sin tiempo", "")
 		Level01Rules.Outcome.LOST_ATTEMPTS:
-			_finish("Sin intentos", "Caer no es fracasar. Prueba otra ruta y usa Bloquear para frenar a los bots.")
+			_finish("Sin intentos", "")
 
 
 func _finish(title: String, message: String) -> void:
@@ -875,7 +954,7 @@ func _finish(title: String, message: String) -> void:
 	#One line and one fact on the screen for a moment, then the results
 	var banner := title.to_upper()
 	if victory:
-		banner = "¡META!" if rules.racers_in_race() == 1 else "¡%s!" % ("PRIMERO" if state.place == 1 else "LLEGASTE %s" % _ordinal(state.place))
+		banner = "META" if rules.racers_in_race() == 1 else _ordinal(state.place)
 	_hud.show_banner(banner, "%d s" % ceili(state.finish_time) if victory else "", Palette.PAPER if victory else Palette.GOLD)
 	var result := RoundResult.make(SCREEN_ID, victory, title, message, lines).with_score(_score_of(state), _points_of_everybody())
 	get_tree().create_timer(1.8).timeout.connect(_report.bind(result, victory))

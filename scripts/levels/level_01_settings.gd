@@ -7,8 +7,8 @@ extends Resource
 @export var time_limit := 150.0
 @export var attempts := 3
 @export var countdown_seconds := 3.0
-#Seconds the racers run before the bots are released
-@export var bot_head_start := 2.0
+#Seconds the racers run before the first bots are released; the others follow (a flanker comes 1.5 times later)
+@export var bot_head_start := 6.0
 #Seconds the rest have to arrive once somebody did; then the doors of the goal close
 @export var finish_window := 20.0
 
@@ -18,7 +18,10 @@ extends Resource
 @export_range(0, 2) var bots_per_extra_player := 0
 @export_range(1, 4) var max_bots := 4
 #Bot speed as a fraction of the player's speed (slightly below 1)
-@export_range(0.3, 1.0) var bot_speed_ratio := 0.97
+@export_range(0.3, 1.0) var bot_speed_ratio := 0.8
+#A bot warns this long before it pushes, and rests this long after trying
+@export var bot_windup := 0.9
+@export var bot_cooldown := 3.2
 @export var bot_recalc_interval := 0.2
 @export var bot_lose_time := 8.0
 #0 picks a different random spawn each round; any other value repeats it
@@ -40,18 +43,18 @@ extends Resource
 @export var refuge_radius := 3.6
 
 @export_group("Push")
-@export var push_speed := 12.0
+@export var push_speed := 8.0
 #Seconds in which the same shove cannot hit a player again
 @export var hit_immunity := 1.1
 
 @export_group("Feed")
 #The feed takes a fragile bridge down now and then: the first time, and the wait between two of them
-@export var feed_first := 4.0
-@export var feed_interval := Vector2(3.5, 6.5)
-@export var feed_warning := 2.0
-@export var feed_duration := 10.0
+@export var feed_first := 10.0
+@export var feed_interval := Vector2(7.0, 11.0)
+@export var feed_warning := 3.0
+@export var feed_duration := 8.0
 #A second feed starts this many seconds after the first one and works on its own, so two bridges can be down at once (0 turns it off)
-@export var feed_extra_delay := 14.0
+@export var feed_extra_delay := 26.0
 #Speed of the conveyor bridges in m/s (a player runs at 5)
 @export var belt_speed := 3.4
 #The push of a spinner, which is stronger than a bot's

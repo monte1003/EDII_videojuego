@@ -48,17 +48,18 @@ const RADII := {
 	&"Q": 6.5,
 	&"W": 6.5,
 	&"Z": 6.0,
-	&"I": 6.5,
+	&"I": 7.0,
 	&"E": 6.0,
 	&"G": 6.0,
 	&"L": 6.0,
-	&"A": 7.2,
-	&"C": 7.2,
+	&"A": 7.7,
+	&"C": 7.7,
 	&"X": 6.3,
 	&"Y": 6.3,
-	&"P": 6.0,
+	&"P": 6.4,
 	&"U": 6.2,
 	&"J": 7.0,
+	&"D": 5.6,
 }
 
 #Kinds of bridge: a plain one, a conveyor belt that flows from the first vertex to the second, a slide that goes downhill from the first vertex
@@ -69,8 +70,8 @@ const BELT := &"belt"
 const SLIDE := &"slide"
 const FRAGILE := &"fragile"
 const NARROW := &"narrow"
-const WIDE_WIDTH := 4.2
-const NARROW_WIDTH := 2.0
+const WIDE_WIDTH := 4.5
+const NARROW_WIDTH := 2.4
 #The cost back along a slide: there is none, it is a one-way arc of the graph
 const ONE_WAY := -1.0
 #How fast a slide carries whoever is on it (m/s), and how high its rails are
@@ -137,6 +138,37 @@ const LAUNCHES := [
 ]
 #The pad stands this far inside the rim of its island, on the side of the island it throws toward
 const LAUNCH_INSET := 1.8
+
+#Comments: a speech bubble that is typed on one side of a wide bridge, flashes and then sweeps across it, pushing off whoever is on its way.
+#Each cycle starts on the other side. "at" is its share of the length of the bridge
+const COMMENTS := [
+	{"edge": [&"W", &"Y"], "at": 0.5, "period": 7.0, "phase": 0.0, "words": ["jaja", "pov", "ratio", "+1"]},
+	{"edge": [&"I", &"L"], "at": 0.5, "period": 7.5, "phase": 2.0, "words": ["primero", "no way", "ya vi", "mood"]},
+]
+#Seconds of each part of a comment cycle: typed, flashing before the push, the push itself and the bubble deflating
+const COMMENT_TYPE := 1.5
+const COMMENT_WARN := 0.9
+const COMMENT_PUSH := 0.35
+const COMMENT_FADE := 0.6
+#The decks: under every bridge that falls or has a comment there is a solid deck, so a fall costs the way back and not an attempt.
+#It lies this far under the lower end, is this much wider than the bridge on each side and this much longer, and a pad on it lifts
+#whoever steps there back to the middle of the island of the bridge that is closer to the start (no arc: the bridge is right over the pad)
+const DECK_DEPTH := 5.0
+const DECK_MARGIN := 4.5
+const DECK_EXTRA := 4.0
+const DECK_PAD_OUT := 3.5
+#The rim of a deck is a wall this high and this thick, cut in pieces of about this length: the pieces that lie inside another deck are left out,
+#so decks that overlap (they share an island and lie at the same height) are one floor with no wall across it
+const DECK_RIM := 1.6
+const DECK_RIM_THICK := 0.3
+const DECK_WALL_PIECE := 2.0
+
+#The leap: a ledge floats beside an island across a gap that a jump cannot cross but a jump and a dive can (the bots never try it). A cannon on the
+#ledge throws far ahead: the reward of whoever risks the void. "angle" turns from north (-Z) toward the east around the island, "gap" is the void
+#between the two rims and "time" the seconds of the flight
+const HOPS := [
+	{"from": &"Z", "to": &"C", "angle": 40.0, "gap": 6.0, "radius": 3.2, "time": 2.9},
+]
 
 const START := &"N"
 const GOAL := &"M"
@@ -343,15 +375,118 @@ static func launches_from(id: StringName) -> Array[Dictionary]:
 	return found
 
 
-#Where the pad of a cannon is: on the island it leaves, toward the island it lands on
+#Where the pad of a cannon is: on the island it leaves, toward the island it lands on (the cannon of a deck says it itself)
 static func launch_pad(launch: Dictionary) -> Vector3:
+	if launch.has("pad"):
+		return launch["pad"]
 	var from: Vector3 = POSITIONS[launch["from"]]
 	return from + _flat_direction(launch["from"], launch["to"]) * (radius_of(launch["from"]) - LAUNCH_INSET)
 
 
 #Where the arc of a cannon ends: the middle of the island it lands on
 static func launch_landing(launch: Dictionary) -> Vector3:
+	if launch.has("landing"):
+		return launch["landing"]
 	return POSITIONS[launch["to"]]
+
+
+#The bridges that have a deck under them: the ones the feed may take down and the ones with a comment
+static func soft_edges() -> Array[Array]:
+	var found: Array[Array] = fragile_edges()
+	for comment: Dictionary in COMMENTS:
+		found.append([comment["edge"][0], comment["edge"][1]])
+	return found
+
+
+#The comment of the bridge between a and b, or an empty dictionary when it has none
+static func comment_of(a: StringName, b: StringName) -> Dictionary:
+	for comment: Dictionary in COMMENTS:
+		var edge: Array = comment["edge"]
+		if (edge[0] == a and edge[1] == b) or (edge[0] == b and edge[1] == a):
+			return comment
+	return {}
+
+
+#The deck under a bridge: where its top is, how big and how turned it is, and its return cannon
+static func deck_of(edge: Array) -> Dictionary:
+	var from: Vector3 = POSITIONS[edge[0]]
+	var to: Vector3 = POSITIONS[edge[1]]
+	var flat := Vector3(to.x - from.x, 0.0, to.z - from.z)
+	var direction := flat.normalized()
+	var top := minf(from.y, to.y) - DECK_DEPTH
+	var start_first := from.z > to.z
+	var start: StringName = edge[0] if start_first else edge[1]
+	var away := direction if start_first else -direction
+	var pad: Vector3 = POSITIONS[start] + away * (radius_of(start) + DECK_PAD_OUT)
+	pad.y = top
+	return {
+		"edge": edge, "top": top, "yaw": atan2(direction.x, direction.z),
+		"center": Vector3((from.x + to.x) / 2.0, top, (from.z + to.z) / 2.0),
+		"size": Vector2(width_of(kind_of(edge[0], edge[1])) + 2.0 * DECK_MARGIN, flat.length() + DECK_EXTRA),
+		"cannon": {"from": StringName("deck_%s%s" % [edge[0], edge[1]]), "to": start, "pad": pad, "landing": POSITIONS[start], "deck": true},
+	}
+
+
+#The middle of the ledge of a leap: at the height of the island it starts from
+static func hop_ledge(hop: Dictionary) -> Vector3:
+	var from: Vector3 = POSITIONS[hop["from"]]
+	var reach: float = radius_of(hop["from"]) + float(hop["gap"]) + float(hop["radius"])
+	var turn := deg_to_rad(float(hop["angle"]))
+	return from + Vector3(sin(turn) * reach, 0.0, -cos(turn) * reach)
+
+
+#The cannons of the ledges, which the graph does not know either: the pad is the middle of the ledge and the arc ends in the middle of the island it lands on
+static func hop_cannons() -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	for hop: Dictionary in HOPS:
+		var centre := hop_ledge(hop)
+		found.append({"from": StringName("hop_%s" % hop["from"]), "to": hop["to"], "time": hop["time"], "pad": centre, "landing": POSITIONS[hop["to"]],
+			"ledge": centre, "radius": hop["radius"], "origin": hop["from"]})
+	return found
+
+
+#Whether a point of the ground plan lies inside the floor of the deck, "inset" meters from its edge
+static func deck_holds(deck: Dictionary, point: Vector3, inset := 0.0) -> bool:
+	var size: Vector2 = deck["size"]
+	var local := Basis(Vector3.UP, float(deck["yaw"])).inverse() * (point - (deck["center"] as Vector3))
+	return absf(local.x) <= size.x / 2.0 - inset and absf(local.z) <= size.y / 2.0 - inset
+
+
+#The pieces of the rim of a deck: where each one stands (on the floor of the deck), how big it is (in the frame of the deck) and how the deck is turned
+static func deck_walls(edge: Array) -> Array[Dictionary]:
+	var deck := deck_of(edge)
+	var size: Vector2 = deck["size"]
+	var basis := Basis(Vector3.UP, float(deck["yaw"]))
+	var others: Array[Dictionary] = []
+	for other in soft_edges():
+		#Only the decks at the same height make one floor with this one; a deck far above or below is another floor
+		if other != edge and is_equal_approx(float(deck_of(other)["top"]), float(deck["top"])):
+			others.append(deck_of(other))
+	var found: Array[Dictionary] = []
+	for side: Array in [[Vector3.RIGHT, size.y], [Vector3.LEFT, size.y], [Vector3.BACK, size.x], [Vector3.FORWARD, size.x]]:
+		var normal: Vector3 = side[0]
+		var length: float = side[1]
+		var count := ceili(length / DECK_WALL_PIECE)
+		var piece := length / count
+		var along := Vector3(normal.z, 0.0, normal.x).abs()
+		for index in count:
+			var local := normal * ((size.x if absf(normal.x) > 0.5 else size.y) / 2.0 - DECK_RIM_THICK / 2.0) + along * (-length / 2.0 + piece * (index + 0.5))
+			var centre := (deck["center"] as Vector3) + basis * local
+			var inside := false
+			for other in others:
+				inside = inside or deck_holds(other, centre, 0.2)
+			if not inside:
+				var wide := Vector3(DECK_RIM_THICK, DECK_RIM, piece) if absf(normal.x) > 0.5 else Vector3(piece, DECK_RIM, DECK_RIM_THICK)
+				found.append({"center": centre, "size": wide, "yaw": deck["yaw"]})
+	return found
+
+
+#The pads of the decks, which the graph does not know: the bots never get there
+static func deck_returns() -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
+	for edge in soft_edges():
+		found.append(deck_of(edge)["cannon"])
+	return found
 
 
 #Where the trampoline of an island is: in the middle of the widest stretch of the rim that no bridge touches

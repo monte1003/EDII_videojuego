@@ -9,6 +9,13 @@ signal hit_taken(hit: Hit)
 signal landed(at: Vector3, hard: bool)
 #Two players ran into each other and bounced apart; "strength" goes from 0 to 1
 signal bumped(other: Player, strength: float)
+#The dive: it leaves toward "direction", touches the ground at "at" and ends when the player is back on its feet
+signal dive_started(direction: Vector3)
+signal dive_landed(at: Vector3)
+signal dive_ended
+
+#The parts of a dive: in the air, sliding on the belly, lying still and getting up
+enum Dive { NONE, FLIGHT, SLIDE, DOWN, RISE }
 
 #What a blow does to the player
 class Hit:
@@ -51,6 +58,23 @@ const POSE_STRETCH := 0.07
 const FLIGHT_CONTROL := 0.3
 const FLIGHT_GRACE := 0.2
 const FLIGHT_SKID := 0.3
+#The dive, a second press of the jump in the air: it flies faster than a run (a share of the speed of the player) along a low arc
+#(its speed up is kept between these two), slides on landing and leaves the player lying before it gets up. A press counts
+#once the player has been this long in the air, and one that comes a little early is remembered for a moment
+const DIVE_SPEED_RATIO := 1.24
+const DIVE_LIFT_MIN := 1.0
+const DIVE_LIFT_MAX := 2.0
+const DIVE_ARM_TIME := 0.12
+const DIVE_MEMORY := 0.15
+const DIVE_SLIDE_TIME := 0.35
+const DIVE_DOWN_TIME := 0.5
+const DIVE_RISE_TIME := GET_UP_TIME
+#The farthest a jump and a dive reach on flat ground, with room to spare: no gap meant to stop a player may be narrower
+const DIVE_MAX_REACH := 8.5
+const DIVE_FOV_KICK := 4.0
+const SLIDE_DUST_EVERY := 0.08
+#Seconds of the clip of getting up, which is played faster to fit the rise
+const RISE_CLIP_TIME := 0.45
 
 var player_id := 0
 var move_input := Vector2.ZERO
@@ -61,8 +85,12 @@ var push_velocity := Vector3.ZERO
 var external_velocity := Vector3.ZERO
 #Set by the round every frame: true while the player overlaps what hit it
 var touching := false
-#Striking a pose: the player stands still and cannot jump while the round keeps it on
-var posing := false
+#Striking a pose: the player stands still and cannot jump while the round keeps it on; "pose_style" says which pose or dance
+var posing := false: set = _set_posing
+var pose_style := 0
+#Each round says whether its players can dive
+var dive_enabled := false
+var dive_phase := Dive.NONE
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _model: CharacterModel
@@ -91,6 +119,15 @@ var _flight_age := 0.0
 var _tumble_axis := Vector3.RIGHT
 var _tumble_angle := 0.0: set = _set_tumble_angle
 var _tumble_tween: Tween
+#The dive: its speed along the ground, how fast the slide brakes, the seconds left of its part, whether this jump already
+#dived, the seconds in the air and how long a press of the jump is still remembered
+var _dive_velocity := Vector3.ZERO
+var _dive_brake := 0.0
+var _dive_left := 0.0
+var _dive_used := false
+var _air_time := 0.0
+var _dive_wanted_left := 0.0
+var _pose_playing := false
 
 @onready var _model_pivot: Node3D = $ModelPivot
 @onready var _camera_rig: PlayerCamera = $CameraRig
@@ -141,6 +178,17 @@ func is_down() -> bool:
 	return _stun_left > 0.0
 
 
+#From the leap of a dive until the player is back on its feet
+func is_diving() -> bool:
+	return dive_phase != Dive.NONE
+
+
+#The arms go out: what a shove looks like on whoever gives it
+func play_shove() -> void:
+	if _model != null and not is_diving():
+		_model.play_move(CharacterModel.SHOVE, false, 0.04)
+
+
 #A plain shove: the horizontal part fades out and the vertical part is a small hop
 func apply_push(impulse: Vector3) -> void:
 	push_velocity = Vector3(impulse.x, 0.0, impulse.z)
@@ -151,6 +199,7 @@ func apply_push(impulse: Vector3) -> void:
 
 #A cannon shot: the player flies along an arc that only it can bend a little, and lands wherever the arc ends
 func launch(impulse: Vector3) -> void:
+	_cancel_dive()
 	_flight = Vector3(impulse.x, 0.0, impulse.z)
 	_flying = true
 	_flight_age = 0.0
@@ -184,6 +233,9 @@ func squash(amount: float) -> void:
 #A blow: it throws the player, then it flips or staggers and gets up
 func take_hit(hit: Hit) -> void:
 	_end_flight(false)
+	_cancel_dive()
+	if not hit.flips and _model != null and not posing:
+		_model.play_move(CharacterModel.STAGGER, false, 0.05)
 	push_velocity = hit.push
 	velocity.y = maxf(velocity.y, 1.6 + 2.2 * hit.strength)
 	_hit_flight = true
@@ -200,6 +252,9 @@ func take_hit(hit: Hit) -> void:
 #Stops every kind of motion, used when the player is put back somewhere
 func clear_motion() -> void:
 	_end_flight(false)
+	_cancel_dive()
+	_dive_used = false
+	_dive_wanted_left = 0.0
 	velocity = Vector3.ZERO
 	push_velocity = Vector3.ZERO
 	move_input = Vector2.ZERO
@@ -230,8 +285,9 @@ func _physics_process(delta: float) -> void:
 		jump_requested = false
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
+	_tick_dive(delta)
 
-	if jump_requested and is_on_floor():
+	if jump_requested and is_on_floor() and dive_phase == Dive.NONE:
 		velocity.y = jump_velocity
 		_squash_speed += 5.0
 	jump_requested = false
@@ -243,9 +299,12 @@ func _physics_process(delta: float) -> void:
 
 	#Movement follows the camera direction
 	var direction := _camera_rig.get_yaw_basis() * Vector3(move_input.x, 0.0, move_input.y)
+	if dive_phase != Dive.NONE:
+		#A dive is a commitment: nothing steers it
+		direction = Vector3.ZERO
 	var control := FLIGHT_CONTROL if _flying else 1.0
-	velocity.x = direction.x * move_speed * control + push_velocity.x + external_velocity.x + _flight.x
-	velocity.z = direction.z * move_speed * control + push_velocity.z + external_velocity.z + _flight.z
+	velocity.x = direction.x * move_speed * control + push_velocity.x + external_velocity.x + _flight.x + _dive_velocity.x
+	velocity.z = direction.z * move_speed * control + push_velocity.z + external_velocity.z + _flight.z + _dive_velocity.z
 	_intended = Vector3(velocity.x, 0.0, velocity.z)
 	if not is_on_floor():
 		_peak_fall = maxf(_peak_fall, -velocity.y)
@@ -266,6 +325,92 @@ func _physics_process(delta: float) -> void:
 	_tick_grace(delta)
 	_animate_body(delta)
 	_kick_dust(delta)
+
+
+#A press of the jump in the air dives, once per jump; then the dive goes through its parts by itself
+func _tick_dive(delta: float) -> void:
+	_air_time = 0.0 if is_on_floor() else _air_time + delta
+	_dive_wanted_left = maxf(_dive_wanted_left - delta, 0.0)
+	match dive_phase:
+		Dive.NONE:
+			if is_on_floor():
+				_dive_used = false
+				_dive_wanted_left = 0.0
+				return
+			if jump_requested:
+				_dive_wanted_left = DIVE_MEMORY
+			if _dive_wanted_left > 0.0 and _can_dive():
+				_start_dive()
+		Dive.FLIGHT:
+			if is_on_floor():
+				_land_dive()
+		Dive.SLIDE:
+			_dive_left -= delta
+			_dive_velocity = _dive_velocity.move_toward(Vector3.ZERO, _dive_brake * delta)
+			if _dive_left <= 0.0:
+				dive_phase = Dive.DOWN
+				_dive_left = DIVE_DOWN_TIME
+				_dive_velocity = Vector3.ZERO
+				SynthSound.play(get_parent(), SynthSound.land(), -11.0, 0.85)
+		Dive.DOWN:
+			_dive_left -= delta
+			if _dive_left <= 0.0:
+				dive_phase = Dive.RISE
+				_dive_left = DIVE_RISE_TIME
+				if _model != null:
+					_model.play_move(CharacterModel.RISE, false, 0.05, RISE_CLIP_TIME / DIVE_RISE_TIME)
+		Dive.RISE:
+			_dive_left -= delta
+			if _dive_left <= 0.0:
+				_cancel_dive()
+
+
+func _can_dive() -> bool:
+	return dive_enabled and not _dive_used and _air_time >= DIVE_ARM_TIME and _stun_left <= 0.0 and not _flying \
+		and not _hit_flight and not posing and not _celebrating
+
+
+#The leap: toward where the player steers, or where it looks when it steers nowhere
+func _start_dive() -> void:
+	var heading := _camera_rig.get_yaw_basis() * Vector3(move_input.x, 0.0, move_input.y)
+	if heading.length() < 0.1:
+		heading = look_direction()
+	heading = heading.normalized()
+	dive_phase = Dive.FLIGHT
+	_dive_used = true
+	_dive_wanted_left = 0.0
+	_dive_velocity = heading * move_speed * DIVE_SPEED_RATIO
+	velocity.y = clampf(velocity.y, DIVE_LIFT_MIN, DIVE_LIFT_MAX)
+	_model_pivot.rotation.y = atan2(heading.x, heading.z)
+	_squash_speed += 6.0
+	if _model != null:
+		_model.play_move(CharacterModel.DIVE, true, 0.06)
+	_camera_rig.kick(DIVE_FOV_KICK, 0.4)
+	SynthSound.play(get_parent(), SynthSound.tone(520.0, 0.2, 700.0, 0.35), -11.0, randf_range(0.95, 1.08))
+	dive_started.emit(heading)
+
+
+#The belly touches the ground: the speed of the dive brakes to nothing along the slide
+func _land_dive() -> void:
+	dive_phase = Dive.SLIDE
+	_dive_left = DIVE_SLIDE_TIME
+	_dive_brake = _dive_velocity.length() / DIVE_SLIDE_TIME
+	if _model != null:
+		_model.play_move(CharacterModel.SLIDE, true, 0.06)
+	shake_camera(0.14)
+	SynthSound.play(get_parent(), SynthSound.thump(0.18), -11.0, 1.25)
+	dive_landed.emit(global_position)
+
+
+#Ends the dive wherever it is: back to plain running, with no pose of the dive left on the model
+func _cancel_dive() -> void:
+	if dive_phase == Dive.NONE:
+		return
+	dive_phase = Dive.NONE
+	_dive_velocity = Vector3.ZERO
+	if _model != null and not _pose_playing:
+		_model.stop_move()
+	dive_ended.emit()
 
 
 #The shot is over: when the player lands it keeps a little of the speed as a skid
@@ -362,12 +507,15 @@ func _animate_body(delta: float) -> void:
 		var aim := Vector2(clampf(local.z * 0.028, -LEAN_LIMIT, LEAN_LIMIT), clampf(-local.x * 0.03, -LEAN_LIMIT, LEAN_LIMIT))
 		if not is_on_floor():
 			aim *= 0.5
-		if posing:
-			#A pose: the hip out to one side and the body swaying a little, proud of itself
+		if dive_phase != Dive.NONE or _pose_playing:
+			#The dive and the poses bring their own lean
+			aim = Vector2.ZERO
+		elif posing:
+			#A pose without an animation: the hip out to one side and the body swaying a little, proud of itself
 			aim = Vector2(-0.1, POSE_LEAN * sin(Time.get_ticks_msec() * 0.004))
 		_lean = _lean.lerp(aim, 1.0 - exp(-LEAN_FOLLOW * delta))
 	var breath := sin(Time.get_ticks_msec() * 0.0022) * 0.012 if _intended.length() < 0.5 and not calm else 0.0
-	if posing and not calm:
+	if posing and not calm and not _pose_playing:
 		breath = POSE_STRETCH + 0.03 * sin(Time.get_ticks_msec() * 0.008)
 	var stretch := _squash + breath
 	_body.basis = Basis(Vector3.UP, _spin) * Basis(Vector3.RIGHT, _lean.x) * Basis(Vector3.BACK, _lean.y) \
@@ -379,13 +527,28 @@ func _kick_dust(delta: float) -> void:
 	_dust_left -= delta
 	if _dust_left > 0.0 or not is_on_floor() or _hit_flight or _intended.length() < move_speed * 0.7:
 		return
-	_dust_left = DUST_EVERY
+	_dust_left = SLIDE_DUST_EVERY if dive_phase == Dive.SLIDE else DUST_EVERY
 	ImpactFx.dust(get_parent(), global_position + Vector3(0.0, 0.04, 0.0), ImpactFx.DUST_COLOR, 3)
 
 
 func _end_celebration() -> void:
 	_spin = 0.0
 	_celebrating = false
+
+
+#The pose or the dance starts with the pose and ends with it; a character without them only sways
+func _set_posing(value: bool) -> void:
+	if posing == value:
+		return
+	posing = value
+	if _model == null:
+		return
+	if value:
+		var count := _model.pose_count()
+		_pose_playing = count > 0 and _model.play_move(CharacterModel.POSES[posmod(pose_style, count)], true, 0.2)
+	elif _pose_playing:
+		_pose_playing = false
+		_model.stop_move()
 
 
 #A flip is a somersault toward where the blow sends the player, a lie on the ground and a get-up; a stagger is a quick lean

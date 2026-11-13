@@ -94,10 +94,10 @@ func tick_countdown(left: float) -> void:
 	SynthSound.play(self, SynthSound.tone(523.0, 0.14, 0.0, 0.4), -9.0)
 
 
-#"¡YA!": the round is on; it leaves by itself
+#"YA": the round is on; it leaves by itself
 func show_go() -> void:
 	_count_shown = 0
-	show_countdown("¡YA!")
+	show_countdown("YA")
 	_countdown.add_theme_color_override("font_color", Palette.GOLD)
 	SynthSound.play(self, SynthSound.tone(1046.0, 0.4, 0.0, 0.45), -7.0)
 	var leave := create_tween()

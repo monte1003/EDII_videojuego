@@ -12,7 +12,8 @@ signal photo_announced(index: int, spot: StringName)
 signal frame_shown(index: int)
 signal frame_locked(index: int, seconds: float)
 signal photo_taken(index: int, shots: Dictionary)
-signal pose_changed(player_id: int, posing: bool)
+#"style" says which pose or dance it is: one at random each time, never the same twice in a row
+signal pose_changed(player_id: int, posing: bool, style: int)
 signal power_taken(player_id: int, pedestal: int, kind: int, seconds: float)
 signal power_returned(pedestal: int, kind: int)
 signal finished
@@ -42,6 +43,7 @@ class PlayerState:
 	var out := false
 	var posing := false
 	var pose_time := 0.0
+	var pose_style := -1
 	var jump_left := 0.0
 	var speed_left := 0.0
 
@@ -78,7 +80,7 @@ func _init(round_settings: SelfieSettings, score_sheet: ScoreSheet, map: SelfieL
 	_rng.seed = seed_value
 	for id in ids:
 		players[id] = PlayerState.new(id)
-	order = reachable_order(shuffled_spots(layout.spots, _rng), layout.travel_table(layout.build_graph()), layout.spawn_island, settings.reach_seconds)
+	order = reachable_order(shuffled_spots(layout.spots, _rng), layout.travel_table(layout.build_graph()), layout.spawn_place, settings.reach_seconds)
 	for index in layout.pedestals.size():
 		pedestal_kinds.append(index % POWER_COUNT)
 		_pedestal_left.append(0.0)
@@ -178,6 +180,11 @@ func set_posing(player_id: int, on: bool) -> bool:
 		return false
 	_set_pose(state, on)
 	return true
+
+
+#One press starts the pose and the next one ends it
+func toggle_pose(player_id: int) -> bool:
+	return set_posing(player_id, not is_posing(player_id))
 
 
 func is_posing(player_id: int) -> bool:
@@ -372,7 +379,11 @@ func _set_pose(state: PlayerState, on: bool) -> void:
 		return
 	state.posing = on
 	state.pose_time = 0.0
-	pose_changed.emit(state.id, on)
+	if on:
+		#Any style but the last one
+		var pick := _rng.randi() % maxi(settings.pose_styles - 1, 1)
+		state.pose_style = pick if pick < state.pose_style or state.pose_style < 0 or settings.pose_styles < 2 else pick + 1
+	pose_changed.emit(state.id, on, state.pose_style)
 
 
 func _tick_players(delta: float) -> void:

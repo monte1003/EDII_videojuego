@@ -51,30 +51,35 @@ func _to_shot(rules: SelfieRules) -> void:
 
 
 func _check_map() -> void:
-	var graph := _layout.build_graph()
+	var costs := _layout.build_graph().costs_from(SelfieLayout.HUB)
 	var reachable := true
-	for id: StringName in _layout.islands:
-		reachable = reachable and graph.shortest_path(SelfieLayout.HUB, id).found
-	_expect(reachable and _layout.spots.size() == 8, "ocho lugares de foto, todos alcanzables por puentes desde el foso")
+	for spot in _layout.spots:
+		reachable = reachable and costs.has(spot)
+	_expect(reachable and _layout.spots.size() == 8, "ocho sets de foto, todos alcanzables a pie desde el centro")
 	var fits := true
 	for spot in _layout.spots:
-		fits = fits and _layout.radius_of(spot) >= SETTINGS.frame_start * 0.7072 + 0.3
-	_expect(fits, "el marco más grande (%.1f m) cabe entero en la isla de cada foto" % SETTINGS.frame_start)
+		var room := _layout.room_of(spot)
+		fits = fits and minf(room.x, room.y) * 2.0 >= SETTINGS.frame_start * 1.22 + 0.7
+	_expect(fits, "el marco más grande (%.1f m) cabe entero en el piso plano de cada set" % SETTINGS.frame_start)
 	var heights: Dictionary = {}
-	for id: StringName in _layout.islands:
+	for id: StringName in _layout.places:
 		heights[snappedf(_layout.position_of(id).y, 0.1)] = true
-	_expect(heights.size() >= 7, "el mapa tiene muchas alturas distintas (%d)" % heights.size())
-	_expect(_layout.stones.size() >= 16, "hay atajos de piedras para saltar (%d piedras)" % _layout.stones.size())
+	_expect(heights.size() >= 5, "el mapa tiene muchas alturas distintas (%d)" % heights.size())
+	var cannons := 0
+	for pad in _layout.pads:
+		cannons += int(ArenaHazards.is_cannon(pad))
+	_expect(cannons >= 2 and _layout.ramps.size() >= 5, "hay rampas, pasarelas y %d cañones para subir a las azoteas" % cannons)
 	var steep := 0.0
-	for bridge in _layout.bridges:
-		var frame := _layout.frame_of(bridge)
-		steep = maxf(steep, absf((frame["end"] as Vector3).y - (frame["start"] as Vector3).y) / maxf(float(frame["length"]), 0.01))
+	for ramp in _layout.ramps:
+		var from: Vector3 = ramp["from"]
+		var to: Vector3 = ramp["to"]
+		steep = maxf(steep, absf(to.y - from.y) / maxf(Vector2(to.x - from.x, to.z - from.z).length(), 0.01))
 	_expect(steep < 0.75, "ninguna rampa pasa de 37 grados (pendiente máxima %.2f)" % steep)
 	var seconds := (SETTINGS.travel_seconds + SETTINGS.frame_seconds + SETTINGS.lock_seconds + SETTINGS.reveal_seconds) * SETTINGS.photo_count
 	_expect(seconds >= 90.0 and seconds <= 120.0, "las ocho fotos duran de 90 a 120 s (%.0f)" % seconds)
 	_expect(_layout.pedestals.size() >= 4 and _layout.pedestals.size() <= 6, "de cuatro a seis pedestales (%d)" % _layout.pedestals.size())
 	var path := _layout.flight_path(_layout.spots[0], _layout.spots[5])
-	_expect(path.size() >= 2 and path[0].y > _layout.position_of(_layout.spots[0]).y + 5.0, "el dron vuela por las islas de la ruta más corta (%d paradas)" % path.size())
+	_expect(path.size() >= 2 and path[0].y > _layout.position_of(_layout.spots[0]).y + 5.0, "el dron vuela por los lugares de la ruta más corta (%d paradas)" % path.size())
 
 
 func _check_bag() -> void:
@@ -131,11 +136,12 @@ func _check_frame() -> void:
 	for photo in 8:
 		_until(rules, SelfieRules.Phase.FRAME)
 		var spot := _layout.position_of(rules.spot())
+		var room := _layout.room_of(rules.spot())
 		var before := rules.frame_center()
 		while rules.phase == SelfieRules.Phase.FRAME:
 			var centre := rules.frame_center()
-			var reach := Vector2(centre.x - spot.x, centre.z - spot.z).length() + rules.final_size(photo) * 0.7072
-			inside_island = inside_island and reach <= _layout.radius_of(rules.spot()) + 0.01
+			var half := rules.frame_size() / 2.0
+			inside_island = inside_island and absf(centre.x - spot.x) + half <= room.x + 0.01 and absf(centre.z - spot.z) + half <= room.y + 0.01
 			rules.tick(0.05)
 		if photo == 7:
 			moved = before.distance_to(rules.frame_center())
@@ -145,7 +151,7 @@ func _check_frame() -> void:
 		_until(rules, SelfieRules.Phase.REVEAL)
 		if photo < 7:
 			_until(rules, SelfieRules.Phase.TRAVEL)
-	_expect(inside_island, "el marco nunca se sale de su isla y queda quieto y a su tamaño cuando se fija")
+	_expect(inside_island, "el marco nunca se sale del piso de su set y queda quieto y a su tamaño cuando se fija")
 	_expect(moved > 0.3, "en las últimas fotos el marco se mueve antes de fijarse (%.1f m)" % moved)
 
 
@@ -218,6 +224,40 @@ func _check_pose() -> void:
 	held.set_posing(1, true)
 	_until(held, SelfieRules.Phase.REVEAL)
 	_expect(held.state_of(1).poses == 1 and held.state_of(1).followers == 195, "centro y pose a tiempo, solo en la foto: 130 por 1,5 (%d)" % held.state_of(1).followers)
+	_check_toggle()
+
+
+#One press of the key poses and the next one drops it; each pose is a different style from the one before
+func _check_toggle() -> void:
+	var rules := _rules([1])
+	_until(rules, SelfieRules.Phase.FRAME)
+	rules.place(1, rules.frame_center(), true, false)
+	var styles: Array[int] = []
+	var events: Array[Array] = []
+	var on_pose := func(id: int, posing: bool, style: int) -> void: events.append([id, posing, style])
+	rules.pose_changed.connect(on_pose)
+	var same := false
+	var out_of_range := false
+	for press in 40:
+		rules.toggle_pose(1)
+		var style := rules.state_of(1).pose_style
+		styles.append(style)
+		out_of_range = out_of_range or style < 0 or style >= SETTINGS.pose_styles
+		rules.toggle_pose(1)
+	for index in range(1, styles.size()):
+		same = same or styles[index] == styles[index - 1]
+	rules.pose_changed.disconnect(on_pose)
+	var distinct: Dictionary = {}
+	for style in styles:
+		distinct[style] = true
+	_expect(events.size() == 80 and events[0][1] and not events[1][1], "una pulsación inicia la pose y la siguiente la quita (%d avisos)" % events.size())
+	_expect(not same and not out_of_range, "cada pose es de un estilo distinto al anterior y siempre uno de los %d" % SETTINGS.pose_styles)
+	_expect(distinct.size() == SETTINGS.pose_styles, "al azar salen los %d estilos (%d en 40 poses)" % [SETTINGS.pose_styles, distinct.size()])
+	rules.place(1, rules.frame_center(), true, false)
+	rules.toggle_pose(1)
+	rules.strike(1)
+	_expect(not rules.is_posing(1), "un golpe sobre quien posa la quita y se puede volver a posar con otra pulsación")
+	_expect(rules.toggle_pose(1) and rules.is_posing(1), "con una pulsación nueva vuelve a posar")
 
 
 func _check_powers() -> void:

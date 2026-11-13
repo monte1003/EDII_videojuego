@@ -10,6 +10,8 @@ extends Node3D
 @export var shake_roll := 0.045
 
 var _trauma := 0.0
+var _base_fov := 70.0
+var _kick: Tween
 
 @onready var _pitch_pivot: Node3D = $PitchPivot
 @onready var _spring_arm: SpringArm3D = $PitchPivot/SpringArm3D
@@ -20,6 +22,7 @@ func _ready() -> void:
 	var body := get_parent() as CollisionObject3D
 	if body:
 		_spring_arm.add_excluded_object(body.get_rid())
+	_base_fov = _camera.fov
 	set_process(false)
 
 
@@ -50,6 +53,15 @@ func get_yaw_basis() -> Basis:
 func frame(distance: float, pitch_degrees: float) -> void:
 	_spring_arm.spring_length = distance
 	_pitch_pivot.rotation.x = deg_to_rad(pitch_degrees)
+
+
+#The view opens "degrees" wider at once and comes back in "seconds": a small kick for a burst of speed
+func kick(degrees: float, seconds: float) -> void:
+	if _kick != null and _kick.is_valid():
+		_kick.kill()
+	_camera.fov = _base_fov + degrees
+	_kick = create_tween()
+	_kick.tween_property(_camera, "fov", _base_fov, seconds).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 #A knock to the camera, from 0 to 1; a bigger one while it still shakes adds up to the limit

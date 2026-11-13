@@ -28,7 +28,7 @@ func _ready() -> void:
 		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
 	show_mission("Prueba los controles", [
 		"%s|mover" % move_keys, "%s|saltar" % InputHints.key_label(&"jump"),
-		"%s|usar" % InputHints.key_label(&"interact")], 6.0)
+		"%s ×2|barrer" % InputHints.key_label(&"jump"), "%s|usar" % InputHints.key_label(&"interact")], 6.0)
 
 
 #How many already said they are ready, and whether this player did

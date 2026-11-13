@@ -14,11 +14,23 @@ extends Resource
 @export var repeat_from := 2
 #Trends to complete for the round to count as won
 @export var win_trends := 3
+#The par of a trend is this share of the walk to each of its bubbles: the average walk between two bubbles of a kind on the
+#graph of the map, or the reach within which the one that is needed is always kept, whichever is shorter
+@export var par_share := 0.5
 
 @export_group("Bubbles")
-@export var copies_per_kind := 4
-#Seconds a fetched bubble takes to come back somewhere else
-@export var respawn_seconds := 4.0
+#Bubbles alive on the map at any moment, and how many of one kind there can be
+@export var bubble_target := 22
+@export var min_per_kind := 3
+@export var max_per_kind := 5
+#Seconds a bubble lives, between these two, and the last seconds of it in which it blinks
+@export var life_seconds := Vector2(9.0, 13.0)
+@export var aging_seconds := 3.0
+#A bubble never appears closer than this many seconds on foot to a player, and a point rests this long after losing its bubble
+@export var spawn_clear_seconds := 1.2
+@export var point_rest := 2.0
+#The kind a player has to fetch always has a bubble closer than this many seconds on foot
+@export var reach_seconds := 6.0
 #How close a player must be to a bubble to touch it
 @export var touch_radius := 1.45
 #Seconds a wrong bubble ignores the player it just bounced
@@ -36,5 +48,6 @@ extends Resource
 @export var loose_owner_rest := 1.0
 
 @export_group("Haters")
-#Bots on the map in each trend
+#Bots in the maze in each trend, and how far from them a player has to be for them to notice it
 @export var haters: Array[int] = [1, 1, 2, 2, 3]
+@export var hater_sight := 13.0

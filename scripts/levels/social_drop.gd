@@ -19,7 +19,7 @@ const STAGES: Array[Vector2i] = [
 
 @export_group("Round")
 @export var time_limit := 80.0
-#"¿Listo?" and "¡Vamos!" on the screens before the first memory; the clock starts with "¡Vamos!"
+#the screens say "YA" before the first memory, and the clock starts with it
 @export var ready_seconds := 3.0
 @export var go_seconds := 1.2
 #Below this height the player has fallen off the platform
@@ -139,8 +139,7 @@ func _physics_process(delta: float) -> void:
 		return
 	if elapsed >= time_limit:
 		_hud.set_time(0.0)
-		_finish(true, "¡Sobreviviste!",
-			"%d segundos sin caerte. No todo lo que aparece en redes es terreno firme: elige con calma dónde pisas." % int(time_limit))
+		_finish(true, "En pie", "")
 		return
 
 	match phase:
@@ -167,8 +166,7 @@ func _check_falls() -> void:
 			continue
 		_fallen[player.player_id] = elapsed
 		if player == _local:
-			_finish(false, "¡Te caíste!",
-				"Aguantaste %d s. Memoriza dónde está cada ícono: cuando las cartas se tapan ya no hay segunda mirada." % floori(elapsed))
+			_finish(false, "Caída", "")
 			return
 		player.set_physics_process(false)
 		player.hide()
@@ -177,7 +175,7 @@ func _check_falls() -> void:
 func _go() -> void:
 	phase = Phase.GO
 	_phase_timer = go_seconds
-	_world.screen_text("¡Vamos!", Palette.TEAL)
+	_world.screen_text("YA", Palette.TEAL)
 	_hud.show_go()
 	_local.set_input_enabled(true)
 
@@ -255,9 +253,9 @@ func _update_rest() -> void:
 		_drops_survived += 1
 		_world.restore()
 		if _round_fits(elapsed + _phase_timer):
-			_world.screen_text("¡Otra vez!", Palette.GOLD)
+			_world.screen_text("Otra", Palette.GOLD)
 		else:
-			_world.screen_text("¡Casi!", Palette.TEAL)
+			_world.screen_text("Casi", Palette.TEAL)
 	if _phase_timer <= 0.0:
 		if _round_fits(elapsed):
 			_start_memorize()
@@ -298,20 +296,20 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	_hud.hide_target()
 	_hud.hide_mission()
 	if victory:
-		_world.screen_text("¡Ganaste!", Palette.TEAL)
+		_world.screen_text("Fin", Palette.TEAL)
 		_world.celebrate()
 		_local.victory_hop()
-		_hud.show_banner("¡SOBREVIVISTE!", "%d s" % int(time_limit))
+		_hud.show_banner("%d S" % int(time_limit), "")
 	else:
-		_world.screen_text("¡Te caíste!", Palette.CORAL)
-		_hud.show_banner("TE CAÍSTE", "%d s" % floori(elapsed), Palette.GOLD)
+		_world.screen_text("Caída", Palette.CORAL)
+		_hud.show_banner("CAÍDA", "%d s" % floori(elapsed), Palette.GOLD)
 	get_tree().create_timer(end_delay).timeout.connect(_end_round.bind(victory, title, message))
 
 
 #Inside a session the results screen takes over; on its own the HUD shows the end panel
 func _end_round(victory: bool, title: String, message: String) -> void:
 	var lines: Array[Array] = [
-		["Aguantaste", "%d s" % floori(minf(elapsed, time_limit))],
+		["Segundos", "%d s" % floori(minf(elapsed, time_limit))],
 		["Caídas esquivadas", str(_drops_survived)],
 	]
 	var sheet := GameSession.score_sheet
@@ -319,7 +317,7 @@ func _end_round(victory: bool, title: String, message: String) -> void:
 	for player in _players:
 		var held: float = _fallen.get(player.player_id, minf(elapsed, time_limit))
 		points[player.player_id] = sheet.drop_points(held / time_limit * sheet.drop_seconds)
-	var score := RoundScore.make(sheet, points[_local.player_id], "Aguantaste %d de %d s" % [floori(minf(elapsed, time_limit)), int(time_limit)])
+	var score := RoundScore.make(sheet, points[_local.player_id], "%d de %d s" % [floori(minf(elapsed, time_limit)), int(time_limit)])
 	if not finish_round(RoundResult.make(MINIGAME_ID, victory, title, message, lines).with_score(score, points)):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_hud.show_end(title, message, victory)

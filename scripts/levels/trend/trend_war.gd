@@ -1,8 +1,9 @@
 class_name TrendWar
 extends ArenaRound
 
-#"Guerra de Tendencias": bubbles with a toy inside float all over the map. Each of the five trends is a chain of kinds to fetch in
-#order before its clock runs out; the sooner, the more points. Shoves and haters knock the last item out of you
+#"Guerra de Tendencias": bubbles with a toy inside are born and go all over the map. Each of the five trends is a chain of kinds
+#to fetch in order before its clock runs out; the sooner, the more points. Shoves, and the haters that live in the maze, knock
+#the last item out of you
 
 const MINIGAME_ID := &"trend_war"
 const SCREEN_LIFT := 11.0
@@ -11,6 +12,11 @@ const SCREEN_PIXELS := Vector2i(432, 156)
 const SCREEN_BACK := Color("1b1640")
 #How far over or under a bubble a player can be and still touch it
 const TOUCH_HEIGHT := 2.3
+const POLE_RADIUS := 0.45
+#A giant toy on a pillar behind each zone, to tell them apart from anywhere: the prop, and how far past the middle of its zone
+const LANDMARKS: Array[StringName] = [&"trophy", &"like_hand", &"heart", &"bell", &"phone"]
+const LANDMARK_OUT := 18.5
+const LANDMARK_HEIGHT := 10.0
 
 @export var settings: TrendSettings
 
@@ -33,13 +39,18 @@ func _ready() -> void:
 	_trend_hud = hud as TrendHud
 	add_child(TrendIcons.new())
 	_plaza = TrendLayout.new()
-	setup_arena(_plaza, 40.0, TrendLayout.TOP_HEIGHT)
-	board = TrendBoard.new(_plaza, settings)
-	board.deal(rng)
+	#The haters only walk the maze
+	bot_places = _plaza.maze_places
+	setup_arena(_plaza)
+	for target in context.targets:
+		target.detection_radius = settings.hater_sight
+	board = TrendBoard.new(_plaza, settings, rng.randi())
+	board.fill(_positions())
 	_bubbles = TrendBubbles.new()
 	world.add_child(_bubbles)
-	_bubbles.build(board, settings)
+	_bubbles.build(board, settings, _plaza)
 	_build_screen()
+	_build_landmarks()
 	var ids: Array[int] = []
 	for id: int in players:
 		ids.append(id)
@@ -66,8 +77,10 @@ func _tick_round(delta: float) -> void:
 	rules.tick(delta)
 	if phase == Phase.ENDED:
 		return
-	for point in board.tick(delta, rng):
-		_bubbles.appear(point)
+	var wanted: Dictionary = {}
+	for id: int in players:
+		wanted[id] = rules.needed(id)
+	board.tick(delta, _positions(), wanted)
 	for id: int in _bounce_rest:
 		_bounce_rest[id] = maxf(float(_bounce_rest[id]) - delta, 0.0)
 	var running := rules.phase == TrendRules.Phase.RUN
@@ -79,7 +92,19 @@ func _tick_round(delta: float) -> void:
 	if rules.phase == TrendRules.Phase.REVEAL and not rules.chain.is_empty():
 		shown = rules.chain[0]
 	var fade := clampf(rules.time_left / settings.fade_seconds, 0.0, 1.0) if running else 1.0
-	_bubbles.refresh(clock, shown, fade, rules.round_index >= settings.drift_from)
+	_bubbles.refresh(clock, shown, fade, _drifting())
+
+
+#Where every player is, for the board to be fair with the bubbles it makes
+func _positions() -> Dictionary:
+	var found: Dictionary = {}
+	for id: int in players:
+		found[id] = (players[id] as Player).global_position
+	return found
+
+
+func _drifting() -> bool:
+	return rules != null and rules.round_index >= settings.drift_from
 
 
 #A blow from a rival or a hater knocks the last item out; it flies back toward whoever hit
@@ -109,17 +134,15 @@ func _check_touches() -> void:
 				break
 		if fetched:
 			continue
-		for point in board.kinds.size():
-			var kind := board.kinds[point]
-			if kind < 0 or not _touches(player, _bubbles.place_of(point)):
+		for bubble_id: int in board.bubbles.keys():
+			var at := board.position_of(bubble_id, _drifting())
+			if not _touches(player, at):
 				continue
-			if kind == need:
-				board.take(point)
-				_bubbles.pop(point)
-				rules.collect(id, kind)
+			if board.kind_of(bubble_id) == need:
+				rules.collect(id, board.take(bubble_id))
 				break
 			if float(_bounce_rest[id]) <= 0.0:
-				_bounce(player, point)
+				_bounce(player, bubble_id, at)
 
 
 func _touches(player: Player, bubble: Vector3) -> bool:
@@ -128,12 +151,12 @@ func _touches(player: Player, bubble: Vector3) -> bool:
 
 
 #A bubble that is not the one to fetch: a soft knock back and a wobble, no punishment
-func _bounce(player: Player, point: int) -> void:
+func _bounce(player: Player, bubble_id: int, at: Vector3) -> void:
 	_bounce_rest[player.player_id] = settings.bounce_rest
-	var away := player.global_position - _bubbles.place_of(point)
+	var away := player.global_position - at
 	away.y = 0.0
 	player.apply_push((away.normalized() if away.length() > 0.05 else Vector3.BACK) * 4.5)
-	_bubbles.wobble(point)
+	_bubbles.wobble(bubble_id)
 	SynthSound.play(self, SynthSound.tone(330.0, 0.12, 120.0, 0.4), -12.0, rng.randf_range(0.95, 1.1))
 
 
@@ -152,11 +175,10 @@ func _on_trend_revealed(index: int, chain: Array[int], limit: float) -> void:
 		beep.tween_callback(SynthSound.play.bind(self, SynthSound.tone(523.0, 0.12, 0.0, 0.4), -10.0, 1.0 + 0.16 * step))
 
 
-#The clock of the trend starts: the par of each player is the fastest way from where it stands
+#The clock of the trend starts: its par is what a good player needs for a chain that long, measured on the graph of the map
 func _on_run_started(_index: int) -> void:
-	var held := board.by_kind()
 	for id: int in players:
-		rules.set_par(id, _plaza.par_seconds((players[id] as Player).global_position, rules.chain, held))
+		rules.set_par(id, _plaza.par_seconds(rules.chain.size(), settings))
 	SynthSound.play(self, SynthSound.tone(880.0, 0.25, 0.0, 0.4), -9.0)
 
 
@@ -204,11 +226,9 @@ func _on_finished() -> void:
 	var won := state.completed >= settings.win_trends
 	var sheet := GameSession.score_sheet
 	var lines: Array[Array] = [["Tendencias", "%d de %d" % [state.completed, count]], ["Mejor", "+%d" % state.best]]
-	var score := RoundScore.make(sheet, state.total, "Completaste %d de %d tendencias" % [state.completed, count], lines)
-	var message := "Una tendencia se disfruta más cuando eliges cuál seguir y a tu ritmo." if won \
-		else "No hace falta subirse a todas las tendencias: elige una ruta y síguela con calma."
-	var result := RoundResult.make(MINIGAME_ID, won, "Viral" if won else "Sin tendencia", message, lines).with_score(score, rules.totals())
-	end_round(result, "¡VIRAL!" if won else "SE ACABÓ", "%d de %d" % [state.completed, count], won)
+	var score := RoundScore.make(sheet, state.total, "%d de %d tendencias" % [state.completed, count], lines)
+	var result := RoundResult.make(MINIGAME_ID, won, "Viral" if won else "Sin tendencia", "", lines).with_score(score, rules.totals())
+	end_round(result, "VIRAL" if won else "%d DE %d" % [state.completed, count], ("%d de %d" % [state.completed, count]) if won else "", won)
 
 
 #The giant screen over the core: a box with the trend on its four faces, the same row of icons the players carry
@@ -240,6 +260,20 @@ func _build_screen() -> void:
 	var holder := Node3D.new()
 	holder.position = _plaza.position_of(TrendLayout.CORE) + Vector3(0.0, SCREEN_LIFT, 0.0)
 	world.add_child(holder)
+	#The pole that holds it up, in the very middle of the plaza
+	var pole_height := SCREEN_LIFT - SCREEN_SIZE.y / 2.0
+	var pole := PartyKit.pillar(pole_height, POLE_RADIUS, PartyKit.PINK, PartyKit.WHITE)
+	pole.position = _plaza.position_of(TrendLayout.CORE)
+	world.add_child(pole)
+	var trunk := CylinderShape3D.new()
+	trunk.radius = POLE_RADIUS
+	trunk.height = pole_height
+	var collider := CollisionShape3D.new()
+	collider.shape = trunk
+	var post := StaticBody3D.new()
+	post.position = pole.position + Vector3(0.0, pole_height / 2.0, 0.0)
+	post.add_child(collider)
+	world.add_child(post)
 	var depth := SCREEN_SIZE.x + 0.5
 	var box := BoxMesh.new()
 	box.size = Vector3(depth, SCREEN_SIZE.y + 0.5, depth)
@@ -274,6 +308,19 @@ func _build_screen() -> void:
 		ring.material_override = PartyKit.candy(PartyKit.WHITE, PartyKit.PINK, 16.0, 0.0, 0.25)
 		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		holder.add_child(ring)
+
+
+#Behind each zone, past the fence, a candy pillar in its colour holds a giant toy: the landmark that tells the zones apart
+func _build_landmarks() -> void:
+	for zone in TrendLayout.ZONE_COUNT:
+		var at := _plaza.zone_spot(zone, LANDMARK_OUT, 0.0)
+		var pillar := PartyKit.pillar(LANDMARK_HEIGHT, 0.9, _plaza.color_of_zone(zone), PartyKit.WHITE)
+		pillar.position = at
+		world.add_child(pillar)
+		var toy := PropKit.make_tall(LANDMARKS[zone], 5.0, Color.WHITE, false)
+		toy.position = at + Vector3(0.0, LANDMARK_HEIGHT + 0.6, 0.0)
+		toy.rotation.y = atan2(-at.x, -at.z)
+		world.add_child(toy)
 
 
 func _refresh_screen() -> void:

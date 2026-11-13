@@ -12,6 +12,8 @@ var _failures := 0
 func _initialize() -> void:
 	_check_map()
 	_check_board()
+	_check_fairness()
+	_check_seed()
 	_check_chains()
 	_check_order_and_points()
 	_check_places_and_ties()
@@ -41,69 +43,186 @@ func _to_run(rules: TrendRules) -> void:
 func _check_map() -> void:
 	var layout := TrendLayout.new()
 	var graph := layout.build_graph()
+	var costs := graph.costs_from(TrendLayout.CORE)
 	var reachable := true
-	for id: StringName in layout.islands:
-		reachable = reachable and graph.shortest_path(TrendLayout.CORE, id).found
-	_expect(reachable, "desde el núcleo se llega por puentes a las %d islas" % layout.islands.size())
+	for id: StringName in layout.places:
+		reachable = reachable and costs.has(id)
+	_expect(reachable, "desde la plaza se llega a los %d lugares del mapa" % layout.places.size())
 	var heights: Dictionary = {}
-	for id: StringName in layout.islands:
+	for id: StringName in layout.places:
 		heights[snappedf(layout.position_of(id).y, 0.1)] = true
-	_expect(heights.size() >= 6, "el mapa tiene muchas alturas distintas (%d)" % heights.size())
-	_expect(layout.points.size() >= TrendCatalog.COUNT * SETTINGS.copies_per_kind + 4, "hay más puntos que burbujas: %d para %d" % [
-		layout.points.size(), TrendCatalog.COUNT * SETTINGS.copies_per_kind])
+	_expect(heights.size() >= 5, "el terreno tiene muchas alturas distintas (%d)" % heights.size())
+	var by_zone: Dictionary = {}
+	for point in layout.points:
+		by_zone[point["zone"]] = int(by_zone.get(point["zone"], 0)) + 1
+	var spread := true
+	for zone in TrendLayout.ZONE_COUNT:
+		spread = spread and int(by_zone.get(zone, 0)) >= 5
+	_expect(spread, "cada una de las cinco zonas tiene al menos 5 puntos de burbuja %s" % by_zone)
+	_expect(layout.points.size() >= SETTINGS.bubble_target + 8, "hay más puntos que burbujas: %d para %d" % [layout.points.size(), SETTINGS.bubble_target])
 	var steep := 0.0
-	for bridge in layout.bridges:
-		var frame := layout.frame_of(bridge)
-		steep = maxf(steep, absf((frame["end"] as Vector3).y - (frame["start"] as Vector3).y) / maxf(float(frame["length"]), 0.01))
+	for ramp in layout.ramps:
+		var from: Vector3 = ramp["from"]
+		var to: Vector3 = ramp["to"]
+		steep = maxf(steep, absf(to.y - from.y) / maxf(Vector2(to.x - from.x, to.z - from.z).length(), 0.01))
 	_expect(steep < 0.75, "ninguna rampa pasa de 37 grados (pendiente máxima %.2f)" % steep)
-	var overlap := false
-	for a: StringName in layout.islands:
-		for b: StringName in layout.islands:
-			if a != b and layout.position_of(a).distance_to(layout.position_of(b)) < layout.radius_of(a) + layout.radius_of(b) + 0.5:
-				overlap = true
-	_expect(not overlap, "ninguna isla se monta sobre otra")
-	var board := TrendBoard.new(layout, SETTINGS)
-	var rng := RandomNumberGenerator.new()
-	var hops := 0.0
-	var count := 0
-	for seed_value in 40:
-		rng.seed = seed_value
-		board.deal(rng)
-		var held := board.by_kind()
-		var chain := TrendRules.make_chain(4, false, rng)
-		var par := layout.par_seconds(layout.position_of(TrendLayout.CORE), chain, held)
-		hops += par * ArenaLayout.WALK_SPEED / chain.size()
-		count += 1
-		if par == INF:
-			_expect(false, "tendencia sin camino con la semilla %d" % seed_value)
-	var average := hops / count
-	_expect(average >= 8.0 and average <= 18.0, "de una burbuja a la siguiente hay de 8 a 18 m de camino en promedio (%.1f)" % average)
+	#The haters walk the graph without drops or launches, and with everything but the maze forbidden they never leave it
+	var bot_graph := layout.build_graph(true)
+	var forbidden: Array[StringName] = []
+	for id: StringName in layout.places:
+		if not layout.maze_places.has(id):
+			forbidden.append(id)
+	var roam := bot_graph.costs_from(layout.maze_places[0], forbidden)
+	var inside := roam.size() == layout.maze_places.size()
+	for id: StringName in roam:
+		inside = inside and layout.maze_places.has(id)
+	_expect(inside and layout.maze_places.size() == 16, "los haters recorren las 16 celdas del laberinto y ningún otro lugar")
+	var leg := layout.expected_leg(float(SETTINGS.bubble_target) / TrendCatalog.COUNT)
+	_expect(leg >= 2.5 and leg <= 8.0, "de una burbuja a la siguiente de su categoría hay unos %.1f s de camino en promedio" % leg)
+	var pars: Array[float] = []
+	var roomy := true
+	for index in SETTINGS.lengths.size():
+		pars.append(layout.par_seconds(SETTINGS.lengths[index], SETTINGS))
+		roomy = roomy and pars[index] < SETTINGS.limits[index] * 0.75 and pars[index] > 2.0
+	_expect(roomy, "el par de cada tendencia sale del grafo y deja margen frente a su límite %s" % [pars.map(func(par: float) -> float: return snappedf(par, 0.1))])
+
+
+#The player of the simulations: it walks from place to place around the map
+func _stroll(layout: TrendLayout, time: float, offset: int) -> Vector3:
+	var stops: Array[StringName] = [&"C", &"tw_in", &"K0", &"bl_in", &"K1", &"bo_in", &"K2", &"mz_in", &"K3", &"ba_in", &"K4"]
+	var along := time / 8.0 + offset * 2.2
+	var from := layout.position_of(stops[int(along) % stops.size()])
+	var to := layout.position_of(stops[(int(along) + 1) % stops.size()])
+	return from.lerp(to, fposmod(along, 1.0))
 
 
 func _check_board() -> void:
 	var layout := TrendLayout.new()
-	var board := TrendBoard.new(layout, SETTINGS)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 9
-	board.deal(rng)
-	var held := board.by_kind()
-	var even := held.size() == TrendCatalog.COUNT
-	for kind: int in held:
-		even = even and (held[kind] as Array).size() == SETTINGS.copies_per_kind
-	_expect(even, "el reparto pone %d burbujas de cada una de las %d categorías" % [SETTINGS.copies_per_kind, TrendCatalog.COUNT])
-	var point: int = held[0][0]
-	_expect(board.take(point) == 0 and board.kinds[point] == -1 and board.take(point) == -1, "una burbuja atrapada deja su punto vacío y no se atrapa dos veces")
-	var back := board.tick(SETTINGS.respawn_seconds - 0.1, rng)
-	_expect(back.is_empty(), "antes de %d s no reaparece" % int(SETTINGS.respawn_seconds))
-	back = board.tick(0.2, rng)
-	_expect(back.size() == 1 and back[0] != point and board.kinds[back[0]] == 0, "reaparece a los %d s en otro punto" % int(SETTINGS.respawn_seconds))
+	var board := TrendBoard.new(layout, SETTINGS, 9)
+	var births: Dictionary = {}
+	var lives: Array[float] = []
+	var early := [0]
+	var too_close := [0]
+	var where := [Vector3.ZERO]
+	var on_spawn := func(id: int) -> void:
+		births[id] = board.clock
+		var bubble: TrendBoard.Bubble = board.bubbles[id]
+		if board.clock > 0.0 and layout.seconds_from(where[0], bubble.point) < SETTINGS.spawn_clear_seconds - 0.01:
+			too_close[0] += 1
+	var on_gone := func(id: int, taken: bool) -> void:
+		if not taken:
+			var lived: float = board.clock - float(births[id])
+			lives.append(lived)
+			if lived < SETTINGS.life_seconds.x - 0.2 and float(births[id]) > 0.0:
+				early[0] += 1
+	board.bubble_spawned.connect(on_spawn)
+	board.bubble_gone.connect(on_gone)
+	where[0] = layout.position_of(TrendLayout.CORE)
+	board.fill({1: where[0]})
+	_expect(board.bubbles.size() == SETTINGS.bubble_target, "al empezar hay %d burbujas vivas" % SETTINGS.bubble_target)
+	var low := 999
+	var high := 0
+	var fewest := 999
+	var most := 0
+	var one_zone := 0
+	var reachable := 0
+	var ticks := 0
+	var taken := 0
+	var need := 0
+	for step in 3000:
+		var time := step * 0.1
+		where[0] = _stroll(layout, time, 0)
+		#Now and then the player fetches the bubble it needs when it is right there, and then needs the next kind
+		for id: int in board.bubbles.keys():
+			if board.kind_of(id) == need and layout.seconds_from(where[0], (board.bubbles[id] as TrendBoard.Bubble).point) < 1.5:
+				board.take(id)
+				taken += 1
+				need = (need + 1) % TrendCatalog.COUNT
+				break
+		board.tick(0.1, {1: where[0]}, {1: need})
+		ticks += 1
+		low = mini(low, board.bubbles.size())
+		high = maxi(high, board.bubbles.size())
+		for kind in TrendCatalog.COUNT:
+			fewest = mini(fewest, board.count_of(kind))
+			most = maxi(most, board.count_of(kind))
+			if board.zones_of(kind).size() < 2:
+				one_zone += 1
+		if board.within_reach(where[0], need):
+			reachable += 1
+	_expect(low >= SETTINGS.bubble_target - 1 and high <= SETTINGS.bubble_target + 1,
+		"en 300 s la cantidad se mantiene: de %d a %d (objetivo %d, margen 1)" % [low, high, SETTINGS.bubble_target])
+	_expect(fewest >= SETTINGS.min_per_kind and most <= SETTINGS.max_per_kind, "cada categoría tiene siempre de %d a %d burbujas" % [fewest, most])
+	_expect(one_zone == 0, "ninguna categoría queda toda en una sola zona")
+	_expect(too_close[0] == 0, "ninguna burbuja nace a menos de %.1f s a pie del jugador" % SETTINGS.spawn_clear_seconds)
+	var longest := 0.0
+	for lived in lives:
+		longest = maxf(longest, lived)
+	_expect(longest <= SETTINGS.life_seconds.y + 0.2 and early[0] <= board.rescues,
+		"una burbuja vive de %d a %d s; solo se van antes las %d que cedieron su sitio a una necesaria" % [
+			int(SETTINGS.life_seconds.x), int(SETTINGS.life_seconds.y), board.rescues])
+	_expect(float(reachable) / ticks > 0.97, "la categoría que toca casi nunca falta al alcance (%.1f %% del tiempo; %d atrapadas)" % [100.0 * reachable / ticks, taken])
+	board.bubble_spawned.disconnect(on_spawn)
+	board.bubble_gone.disconnect(on_gone)
+	_expect(board.take(-5) == -1, "una burbuja que no existe no se atrapa")
 	board.drop(3, Vector3.ZERO, Vector3.RIGHT, 7)
 	_expect(board.loose.size() == 1 and not board.can_pick(board.loose[0], 7) and board.can_pick(board.loose[0], 8),
 		"lo que suelta un golpe queda suelto: su dueño espera un momento y cualquier otro lo puede tomar")
-	board.tick(SETTINGS.loose_owner_rest + 0.1, rng)
+	board.tick(SETTINGS.loose_owner_rest + 0.1, {}, {})
 	_expect(board.can_pick(board.loose[0], 7), "pasado ese momento su dueño también puede")
-	board.tick(SETTINGS.loose_seconds, rng)
+	board.tick(SETTINGS.loose_seconds, {}, {})
 	_expect(board.loose.is_empty(), "a los %d s lo suelto desaparece" % int(SETTINGS.loose_seconds))
+
+
+#With several players the bubbles are born about as far from each of them, and with one, at a middle distance
+func _check_fairness() -> void:
+	var layout := TrendLayout.new()
+	for count in [1, 2, 3, 4]:
+		var board := TrendBoard.new(layout, SETTINGS, 30 + count)
+		var players: Dictionary = {}
+		for id in count:
+			players[id + 1] = _stroll(layout, 0.0, id)
+		var sums: Dictionary = {}
+		var spawns := [0]
+		var on_spawn := func(id: int) -> void:
+			spawns[0] += 1
+			for player: int in players:
+				sums[player] = float(sums.get(player, 0.0)) + layout.seconds_from(players[player], (board.bubbles[id] as TrendBoard.Bubble).point)
+		board.bubble_spawned.connect(on_spawn)
+		board.fill(players)
+		for step in 2400:
+			for id in count:
+				players[id + 1] = _stroll(layout, step * 0.1, id)
+			board.tick(0.1, players, {})
+		board.bubble_spawned.disconnect(on_spawn)
+		var nearest := INF
+		var farthest := 0.0
+		for player: int in sums:
+			nearest = minf(nearest, float(sums[player]) / spawns[0])
+			farthest = maxf(farthest, float(sums[player]) / spawns[0])
+		if count == 1:
+			_expect(nearest >= 3.0 and nearest <= 9.0, "con un jugador las burbujas nacen a una distancia media (%.1f s a pie)" % nearest)
+		else:
+			_expect(farthest / nearest < 1.2, "con %d jugadores nacen casi igual de lejos de cada uno (de %.1f a %.1f s en promedio)" % [count, nearest, farthest])
+
+
+#The same seed and the same players give the very same bubbles; another seed gives others
+func _check_seed() -> void:
+	var layout := TrendLayout.new()
+	var logs: Array[Array] = []
+	for seed_value in [77, 77, 78]:
+		var board := TrendBoard.new(layout, SETTINGS, seed_value)
+		var record: Array = []
+		var on_spawn := func(id: int) -> void:
+			record.append([id, (board.bubbles[id] as TrendBoard.Bubble).point, board.kind_of(id)])
+		board.bubble_spawned.connect(on_spawn)
+		board.fill({1: layout.position_of(TrendLayout.CORE)})
+		for step in 900:
+			board.tick(0.1, {1: _stroll(layout, step * 0.1, 0)}, {1: floori(step / 100.0) % TrendCatalog.COUNT})
+		board.bubble_spawned.disconnect(on_spawn)
+		logs.append(record)
+	_expect(logs[0] == logs[1] and logs[0].size() > 100, "con la misma semilla el reparto se repite idéntico (%d burbujas)" % logs[0].size())
+	_expect(logs[0] != logs[2], "y con otra semilla cambia")
 
 
 func _check_chains() -> void:

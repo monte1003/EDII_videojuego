@@ -4,6 +4,10 @@ extends Node
 #Chance that the racer stops to scroll its phone when it reaches an island, and for how long
 const DISTRACTION_CHANCE := 0.3
 const DISTRACTION_TIME := Vector2(0.8, 2.0)
+#The clumsy racer (a person that is not good at the game): it stops more often and longer, and misses this share of the jumps
+const CLUMSY_DISTRACTION_CHANCE := 0.6
+const CLUMSY_DISTRACTION_TIME := Vector2(1.5, 3.5)
+const CLUMSY_MISS := 0.35
 
 #Test helper that plays a racer of level 1 in place of a keyboard: it walks the shortest route to the goal like a player would, jumps the spinners, the sweeping blocks and the rolling balls and
 #sometimes stops to scroll its phone. The game never uses it; it only sets the actions of its Player, like the keyboard does for a person.
@@ -22,6 +26,8 @@ var danger_edge: Array[StringName] = []
 var distractible := true
 #The islands to go through, in order, instead of the cheapest route (to time one way of the course); empty plays the cheapest route
 var forced_route: Array[StringName] = []
+#Plays like a person that is not good at the game
+var clumsy := false
 
 var _player: Player
 var _vertex: StringName = Level01Layout.START
@@ -37,6 +43,10 @@ var _distracted_left := 0.0
 #The island a cannon shot is flying to, and for how long it has been in the air
 var _flying_to: StringName = &""
 var _flight_time := 0.0
+#Rolled again on every island: while it is under the share of misses, the jumps of the next stretch are not made
+var _miss_roll := 1.0
+#The cannon of the deck the racer fell onto: it walks to its pad and is thrown back to the start of the bridge
+var _deck: Dictionary = {}
 
 
 func _init() -> void:
@@ -52,6 +62,7 @@ func setup(player: Player, skill: float) -> void:
 #After a fall the racer starts again from the checkpoint
 func reset_to(vertex: StringName) -> void:
 	_vertex = vertex
+	_deck = {}
 	_flying_to = &""
 	_committed = false
 	_route.clear()
@@ -73,6 +84,10 @@ func _physics_process(delta: float) -> void:
 	if _flying_to != &"":
 		_fly(delta)
 		return
+	_check_fall()
+	if not _deck.is_empty():
+		_walk_deck()
+		return
 	if _distracted_left > 0.0:
 		_distracted_left -= delta
 		_set_move(Vector3.ZERO)
@@ -87,6 +102,34 @@ func _physics_process(delta: float) -> void:
 	_jump_spinners()
 	_jump_blocks()
 	_jump_balls()
+	_jump_comments()
+
+
+#A racer that dropped well under the island or bridge it was on, onto a deck: it goes to the pad of the deck it stands on
+func _check_fall() -> void:
+	if not _deck.is_empty() or not _player.is_on_floor():
+		return
+	var at := _player.global_position
+	if at.y >= (Level01Layout.POSITIONS[current_vertex()] as Vector3).y - 2.5:
+		return
+	for edge in Level01Layout.soft_edges():
+		var deck := Level01Layout.deck_of(edge)
+		if absf(at.y - float(deck["top"])) < 1.0 and Level01Layout.deck_holds(deck, at):
+			_deck = deck["cannon"]
+			_committed = false
+			return
+
+
+#On the deck it goes to the pad; once the pad has lifted it back it goes on from the island at the start of the bridge
+func _walk_deck() -> void:
+	var pad: Vector3 = _deck["pad"]
+	if _player.global_position.y > pad.y + 3.0:
+		_vertex = _deck["to"]
+		_deck = {}
+		_route.clear()
+		_dirty = true
+		return
+	_set_move(_toward(pad) if not _reached(pad) else Vector3.ZERO)
 
 
 func _plan() -> void:
@@ -166,8 +209,16 @@ func _fly(delta: float) -> void:
 func _arrive() -> void:
 	_vertex = _leg_vertex
 	_committed = false
-	if distractible and _vertex != Level01Layout.GOAL and rng.randf() < DISTRACTION_CHANCE:
-		_distracted_left = rng.randf_range(DISTRACTION_TIME.x, DISTRACTION_TIME.y)
+	_miss_roll = rng.randf() if clumsy else 1.0
+	var chance := CLUMSY_DISTRACTION_CHANCE if clumsy else DISTRACTION_CHANCE
+	var time := CLUMSY_DISTRACTION_TIME if clumsy else DISTRACTION_TIME
+	if distractible and _vertex != Level01Layout.GOAL and rng.randf() < chance:
+		_distracted_left = rng.randf_range(time.x, time.y)
+
+
+#Whether the racer makes the jump it decided on: a clumsy one misses some
+func _jumps() -> bool:
+	return _miss_roll >= CLUMSY_MISS
 
 
 func _is_danger(a: StringName, b: StringName) -> bool:
@@ -176,7 +227,7 @@ func _is_danger(a: StringName, b: StringName) -> bool:
 
 #The bar of the island it stands on: it jumps when the bar is about to reach it
 func _jump_spinners() -> void:
-	if _committed or not Level01Layout.SPINNERS.has(_vertex) or not _player.is_on_floor() or not clock.is_valid():
+	if not _jumps() or _committed or not Level01Layout.SPINNERS.has(_vertex) or not _player.is_on_floor() or not clock.is_valid():
 		return
 	var centre: Vector3 = Level01Layout.POSITIONS[_vertex]
 	var wait := Level01Hazards.time_to_hit(centre, Level01Layout.SPINNERS[_vertex], clock.call(), _player.global_position, 0.5)
@@ -186,7 +237,7 @@ func _jump_spinners() -> void:
 
 #The block that sweeps the bridge it is crossing: it jumps when the block is about to reach it
 func _jump_blocks() -> void:
-	if not _committed or not _player.is_on_floor() or not clock.is_valid():
+	if not _jumps() or not _committed or not _player.is_on_floor() or not clock.is_valid():
 		return
 	var pusher := Level01Layout.pusher_of(_vertex, _leg_vertex)
 	if pusher.is_empty():
@@ -196,9 +247,23 @@ func _jump_blocks() -> void:
 		_player.jump_requested = true
 
 
+#The comment of the bridge it is crossing: it jumps when its push is about to start and the bubble is close
+func _jump_comments() -> void:
+	if not _jumps() or not _committed or not _player.is_on_floor() or not clock.is_valid():
+		return
+	var comment := Level01Layout.comment_of(_vertex, _leg_vertex)
+	if comment.is_empty():
+		return
+	var wait := Level01Hazards.comment_wait(comment, clock.call())
+	var bubble := Level01Hazards.comment_center(comment, clock.call())
+	var near := Vector2(_player.global_position.x - bubble.x, _player.global_position.z - bubble.z).length() < 3.2
+	if near and wait >= 0.08 and wait <= 0.3:
+		_player.jump_requested = true
+
+
 #The balls that roll across the island it stands on: it jumps when one is about to reach it
 func _jump_balls() -> void:
-	if _committed or not _player.is_on_floor() or not clock.is_valid():
+	if not _jumps() or _committed or not _player.is_on_floor() or not clock.is_valid():
 		return
 	for ball: Dictionary in Level01Layout.BALLS:
 		if ball["island"] != _vertex:

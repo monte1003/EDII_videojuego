@@ -40,6 +40,33 @@ static func landing(host: Node3D, player: Player, hard: bool, rng: RandomNumberG
 		player.shake_camera(0.25)
 
 
+#A ring of light that opens and fades: flat on the floor when "facing" is up, or standing in the air and looking along "facing".
+#"from" and "to" are its radius at the start and at the end
+static func ring(parent: Node3D, at: Vector3, facing: Vector3, color: Color, from: float, to: float, seconds: float) -> void:
+	var band := TorusMesh.new()
+	band.inner_radius = 0.86
+	band.outer_radius = 1.0
+	band.rings = 28
+	band.ring_segments = 6
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = color
+	var wave := MeshInstance3D.new()
+	wave.mesh = band
+	wave.material_override = material
+	wave.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(wave)
+	wave.global_position = at
+	if absf(facing.normalized().dot(Vector3.UP)) < 0.9:
+		wave.global_basis = Basis.looking_at(facing.normalized(), Vector3.UP) * Basis(Vector3.RIGHT, PI / 2.0)
+	wave.scale = Vector3.ONE * from
+	var tween := wave.create_tween().set_parallel(true)
+	tween.tween_property(wave, "scale", Vector3.ONE * to, seconds).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(material, "albedo_color:a", 0.0, seconds).set_ease(Tween.EASE_IN)
+	tween.chain().tween_callback(wave.queue_free)
+
+
 #A round puff on the ground that grows and fades
 static func dust(parent: Node3D, at: Vector3, color: Color, amount := 14) -> void:
 	var puff := CPUParticles3D.new()

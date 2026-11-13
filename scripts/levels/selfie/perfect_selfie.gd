@@ -26,6 +26,8 @@ var _shields: Dictionary = {}
 var _rings: Dictionary = {}
 var _glitter: Dictionary = {}
 var _blinks := 0
+#The first photo teaches the shove once; the chips are drawn from these
+var _shove_taught := false
 #Per player: the arrow on the floor that points to the photo while its camera looks somewhere else
 var _guides: Dictionary = {}
 
@@ -36,7 +38,7 @@ func _ready() -> void:
 		ScreenFlow.mark_current(MINIGAME_ID)
 	_selfie_hud = hud as SelfieHud
 	_studio = SelfieLayout.new()
-	setup_arena(_studio, 38.0, SelfieLayout.TOP_HEIGHT)
+	setup_arena(_studio)
 	var ids: Array[int] = []
 	for id: int in players:
 		ids.append(id)
@@ -46,6 +48,7 @@ func _ready() -> void:
 	rules = SelfieRules.new(settings, GameSession.score_sheet, _studio, ids, rng.randi())
 	rules.photo_announced.connect(_on_photo_announced)
 	rules.frame_locked.connect(_on_frame_locked)
+	rules.frame_shown.connect(_on_frame_shown)
 	rules.photo_taken.connect(_on_photo_taken)
 	rules.pose_changed.connect(_on_pose_changed)
 	rules.power_taken.connect(_on_power_taken)
@@ -57,18 +60,76 @@ func _ready() -> void:
 	_powers = SelfiePowers.new()
 	world.add_child(_powers)
 	_powers.build(_studio.pedestals, rules.pedestal_kinds)
-	keys.interact_pressed.connect(request_pose.bind(local_id, true))
-	keys.interact_released.connect(request_pose.bind(local_id, false))
+	keys.interact_pressed.connect(toggle_pose.bind(local_id))
 	_help.setup(HelpPages.perfect_selfie(settings, GameSession.score_sheet))
 	_selfie_hud.set_photo(1, rules.photo_count())
-	hud.show_mission("Entra al marco antes del disparo", [
+	hud.show_mission("Entra al marco", [
 		"%s|mover" % InputHints.move_label(), "%s|posar" % InputHints.key_label(&"interact"), "%s|empujar" % InputHints.key_label(&"shove")], 4.5)
 
 
 #A player starts or stops its pose; the rules decide whether it can
 func request_pose(player_id: int, on: bool) -> void:
-	if phase == Phase.RUNNING and players.has(player_id) and not (players[player_id] as Player).is_down():
-		rules.set_posing(player_id, on)
+	if phase != Phase.RUNNING or not players.has(player_id):
+		return
+	var player: Player = players[player_id]
+	if on and (player.is_down() or player.is_diving()):
+		return
+	rules.set_posing(player_id, on)
+
+
+#The chips of the two actions: the pose near the player while the frame is there and the shove over the rival in reach, or near
+#the player while there are rivals in the frame, with its recharge. They hide when the local player cannot act
+func _tick_chips() -> void:
+	var player := local_player()
+	var camera := player.view_camera()
+	var acting := phase == Phase.RUNNING and not is_falling(local_id) and not player.is_down()
+	var head := player.global_position + Vector3(0.0, 1.9, 0.0)
+	var visible_head := acting and not camera.is_position_behind(head)
+	var here := camera.unproject_position(head) if visible_head else Vector2.ZERO
+	var in_frame := rules.frame_visible() and (rules.is_inside(player.global_position) \
+		or Vector2(player.global_position.x - rules.frame_center().x, player.global_position.z - rules.frame_center().z).length() < rules.frame_size() * 0.5 + 4.0)
+	_selfie_hud.set_pose_chip(visible_head and in_frame, rules.is_posing(local_id), here + Vector2(96.0, -6.0))
+	var target := shove_target(local_id)
+	var reach := target != NOBODY
+	var crowded := in_frame and _rival_in_frame()
+	var teaching := not _shove_taught and rules.frame_visible() and rules.photo_index == 0 and in_frame
+	var anchor := here + Vector2(-96.0, -6.0)
+	if reach:
+		var over := shove_target_position(target)
+		if not camera.is_position_behind(over):
+			anchor = camera.unproject_position(over) + Vector2(0.0, -34.0)
+	var charge := 1.0 - brawl.rest_left(local_id) / brawl.shove_rest
+	var show_shove := visible_head and (reach or crowded or teaching)
+	if show_shove and teaching and not _shove_taught:
+		_shove_taught = true
+		_selfie_hud.shove_chip.teach("saca a otros")
+	_selfie_hud.set_shove_chip(show_shove, charge, anchor)
+
+
+#Whether somebody else (a player or a bot) is inside the frame
+func _rival_in_frame() -> bool:
+	for id: int in players:
+		if id != local_id and rules.is_inside((players[id] as Player).global_position):
+			return true
+	for bot in bots:
+		if rules.is_inside(bot.global_position):
+			return true
+	return false
+
+
+#One press of the key strikes the pose and the next one drops it
+func toggle_pose(player_id: int) -> void:
+	request_pose(player_id, not rules.is_posing(player_id))
+
+
+#Shoving drops the pose first: nobody shoves from a pose
+func request_shove(player_id: int) -> bool:
+	if rules != null and rules.is_posing(player_id):
+		rules.set_posing(player_id, false)
+	var thrown := super(player_id)
+	if thrown and player_id == local_id:
+		_selfie_hud.press_shove()
+	return thrown
 
 
 func _on_round_started() -> void:
@@ -78,6 +139,9 @@ func _on_round_started() -> void:
 func _tick_round(delta: float) -> void:
 	for id: int in players:
 		var player: Player = players[id]
+		#Trying to move or to jump drops the pose
+		if rules.is_posing(id) and (player.move_input.length() > settings.pose_break_input or player.jump_requested):
+			rules.set_posing(id, false)
 		rules.place(id, player.global_position, player.is_on_floor(), is_falling(id))
 	rules.extras.clear()
 	for bot in bots:
@@ -87,7 +151,9 @@ func _tick_round(delta: float) -> void:
 		return
 	if rules.frame_visible():
 		_drone.show_frame(rules.frame_center(), rules.frame_size(), rules.lock_share())
+		_selfie_hud.viewfinder.aim(rules.frame_center(), rules.frame_size())
 		_tick_blinks()
+	_tick_chips()
 	for id: int in players:
 		var player: Player = players[id]
 		player.move_speed = _base_speed * rules.speed_scale(id)
@@ -99,10 +165,6 @@ func _tick_round(delta: float) -> void:
 		for index in _studio.pedestals.size():
 			if rules.pedestal_kinds[index] >= 0 and player.global_position.distance_to(_studio.pedestals[index] + Vector3(0.0, 0.6, 0.0)) <= settings.power_radius:
 				rules.take_power(id, index)
-
-
-func _can_shove(player_id: int) -> bool:
-	return not rules.is_posing(player_id)
 
 
 func _shove_scale(victim_id: int) -> float:
@@ -124,9 +186,16 @@ func _on_photo_announced(index: int, spot: StringName) -> void:
 	for missing in maxi(settings.bombers[mini(index, settings.bombers.size() - 1)] - bots.size(), 0):
 		add_bot()
 	_drone.hide_frame()
-	_drone.fly(_studio.flight_path(_studio.nearest_island(_drone.global_position), spot), settings.travel_seconds * 0.9)
+	_selfie_hud.announce_camera()
+	_drone.fly(_studio.flight_path(_studio.nearest_place(_drone.global_position - Vector3(0.0, SelfieLayout.DRONE_HEIGHT, 0.0)), spot), settings.travel_seconds * 0.9)
 	_selfie_hud.set_photo(index + 1, rules.photo_count())
 	SynthSound.play(self, SynthSound.tone(392.0, 0.3, 300.0, 0.35), -11.0)
+
+
+#The viewfinder starts to draw the place of the photo
+func _on_frame_shown(_index: int) -> void:
+	_selfie_hud.viewfinder.aim(rules.frame_center(), rules.frame_size())
+	_selfie_hud.viewfinder.set_active(true)
 
 
 func _on_frame_locked(_index: int, _seconds: float) -> void:
@@ -151,30 +220,22 @@ func _on_photo_taken(_index: int, shots: Dictionary) -> void:
 	hud.flash(Color.WHITE, 0.9, 0.5)
 	ImpactFx.hit_stop(get_tree(), 0.12)
 	cheer(2.6)
-	var faces: Array[Texture2D] = []
-	var crowd := 0
 	for id: int in shots:
 		var shot: SelfieRules.Shot = shots[id]
-		crowd = shot.crowd
 		if not shot.inside:
 			continue
 		var player: Player = players[id]
 		pop_text(player.global_position + Vector3(0.0, 1.7, 0.0), "+%d" % shot.followers, Palette.GOLD if shot.posing else Palette.PAPER)
 		player.squash(4.0)
-		for slot in participants:
-			if slot.player_id == id and slot.character != null and slot.character.icon != null:
-				faces.append(slot.character.icon)
 	var mine: SelfieRules.Shot = shots[local_id]
 	_selfie_hud.set_followers(rules.state_of(local_id).followers, mine.followers)
-	var caption := "FUERA"
-	if mine.inside:
-		caption = "PERFECTA" if mine.centered and mine.posing else ("POSE" if mine.posing else ("CENTRO" if mine.centered else "SALISTE"))
-	_selfie_hud.show_print(faces, maxi(crowd - faces.size(), 0), caption, settings.reveal_seconds)
+	_selfie_hud.reveal_photo(mine.followers if mine.inside else 0, mine.inside, mine.posing, settings.reveal_seconds - 1.13)
 	get_tree().create_timer(settings.reveal_seconds * 0.7).timeout.connect(_drone.hide_frame)
 
 
-func _on_pose_changed(player_id: int, posing: bool) -> void:
+func _on_pose_changed(player_id: int, posing: bool, style: int) -> void:
 	var player: Player = players[player_id]
+	player.pose_style = style
 	player.posing = posing
 	(_glitter[player_id] as CPUParticles3D).emitting = posing
 	if posing:
@@ -203,12 +264,10 @@ func _on_finished() -> void:
 	var won := state.photos >= settings.win_photos
 	var sheet := GameSession.score_sheet
 	var lines: Array[Array] = [["Fotos", "%d de %d" % [state.photos, count]], ["Poses", str(state.poses)], ["Seguidores", str(state.followers)]]
-	var score := RoundScore.make(sheet, rules.points_of(local_id), "Saliste en %d de %d fotos" % [state.photos, count], lines)
-	var message := "Saliste bien sin vivir para la foto: posar es un rato, no todo el día." if won \
-		else "No hay que salir en todas las fotos: llega con calma y elige cuándo posar."
-	var result := RoundResult.make(MINIGAME_ID, won, "Foto perfecta" if won else "Fuera de cuadro", message, lines).with_score(score, rules.totals())
+	var score := RoundScore.make(sheet, rules.points_of(local_id), "%d de %d fotos" % [state.photos, count], lines)
+	var result := RoundResult.make(MINIGAME_ID, won, "En cuadro" if won else "Fuera de cuadro", "", lines).with_score(score, rules.totals())
 	_drone.hide_frame()
-	end_round(result, "¡QUÉ FOTO!" if won else "FUERA DE CUADRO", "%d seguidores" % state.followers, won)
+	end_round(result, "%d SEGUIDORES" % state.followers, "%d de %d fotos" % [state.photos, count], won)
 
 
 #What shows on a player: a bubble while the shield lasts, a ring under the feet while a boost does, and sparkles while it poses

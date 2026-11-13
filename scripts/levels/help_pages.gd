@@ -23,9 +23,9 @@ Cuando alguien llega, la meta se cierra en %d segundos. El tiempo máximo es %s.
 		},
 		{
 			"title": "El feed cambia",
-			"body": "Los puentes color coral son frágiles: cada cierto tiempo uno parpadea y %d segundos después cae por unos %d. Pasados %d segundos del inicio puede haber dos caídos a la vez. Si estás encima, caes con él.
+			"body": "Los puentes color coral son frágiles: cada cierto tiempo uno parpadea y %d segundos después cae por unos %d. Pasados %d segundos del inicio puede haber dos caídos a la vez. No elige un puente con alguien encima, pero si pisas uno marcado caes con él: abajo hay una cubierta y no pierdes el intento.
 
-Casi siempre hay varios caminos parecidos: cuando uno se cierra, los bots calculan otro, y tú también." % [
+Antes de caer, al puente le sale un letrero que dice SATURADA. Casi siempre hay varios caminos parecidos: cuando uno se cierra, los bots calculan otro, y tú también." % [
 				int(settings.feed_warning), int(settings.feed_duration), int(settings.feed_first + settings.feed_extra_delay)],
 		},
 		{
@@ -41,10 +41,12 @@ Los de los lados dan más vueltas y lo compensan: un tobogán azul te baja rápi
 En las islas con el borde rosado gira una barra por todo el piso. Salta sobre ella cuando se acerque o rodéala por el borde, sin caerte.",
 		},
 		{
-			"title": "Atajos y bloques",
+			"title": "Atajos, bloques y comentarios",
 			"body": "Los puentes angostos son atajos: acortan mucho el camino, pero casi no dejan espacio para un empujón.
 
-En algunos puentes anchos va y viene un bloque de rayas. Si te toca, te lanza al vacío: pasa cuando se aleje o salta sobre él.",
+En algunos puentes anchos va y viene un bloque de rayas. Si te toca, te lanza al vacío: pasa cuando se aleje o salta sobre él.
+
+Otros puentes anchos tienen un comentario: una burbuja que se escribe en una orilla, parpadea y cruza de lado a lado empujando a quien encuentre. Salta sobre ella o cruza por el otro lado.",
 		},
 		{
 			"title": "Todo se mueve",
@@ -52,14 +54,16 @@ En algunos puentes anchos va y viene un bloque de rayas. Si te toca, te lanza al
 
 En algunas islas rueda una bola de caramelo por una franja rosada que se enciende antes de que salga; salta cuando llegue. Algunas barras aceleran y frenan.
 
-Los trampolines de colores, en la parte quieta del borde de algunas islas, te lanzan al aire: sirven para ver el camino o para esquivar.",
+Los trampolines de colores, en la parte quieta del borde de algunas islas, te lanzan al aire: sirven para ver el camino o para esquivar.
+
+Debajo de los puentes que caen y de los que tienen comentario hay una cubierta con borde bajo. Si caes ahí no pierdes el intento: solo el camino, porque una plataforma dorada del piso te devuelve a la isla donde empieza el puente.",
 		},
 		{
 			"title": "Los bots molestos",
 			"body": "Son lo que molesta en internet y cada uno te busca a su manera:
 %s
 
-Salen en momentos distintos. Cuando uno se acerca, le sale un %s: ¡te va a empujar! Corre en sentido contrario y no pasa nada." % [
+Salen en momentos distintos. Cuando uno se acerca, le sale un %s: va a empujar. Corre en sentido contrario y no pasa nada." % [
 				"
 ".join(roster), key.call("❗")],
 		},
@@ -77,7 +81,7 @@ Pausa digital (isla %s): dentro de la burbuja nadie te empuja %d segundos." % [
 		{
 			"title": "Cómo se maneja",
 			"body": "Moverte: %s
-Saltar: %s
+Saltar: %s (dos veces en el aire barres: llegas más lejos y quedas tendido un momento)
 Mirar: %s
 Usar una estación: %s
 Pausa: %s · Esta ayuda: %s
@@ -165,25 +169,33 @@ static func trend_war(settings: TrendSettings) -> Array[Dictionary]:
 	return [
 		{
 			"title": "Tu misión",
-			"body": "Por toda la plaza flotan burbujas con algo dentro. Cada tendencia es una fila de íconos: atrapa una burbuja de cada uno antes de que se acabe su reloj.
+			"body": "En la plaza nacen burbujas con algo dentro y se van solas a los %d a %d segundos. Cada tendencia es una fila de íconos: atrapa una burbuja de cada uno, en orden, antes de que se acabe su reloj.
 
-Son %d tendencias. Cuanto antes completes cada una, más puntos; si el reloj llega a cero sin completarla, esa no suma." % count,
+Son %d tendencias. Cuanto antes completes cada una, más puntos; si el reloj llega a cero sin completarla, esa no suma." % [
+				int(settings.life_seconds.x), int(settings.life_seconds.y), count],
 		},
 		{
 			"title": "En orden",
-			"body": "Las burbujas se atrapan en el orden de la fila, de izquierda a derecha. La que te toca brilla con su color sobre un aro y un haz de luz; las demás quedan apagadas.
+			"body": "La burbuja que te toca brilla con su color sobre un aro y un haz de luz; las demás quedan apagadas. Cuando una burbuja envejece, su aro se encoge y late más rápido: va a irse.
 
-Tocar una burbuja que no te toca no castiga: solo rebota. Cada tendencia trae más íconos y la plaza se mueve más: barras, trampolines, cintas y bloques.",
+Siempre hay unas %d vivas y de cada categoría hay al menos %d, en más de una zona. Tocar una que no te toca no castiga: solo rebota." % [
+				settings.bubble_target, settings.min_per_kind],
 		},
 		{
-			"title": "Empujar",
-			"body": "Con %s empujas a quien tengas delante. Quien recibe el golpe suelta lo último que atrapó: sale volando unos segundos y lo puede tomar quien lo necesite.
+			"title": "Cinco zonas",
+			"body": "Cada zona tiene su color, su forma y su manera de hacerlo difícil. La torre morada es de tarimas que se suben en espiral. La rampa menta tiene cintas: una sube, una baja y una cambia de sentido. El campo ámbar son trampolines y cañones hacia dos pilares. El laberinto rosa tiene muros que no se saltan. El escenario azul gira dos barras.
 
-Después de un golpe hay un momento de gracia para que nadie quede encadenado." % InputHints.key_markup(&"shove"),
+Todas salen de la plaza del centro, bajo la pantalla gigante.",
+		},
+		{
+			"title": "Empujar y barrer",
+			"body": "Con %s empujas a quien tengas delante: quien recibe el golpe suelta lo último que atrapó y sale volando unos segundos. Después hay un momento de gracia.
+
+Con %s dos veces en el aire barres: llegas más lejos, pero quedas tendido un momento." % [InputHints.key_markup(&"shove"), InputHints.key_markup(&"jump")],
 		},
 		{
 			"title": "Haters",
-			"body": "Los haters te siguen por los puentes. Si te alcanzan, pasa lo mismo que con un empujón: pierdes lo último que atrapaste. No compiten ni suman puntos, solo estorban.
+			"body": "Los haters viven en el laberinto: fuera de él nadie te quita nada. Si te alcanzan, pierdes lo último que atrapaste. A ellos también los puedes empujar.
 
 Moverte: %s · Saltar: %s · Mirar: %s
 Pausa: %s · Esta ayuda: %s" % [
@@ -198,9 +210,9 @@ static func perfect_selfie(settings: SelfieSettings, sheet: ScoreSheet) -> Array
 	return [
 		{
 			"title": "Tu misión",
-			"body": "Un dron recorre el estudio y toma %d fotos, cada una en un lugar distinto. Sigue su haz de luz y métete en el marco que dibuja en el piso antes del disparo.
+			"body": "Un dron recorre el estudio y toma %d fotos, cada una en un set distinto. Un mensaje avisa cada vez que la cámara se mueve: ve hacia su luz y métete en el marco que dibuja en el piso antes del disparo.
 
-Cada foto en la que sales te da seguidores. Si estás en el aire o fuera del marco cuando dispara, no sales." % settings.photo_count,
+En el visor de arriba ves lo que ve la cámara. Si estás en el aire o fuera del marco cuando dispara, no sales." % settings.photo_count,
 		},
 		{
 			"title": "Marco y centro",
@@ -211,18 +223,20 @@ Salir vale %d seguidores y estar en el círculo del centro suma %d. Una foto par
 		},
 		{
 			"title": "Pose y empujón",
-			"body": "Mantén %s para posar: te quedas quieto y, si llevas un momento posando al disparo, sumas %d seguidores más. Centro y pose a la vez dan un extra.
+			"body": "Pulsa %s una vez para posar: tu personaje hace una pose o un baile distinto cada vez y no se mueve. Si llevas un momento posando al disparo, sumas %d seguidores más. Se quita con %s otra vez o al intentar moverte.
 
-Posando no te mueves ni saltas, y un empujón te lleva más lejos. Con %s empujas a quien tengas delante." % [
-				InputHints.key_markup(&"interact"), sheet.selfie_pose, InputHints.key_markup(&"shove")],
+Posando, un empujón te lleva más lejos. Con %s empujas a quien tengas delante, y su tecla aparece sobre quien alcances." % [
+				InputHints.key_markup(&"interact"), sheet.selfie_pose, InputHints.key_markup(&"interact"), InputHints.key_markup(&"shove")],
 		},
 		{
-			"title": "Potenciadores",
-			"body": "En los pedestales aparecen cristales: la flecha te hace saltar más alto, el rayo te hace correr más rápido y el escudo bloquea el siguiente golpe.
+			"title": "Subir y potenciadores",
+			"body": "Las azoteas se alcanzan por la rampa larga, por las pasarelas o con los cañones. Con %s dos veces en el aire barres: llegas más lejos y quedas tendido un momento.
+
+En los pedestales aparecen cristales: la flecha te hace saltar más alto, el rayo te hace correr más rápido y el escudo bloquea el siguiente golpe.
 
 Moverte: %s · Saltar: %s · Mirar: %s
 Pausa: %s · Esta ayuda: %s" % [
-				InputHints.move_markup(), InputHints.key_markup(&"jump"), key.call("MOUSE"),
+				InputHints.key_markup(&"jump"), InputHints.move_markup(), InputHints.key_markup(&"jump"), key.call("MOUSE"),
 				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
 		},
 	]

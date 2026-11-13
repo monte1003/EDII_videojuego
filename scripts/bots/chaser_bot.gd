@@ -9,6 +9,9 @@ signal route_changed(bot: ChaserBot)
 
 enum State { INACTIVE, CHASE, SEARCH }
 
+#How fast the speed of a shove fades (m/s each second)
+const KNOCK_DECAY := 14.0
+
 @export_group("Movement")
 @export var move_speed := 4.3
 @export var waypoint_tolerance := 0.6
@@ -56,6 +59,9 @@ var external_velocity := Vector3.ZERO
 var manual_target := false
 #Keeps the bot standing still (used to show a route before the bot starts to walk it)
 var hold_movement := false
+#A shove from a player: the speed it throws the bot at, which fades out, and the seconds the bot stays dazed
+var knock := Vector3.ZERO
+var dazed_left := 0.0
 
 var _ctx: ChaseContext
 var _focus: ChaseTarget
@@ -133,6 +139,21 @@ func set_target(vertex: StringName) -> void:
 	_dirty = true
 
 
+#A player shoves the bot: it is thrown back, forgets the push it was winding up and stays dazed for a moment
+func take_shove(push: Vector3, seconds: float) -> void:
+	knock = Vector3(push.x, 0.0, push.z)
+	dazed_left = seconds
+	_windup_left = 0.0
+	_push_target = null
+	_push_cooldown_left = maxf(_push_cooldown_left, seconds)
+	if _visual != null:
+		_look().set_alert(false)
+
+
+func is_dazed() -> bool:
+	return dazed_left > 0.0
+
+
 func role_kind() -> int:
 	return appearance.role if appearance != null else BotRole.Kind.CHASE
 
@@ -189,7 +210,9 @@ func _physics_process(delta: float) -> void:
 		velocity.y = 0.0
 
 	var wanted := Vector3.ZERO
-	if state != State.INACTIVE:
+	dazed_left = maxf(dazed_left - delta, 0.0)
+	knock = knock.move_toward(Vector3.ZERO, KNOCK_DECAY * delta)
+	if state != State.INACTIVE and dazed_left <= 0.0:
 		_perception_timer += delta
 		if _perception_timer >= perception_interval:
 			_perception_timer = 0.0
@@ -201,8 +224,8 @@ func _physics_process(delta: float) -> void:
 			wanted = _walk(delta)
 
 	wanted = _stay_on_platform(_with_separation(wanted))
-	velocity.x = wanted.x + external_velocity.x
-	velocity.z = wanted.z + external_velocity.z
+	velocity.x = wanted.x + external_velocity.x + knock.x
+	velocity.z = wanted.z + external_velocity.z + knock.z
 	move_and_slide()
 	if _visual != null:
 		_look().set_moving(wanted.length() > 0.1)

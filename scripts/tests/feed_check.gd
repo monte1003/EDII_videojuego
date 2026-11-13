@@ -21,7 +21,11 @@ func _initialize() -> void:
 	_check_slides()
 	_check_cannons()
 	_check_lanes()
-	print("feed_check: %s" % ("OK" if _failures == 0 else "%d FALLOS" % _failures))
+	_check_comments()
+	_check_decks()
+	_check_hops()
+	_check_deck_floors()
+	print("feed_check:%s" % ("OK" if _failures == 0 else "%d FALLOS" % _failures))
 	quit(1 if _failures > 0 else 0)
 
 
@@ -436,6 +440,235 @@ func _check_lanes() -> void:
 			lowest = minf(lowest, cost)
 			highest = maxf(highest, cost)
 		_expect(highest - lowest <= 2.5, "los tres caminos de la %s cuestan casi lo mismo: de %.1f a %.1f" % [part, lowest, highest])
+
+
+#The comments: on a bridge of the course, a cycle with its parts in order, a push that only hits on the ground and across its path
+func _check_comments() -> void:
+	var placed := true
+	var cycle := true
+	var order := true
+	var hits := true
+	var jumps := true
+	var waits := true
+	var step := 0.05
+	for comment: Dictionary in Level01Layout.COMMENTS:
+		var edge: Array = comment["edge"]
+		placed = placed and Level01Layout.POSITIONS.has(edge[0]) and Level01Layout.POSITIONS.has(edge[1]) and not Level01Layout.fragile_edges().has(edge)
+		placed = placed and Level01Layout.comment_of(edge[0], edge[1]) == comment and Level01Layout.comment_of(edge[1], edge[0]) == comment
+		var period: float = comment["period"]
+		cycle = cycle and period > Level01Layout.COMMENT_TYPE + Level01Layout.COMMENT_WARN + Level01Layout.COMMENT_PUSH + Level01Layout.COMMENT_FADE + 1.0
+		cycle = cycle and (comment["words"] as Array).size() >= 3
+		var last := -1
+		var pushes := 0
+		var time := 0.0
+		while time < period * 4.0:
+			var state := Level01Hazards.comment_state(comment, time)
+			var stage := int(state["stage"])
+			#The parts only go forward inside a cycle: typing, warning, push, fading and then idle (which ranks last)
+			var rank := 5 if stage == Level01Hazards.COMMENT_IDLE else stage
+			if rank < last and int(state["cycle"]) == floori((time - step + float(comment["phase"])) / period):
+				order = false
+			last = rank
+			if stage == Level01Hazards.COMMENT_PUSHING:
+				var center := Level01Hazards.comment_center(comment, time)
+				var track := Level01Hazards.block_track(comment)
+				var feet := Vector3(center.x, (track["centre"] as Vector3).y, center.z)
+				hits = hits and Level01Hazards.comment_hits(comment, time, feet)
+				jumps = jumps and not Level01Hazards.comment_hits(comment, time, feet + Vector3(0.0, 1.2, 0.0))
+				hits = hits and not Level01Hazards.comment_hits(comment, time, feet + (track["side"] as Vector3) * 3.0)
+				hits = hits and not Level01Hazards.comment_hits(comment, time, feet + Vector3(-(track["side"] as Vector3).z, 0.0, (track["side"] as Vector3).x) * 3.0)
+				#It pushes toward the side it ends on, away from the one it was typed on
+				var side := float(state["side"])
+				hits = hits and Level01Hazards.comment_push(comment, time).dot((track["side"] as Vector3) * side) < -0.99
+			else:
+				hits = hits and not Level01Hazards.comment_hits(comment, time, Level01Hazards.comment_center(comment, time))
+			if stage == Level01Hazards.COMMENT_PUSHING and int(Level01Hazards.comment_state(comment, time - step)["stage"]) != Level01Hazards.COMMENT_PUSHING:
+				pushes += 1
+			var wait := Level01Hazards.comment_wait(comment, time)
+			waits = waits and wait >= 0.0 and wait <= period
+			if stage == Level01Hazards.COMMENT_WARNING:
+				waits = waits and wait > 0.0 and wait <= Level01Layout.COMMENT_WARN + step
+			time += step
+		cycle = cycle and pushes == 4
+	_expect(Level01Layout.COMMENTS.size() == 2, "hay dos comentarios")
+	_expect(placed, "cada comentario está en un puente del recorrido que no cae, y el grafo lo encuentra por sus dos extremos")
+	_expect(cycle and order, "el ciclo tiene tipeo, aviso, barrido y desinflado en ese orden, con un respiro, y barre una vez por periodo")
+	_expect(hits, "el barrido golpea a quien está en la burbuja y no a quien está a un lado ni delante; solo golpea durante el barrido y empuja hacia el lado donde termina")
+	_expect(jumps, "quien salta por encima de la burbuja no es golpeado")
+	_expect(waits, "la espera hasta el próximo barrido nunca supera el periodo y durante el aviso es menor que el aviso")
+
+
+#The decks: under the lower end of their bridge, wider and longer than it, clear of the islands, with a cannon that throws back to the start
+func _check_decks() -> void:
+	var edges := Level01Layout.soft_edges()
+	var under := true
+	var covers := true
+	var clear := true
+	var returns := true
+	var apart := true
+	var hit := true
+	var outlines: Array[PackedVector2Array] = []
+	for edge in edges:
+		var deck := Level01Layout.deck_of(edge)
+		var from: Vector3 = Level01Layout.POSITIONS[edge[0]]
+		var to: Vector3 = Level01Layout.POSITIONS[edge[1]]
+		var top: float = deck["top"]
+		under = under and top <= minf(from.y, to.y) - 4.0 and top >= minf(from.y, to.y) - 6.0
+		var size: Vector2 = deck["size"]
+		var centre: Vector3 = deck["center"]
+		var basis := Basis(Vector3.UP, float(deck["yaw"]))
+		#Both ends of the bridge lie over the deck
+		for end: Vector3 in [from, to]:
+			var local := basis.inverse() * (end - centre)
+			covers = covers and absf(local.x) <= size.x / 2.0 and absf(local.z) <= size.y / 2.0
+		var cannon: Dictionary = deck["cannon"]
+		var pad := Level01Layout.launch_pad(cannon)
+		var local_pad := basis.inverse() * (pad - centre)
+		covers = covers and absf(local_pad.z) <= size.y / 2.0 - 1.0 and absf(pad.y - top) < 0.01
+		#The pad lifts to the middle of the island of the bridge that is closer to the start of the course
+		var start: StringName = cannon["to"]
+		var other: StringName = edge[1] if start == edge[0] else edge[0]
+		returns = returns and (start == edge[0] or start == edge[1]) and (Level01Layout.POSITIONS[start] as Vector3).z > (Level01Layout.POSITIONS[other] as Vector3).z
+		returns = returns and Level01Layout.launch_landing(cannon).is_equal_approx(Level01Layout.POSITIONS[start])
+		hit = hit and Level01Hazards.launch_hits(cannon, pad) and not Level01Hazards.launch_hits(cannon, pad + Vector3(3.0, 0.0, 0.0))
+		#No other island of the course stands over the deck
+		for id: StringName in Level01Layout.POSITIONS:
+			if id == edge[0] or id == edge[1]:
+				continue
+			var local_island := basis.inverse() * ((Level01Layout.POSITIONS[id] as Vector3) - centre)
+			if absf(local_island.x) <= size.x / 2.0 + Level01Layout.radius_of(id) and absf(local_island.z) <= size.y / 2.0 + Level01Layout.radius_of(id) and (Level01Layout.POSITIONS[id] as Vector3).y - 2.5 < top + 2.0:
+				clear = false
+				print("  la cubierta %s-%s toca la isla %s" % [edge[0], edge[1], id])
+		#Decks that overlap are one floor: they lie at the same height, so there is no step between them
+		var outline := PackedVector2Array()
+		for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+			var spot := centre + basis * Vector3(corner.x * size.x / 2.0, 0.0, corner.y * size.y / 2.0)
+			outline.append(Vector2(spot.x, spot.z))
+		for index in outlines.size():
+			var apart_by := absf(top - float(Level01Layout.deck_of(edges[index])["top"]))
+			if apart_by > 0.01 and apart_by < 2.5 and not Geometry2D.intersect_polygons(outlines[index], outline).is_empty():
+				apart = false
+				print("  las cubiertas %s-%s y %s-%s se traslapan con un escalón o un techo bajo" % [edges[index][0], edges[index][1], edge[0], edge[1]])
+		outlines.append(outline)
+	_expect(edges.size() == Level01Layout.fragile_edges().size() + Level01Layout.COMMENTS.size(), "hay una cubierta por cada puente que cae y por cada comentario")
+	_expect(under, "cada cubierta queda al menos 4 m por debajo del extremo más bajo de su puente")
+	_expect(covers, "la cubierta cubre los dos extremos de su puente y su plataforma de cañón")
+	_expect(clear, "ninguna cubierta toca otra isla del recorrido")
+	_expect(apart, "dos cubiertas que se traslapan quedan a la misma altura (un solo piso, sin escalón) o a más de 2,5 m una de otra (pisos distintos)")
+	_expect(returns, "la plataforma de cada cubierta devuelve al centro de la isla del inicio del puente")
+	_expect(hit, "la plataforma de la cubierta responde a quien la pisa y no a quien está lejos")
+
+
+#The leaps: a ledge across a gap wider than a jump and narrower than the longest dive, clear of everything, with a cannon that lands in the middle of its island
+func _check_hops() -> void:
+	var gravity := 9.8
+	var wide := true
+	var clear := true
+	var lands := true
+	var clean := true
+	var hits := true
+	var apart := true
+	for hop: Dictionary in Level01Layout.HOPS:
+		var from: Vector3 = Level01Layout.POSITIONS[hop["from"]]
+		var ledge := Level01Layout.hop_ledge(hop)
+		var radius: float = hop["radius"]
+		var gap := Vector2(ledge.x - from.x, ledge.z - from.z).length() - Level01Layout.radius_of(hop["from"]) - radius
+		wide = wide and absf(gap - float(hop["gap"])) < 0.01 and gap >= 5.5 and gap <= 6.8 and absf(ledge.y - from.y) < 0.01
+		#Nothing else comes near the ledge: no other island, no bridge
+		for id: StringName in Level01Layout.POSITIONS:
+			if id != hop["from"] and Vector2(ledge.x, ledge.z).distance_to(Vector2((Level01Layout.POSITIONS[id] as Vector3).x, (Level01Layout.POSITIONS[id] as Vector3).z)) < Level01Layout.radius_of(id) + radius + 2.5:
+				clear = false
+				print("  el mirador toca la isla %s" % id)
+		for edge in Level01Layout.EDGES:
+			var line := _bridge_line(edge)
+			if Geometry2D.get_closest_point_to_segment(Vector2(ledge.x, ledge.z), line[0], line[1]).distance_to(Vector2(ledge.x, ledge.z)) < Level01Layout.width_of(edge[4]) / 2.0 + radius + 2.5:
+				clear = false
+				print("  el mirador toca el puente %s-%s" % [edge[0], edge[1]])
+		#The island it lands on has no bar or ball, and the bots cannot get to the ledge: the graph does not know it
+		clean = clean and not _busy_islands().has(hop["to"]) and Level01Layout.POSITIONS.has(hop["to"])
+		clean = clean and not Level01Layout.build_graph().has_vertex(StringName("hop_%s" % hop["from"]))
+		var cannon := Level01Layout.hop_cannons()[0]
+		var velocity := Level01Hazards.launch_velocity(cannon, gravity)
+		var point := ledge
+		var time := 0.0
+		while time < float(cannon["time"]) - 1.0 / 120.0:
+			velocity.y -= gravity / 60.0
+			point += velocity / 60.0
+			time += 1.0 / 60.0
+			if not _over_the_course(point, hop["from"], hop["to"]):
+				clear = false
+				print("  el arco del mirador pasa baja sobre %s a %.2f s" % [point, time])
+		var landing := Level01Layout.launch_landing(cannon)
+		lands = lands and Vector2(point.x - landing.x, point.z - landing.z).length() < 1.0 and absf(point.y - landing.y) < 0.6
+		hits = hits and Level01Hazards.launch_hits(cannon, ledge) and not Level01Hazards.launch_hits(cannon, ledge + Vector3(radius, 0.0, 0.0) * 1.2)
+		#The cannon sits in the middle of the ledge, so the whole ledge is within the reach of the dive that lands on it
+		apart = apart and Level01Layout.launch_pad(cannon).is_equal_approx(ledge)
+	_expect(Level01Layout.HOPS.size() == 1, "hay un salto largo")
+	_expect(wide, "el hueco mide entre 5,5 y 6,8 m (más que un salto, menos que el mejor barrido) y el mirador está a la altura de su isla")
+	_expect(clear, "el mirador y el arco de su cañón no tocan otra isla ni puente: el arco pasa 3 m por encima de lo que sobrevuela")
+	_expect(clean, "el cañón del mirador aterriza en una isla sin barra ni bola y el grafo no lo conoce: los bots nunca lo usan")
+	_expect(lands, "el arco termina a menos de 1 m del centro de la isla de llegada, a su altura")
+	_expect(hits and apart, "el cañón está en el centro del mirador y lanza a quien lo pisa, no a quien está en el borde")
+
+
+#The floor of the decks has no pocket: from the pad of any deck a racer can walk to every free spot of every deck that touches it, around the
+#pieces of the rim (a body is about 0.45 m wide), and no piece of the rim stands inside another deck
+func _check_deck_floors() -> void:
+	var edges := Level01Layout.soft_edges()
+	var decks: Array[Dictionary] = []
+	var walls: Array[Dictionary] = []
+	for edge in edges:
+		decks.append(Level01Layout.deck_of(edge))
+		walls.append_array(Level01Layout.deck_walls(edge))
+	var inside := 0
+	for wall in walls:
+		for deck in decks:
+			if Level01Layout.deck_holds(deck, wall["center"], 0.6) and absf(float(deck["top"]) - float((wall["center"] as Vector3).y)) < 0.01:
+				inside += 1
+	var trapped := 0
+	var cells := 0
+	for deck in decks:
+		var pad: Vector3 = Level01Layout.launch_pad(deck["cannon"])
+		var size: Vector2 = deck["size"]
+		var basis := Basis(Vector3.UP, float(deck["yaw"]))
+		#A grid of one meter in the frame of the deck, from the cell of the pad outward over the floors of all the decks at that height
+		var reached: Dictionary = {}
+		var free: Dictionary = {}
+		var columns := ceili(size.x)
+		var rows := ceili(size.y)
+		var spacing := Vector2(size.x / columns, size.y / rows)
+		for column in columns:
+			for row in rows:
+				var spot := (deck["center"] as Vector3) + basis * Vector3((column + 0.5) * spacing.x - size.x / 2.0, 0.0, (row + 0.5) * spacing.y - size.y / 2.0)
+				var blocked := false
+				for wall in walls:
+					if absf(float((wall["center"] as Vector3).y) - float(deck["top"])) > 0.01:
+						continue
+					var wall_size: Vector3 = wall["size"]
+					var local := Basis(Vector3.UP, float(wall["yaw"])).inverse() * (spot - (wall["center"] as Vector3))
+					blocked = blocked or (absf(local.x) <= wall_size.x / 2.0 + 0.45 and absf(local.z) <= wall_size.z / 2.0 + 0.45)
+				if not blocked:
+					free[Vector2i(column, row)] = spot
+		var local_pad := basis.inverse() * (pad - (deck["center"] as Vector3))
+		var start := Vector2i(clampi(floori((local_pad.x + size.x / 2.0) / spacing.x), 0, columns - 1), clampi(floori((local_pad.z + size.y / 2.0) / spacing.y), 0, rows - 1))
+		if not free.has(start):
+			trapped += 1
+			continue
+		var queue: Array[Vector2i] = [start]
+		reached[start] = true
+		while not queue.is_empty():
+			var cell: Vector2i = queue.pop_back()
+			for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var next: Vector2i = cell + step
+				if free.has(next) and not reached.has(next):
+					reached[next] = true
+					queue.append(next)
+		for cell: Vector2i in free:
+			cells += 1
+			if not reached.has(cell):
+				trapped += 1
+	_expect(inside == 0, "ninguna pieza del borde de una cubierta queda dentro del piso de otra (%d dentro)" % inside)
+	_expect(trapped == 0 and cells > 200, "desde el cañón de cada cubierta se camina a todo su piso, sin rincones cerrados (%d de %d celdas sin alcanzar)" % [trapped, cells])
 
 
 #The islands that already have something to do

@@ -55,6 +55,7 @@ const GATE_RADIUS := 2.15
 const GATE_INSET := 1.4
 #The arc of a cannon is marked by this many hoops; the pad and the target are these wide
 const HOOPS := 7
+const DECK_COLOR := Color("7667c4")
 const CANNON_RADIUS := 1.6
 const TARGET_RADIUS := 2.1
 #How long a fragile bridge takes to drop out of sight or to come back, and how far it drops
@@ -100,6 +101,9 @@ var _spinners: Dictionary = {}
 var _blocks: Array[Dictionary] = []
 #The rolling balls with their lanes, the trampolines by island and the belts about to turn around
 var _balls: Array[Dictionary] = []
+#The speech bubbles of the comments, and the signs that say a route is saturated, by bridge
+var _comments: Array[Dictionary] = []
+var _saturated: Dictionary = {}
 var _pads: Dictionary = {}
 var _belt_warning: Dictionary = {}
 var _set: Level01Set
@@ -130,7 +134,10 @@ func build(locators: Array[PlayerLocator], refuge_radius: float, belt_speed: flo
 	_build_spinners()
 	_build_balls()
 	_build_pads()
+	_build_decks()
+	_build_ledges()
 	_build_cannons()
+	_build_comments()
 	_build_barrier()
 	_build_name_labels()
 	_scatter_decor()
@@ -182,6 +189,8 @@ func update_hazards(time: float) -> void:
 		pivot.rotation.y = -Level01Hazards.angle_at(Level01Layout.SPINNERS[id], time)
 	for entry in _balls:
 		_place_ball(entry, time)
+	for entry in _comments:
+		_update_comment(entry, time)
 
 
 #A belt flows from its first island to its second or, after turning around, the other way: its chevrons point where it goes
@@ -237,11 +246,12 @@ func fire_cannon(launch: Dictionary) -> void:
 	SynthSound.play(self, SynthSound.tone(150.0, 0.4, 480.0, 0.6), -4.0, 1.0)
 
 
-#A fragile bridge flashes while it is about to fall
+#A fragile bridge flashes while it is about to fall, and a sign over it says its route is saturated until it comes back
 func flash_bridge(a: StringName, b: StringName, on: bool) -> void:
 	var key := _key(a, b)
 	if on:
 		_flashing[key] = true
+		_show_saturated(a, b)
 		return
 	_flashing.erase(key)
 	var record: Dictionary = _bridges.get(key, {})
@@ -260,6 +270,8 @@ func set_bridge_open(a: StringName, b: StringName, open: bool) -> void:
 	var rest_y: float = record["rest_y"]
 	var tween := create_tween()
 	if open:
+		if _saturated.has(_key(a, b)):
+			(_saturated[_key(a, b)] as Node3D).hide()
 		visual.visible = true
 		tween.tween_property(visual, "global_position:y", rest_y, DROP_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	else:
@@ -864,7 +876,11 @@ func _build_cannons() -> void:
 	target.outer_radius = TARGET_RADIUS
 	target.rings = 36
 	target.ring_segments = 6
-	for launch: Dictionary in Level01Layout.LAUNCHES:
+	var launches: Array = []
+	launches.append_array(Level01Layout.LAUNCHES)
+	launches.append_array(Level01Layout.deck_returns())
+	launches.append_array(Level01Layout.hop_cannons())
+	for launch: Dictionary in launches:
 		var spot := Level01Layout.launch_pad(launch)
 		var aim := Level01Layout.launch_landing(launch) - spot
 		aim.y = 0.0
@@ -877,11 +893,15 @@ func _build_cannons() -> void:
 		var flat := Basis.looking_at(aim, Vector3.UP) * Basis(Vector3.RIGHT, -PI / 2.0)
 		var cushion_mark := _mesh(pad, arrow, _material(Color("fdfbff"), 0.8), Vector3(0.0, 0.31, 0.0))
 		cushion_mark.basis = flat
-		#Arrows painted on the floor lead from the middle of the island to the pad
-		for step in 3:
+		#Arrows painted on the floor lead from the middle of the island to the pad (a ledge is too small: its arrows are on the island across the gap)
+		var arrows := 0 if launch.has("ledge") or launch.has("deck") else 3
+		for step in arrows:
 			var painted := _mesh(self, arrow, _material(AMBER, 0.9), spot - aim * (2.6 + step * 1.6) + Vector3(0.0, 0.045, 0.0))
 			painted.basis = flat
 		_cannons["%s>%s" % [launch["from"], launch["to"]]] = pad
+		#The cannon of a deck is only a pad: no hoops and no target on the island it throws back to
+		if launch.has("deck"):
+			continue
 		for index in HOOPS:
 			var seconds := float(launch["time"]) * float(index + 1) / float(HOOPS + 1)
 			var at := Level01Hazards.launch_point(launch, seconds, _gravity)
@@ -894,6 +914,151 @@ func _build_cannons() -> void:
 		_mesh(self, target, _material(AMBER, 1.2), landing + Vector3(0.0, 0.05, 0.0))
 		var core := _mesh(self, target, _material(Color("fdfbff"), 0.8), landing + Vector3(0.0, 0.055, 0.0))
 		core.scale = Vector3(0.55, 1.0, 0.55)
+
+
+#Under every bridge that falls or has a comment lies a solid deck with a low rim: a fall lands on it and costs the way back, not an attempt
+func _build_decks() -> void:
+	for edge in Level01Layout.soft_edges():
+		var deck := Level01Layout.deck_of(edge)
+		var size: Vector2 = deck["size"]
+		var basis := Basis(Vector3.UP, float(deck["yaw"]))
+		var middle: Vector3 = deck["center"] - Vector3(0.0, 0.5, 0.0)
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(size.x, 1.0, size.y)
+		_body(shape, Transform3D(basis, middle))
+		#Every deck has the same colour: decks that overlap lie at the same height and their faces share a plane
+		_merger.add(&"board", _merged(&"board"), false, _box(shape.size), Transform3D(basis, middle), DECK_COLOR)
+		#A rim around the whole floor (not across it): walls the body can lean on, with a pale cap
+		var rim := StaticBody3D.new()
+		add_child(rim)
+		for piece in Level01Layout.deck_walls(edge):
+			var wall_size: Vector3 = piece["size"]
+			var wall_at := Transform3D(basis, (piece["center"] as Vector3) + Vector3(0.0, wall_size.y / 2.0, 0.0))
+			var wall := BoxShape3D.new()
+			wall.size = wall_size
+			var collider := CollisionShape3D.new()
+			collider.shape = wall
+			collider.transform = wall_at
+			rim.add_child(collider)
+			_merger.add(&"board", _merged(&"board"), false, _box(wall_size), wall_at, DECK_COLOR.lightened(0.55))
+
+
+#The ledge of each leap: a small island across a gap, with its rim, and arrows on the island it starts from that point at it
+func _build_ledges() -> void:
+	for cannon in Level01Layout.hop_cannons():
+		var centre: Vector3 = cannon["ledge"]
+		var radius: float = cannon["radius"]
+		var color: Color = (TIERS[cannon["origin"]] as Color).lightened(0.15)
+		var shape := CylinderShape3D.new()
+		shape.radius = radius
+		shape.height = THICKNESS
+		var body_at := centre + Vector3(0.0, -THICKNESS / 2.0, 0.0)
+		_body(shape, Transform3D(Basis.IDENTITY, body_at))
+		var top := CylinderMesh.new()
+		top.top_radius = radius
+		top.bottom_radius = radius
+		top.height = THICKNESS
+		top.radial_segments = 28
+		top.rings = 1
+		_merger.add(&"board", _merged(&"board"), true, top, Transform3D(Basis.IDENTITY, body_at), color)
+		var skirt := CylinderMesh.new()
+		skirt.top_radius = radius * 0.97
+		skirt.bottom_radius = radius * 0.5
+		skirt.height = 1.4
+		skirt.radial_segments = 28
+		skirt.rings = 1
+		_merger.add(&"skirt", _merged(&"skirt"), false, skirt, Transform3D(Basis.IDENTITY, body_at + Vector3(0.0, -THICKNESS / 2.0 - 0.7, 0.0)), color.darkened(0.35))
+		var tool := SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		PartyKit.add_arc_tube(tool, radius - 0.12, RIM_TUBE, 0.0, TAU, ceili(TAU * radius / 0.6), 8)
+		_merger.add(&"rim", _merged(&"rim"), false, tool.commit(), Transform3D(Basis.IDENTITY, body_at + Vector3(0.0, RIM_HEIGHT, 0.0)), MAGENTA,
+			Vector2(roundf(TAU * radius / RIM_STRIPE), 1.0))
+		#Arrows painted on the island point across the gap
+		var from: Vector3 = Level01Layout.POSITIONS[cannon["origin"]]
+		var across := centre - from
+		across.y = 0.0
+		across = across.normalized()
+		var arrow := PrismMesh.new()
+		arrow.size = Vector3(1.2, 1.2, 0.04)
+		var flat := Basis.looking_at(across, Vector3.UP) * Basis(Vector3.RIGHT, -PI / 2.0)
+		var edge := Level01Layout.radius_of(cannon["origin"])
+		for step in 3:
+			var painted := _mesh(self, arrow, _material(MAGENTA, 0.9), from + across * (edge - 4.4 + step * 1.5) + Vector3(0.0, 0.045, 0.0))
+			painted.basis = flat
+
+
+#A speech bubble for each comment, and the light on the bridge that says where it will come from
+func _build_comments() -> void:
+	for comment: Dictionary in Level01Layout.COMMENTS:
+		var holder := Node3D.new()
+		holder.hide()
+		add_child(holder)
+		holder.add_child(PropKit.make(&"bubble", Vector3(2.0, 1.7, 1.2)))
+		var label := Label3D.new()
+		label.font = NAME_FONT
+		label.font_size = 96
+		label.pixel_size = 0.007
+		label.modulate = Color("fdfbff")
+		label.outline_size = 22
+		label.outline_modulate = Color("2a2145")
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.position = Vector3(0.0, 0.2, 0.7)
+		holder.add_child(label)
+		var track := Level01Hazards.block_track(comment)
+		var strip_material := _material_copy(MAGENTA, 0.9, 0.55)
+		var strip := _mesh(self, _box(Vector3(Level01Layout.WIDE_WIDTH, 0.03, 2.4)), strip_material, (track["centre"] as Vector3) + Vector3(0.0, 0.05, 0.0))
+		strip.basis = Basis.looking_at(track["tangent"] as Vector3, Vector3.UP)
+		strip.hide()
+		_comments.append({"comment": comment, "holder": holder, "label": label, "strip": strip, "strip_material": strip_material})
+
+
+#A bubble is typed letter by letter on its side, flashes, sweeps across the bridge and deflates
+func _update_comment(entry: Dictionary, time: float) -> void:
+	var comment: Dictionary = entry["comment"]
+	var state := Level01Hazards.comment_state(comment, time)
+	var stage := int(state["stage"])
+	var holder: Node3D = entry["holder"]
+	var strip: MeshInstance3D = entry["strip"]
+	holder.visible = stage != Level01Hazards.COMMENT_IDLE
+	var warning := stage == Level01Hazards.COMMENT_WARNING
+	strip.visible = stage == Level01Hazards.COMMENT_TYPING or warning
+	if not holder.visible:
+		return
+	var share := float(state["share"])
+	holder.global_position = Level01Hazards.comment_center(comment, time)
+	var words: Array = comment["words"]
+	var word := String(words[int(state["cycle"]) % words.size()])
+	var grown := 1.0
+	match stage:
+		Level01Hazards.COMMENT_TYPING:
+			grown = lerpf(0.3, 1.0, 1.0 - pow(1.0 - share, 3.0))
+		Level01Hazards.COMMENT_WARNING:
+			grown = 1.0 + 0.07 * sin(time * 32.0)
+		Level01Hazards.COMMENT_FADING:
+			grown = 1.0 - share
+	holder.scale = Vector3.ONE * maxf(grown, 0.01)
+	(entry["label"] as Label3D).text = word.substr(0, ceili(word.length() * minf(share * 1.4, 1.0))) if stage == Level01Hazards.COMMENT_TYPING else word
+	(entry["strip_material"] as StandardMaterial3D).emission_energy_multiplier = 0.5 + (2.2 * absf(sin(time * 12.0)) if warning else 0.0)
+
+
+#A sign over a bridge the feed is about to take down
+func _show_saturated(a: StringName, b: StringName) -> void:
+	var key := _key(a, b)
+	if not _saturated.has(key):
+		var label := Label3D.new()
+		label.text = "SATURADA"
+		label.font = NAME_FONT
+		label.font_size = 64
+		label.fixed_size = true
+		label.pixel_size = 0.0018
+		label.modulate = CORAL
+		label.outline_size = 14
+		label.outline_modulate = Color("2a2145")
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.position = ((Level01Layout.POSITIONS[a] as Vector3) + (Level01Layout.POSITIONS[b] as Vector3)) / 2.0 + Vector3(0.0, 2.6, 0.0)
+		add_child(label)
+		_saturated[key] = label
+	(_saturated[key] as Node3D).show()
 
 
 #A translucent wall across the bridge that Bloquear closes for the bots
@@ -926,6 +1091,8 @@ func _build_name_labels() -> void:
 	]
 	for launch: Dictionary in Level01Layout.LAUNCHES:
 		entries.append(["CAÑÓN", "Te lanza a la isla %s" % launch["to"], AMBER, Level01Layout.launch_pad(launch), 3.4, 30.0])
+	for launch: Dictionary in Level01Layout.hop_cannons():
+		entries.append(["SALTO LARGO", "Con barrido llegas a la isla %s" % launch["to"], MAGENTA, Level01Layout.launch_pad(launch), 3.8, 40.0])
 	for edge in Level01Layout.EDGES:
 		if edge[4] == Level01Layout.SLIDE:
 			entries.append(["TOBOGÁN", "Solo baja, y muy rápido", SKY, Level01Layout.POSITIONS[edge[0]], 5.2, 30.0])

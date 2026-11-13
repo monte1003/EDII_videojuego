@@ -6,14 +6,14 @@ extends Resource
 @export_group("Photos")
 @export var photo_count := 8
 #Seconds of each part of a photo: the drone flies there, the frame moves, the frame stays fixed and blinks, and the result shows
-@export var travel_seconds := 4.4
-@export var frame_seconds := 6.0
+@export var travel_seconds := 4.2
+@export var frame_seconds := 5.6
 @export var lock_seconds := 1.4
 #The last photos blink faster
 @export var lock_end := 1.0
-@export var reveal_seconds := 2.0
+@export var reveal_seconds := 3.1
 #The next photo is never farther than this many seconds on foot from the last one, when the bag allows it
-@export var reach_seconds := 9.5
+@export var reach_seconds := 10.5
 #Photos to be in for the round to count as won
 @export var win_photos := 4
 
@@ -36,6 +36,9 @@ extends Resource
 @export var pose_hold := 0.8
 #A shove pushes somebody who poses this much harder
 @export var pose_shove_scale := 1.5
+#How many poses and dances there are to pick from, and how hard the keys must be pressed for a move to end the pose
+@export var pose_styles := 6
+@export var pose_break_input := 0.3
 
 @export_group("Power-ups")
 #How much higher the jump goes and how much faster the run is, and for how long

@@ -23,6 +23,8 @@ var _done := false
 func _ready() -> void:
 	super()
 	_players = spawn_players(_actors, SPAWN_POINTS)
+	for player in _players:
+		player.dive_enabled = true
 	var local := _players[0]
 	var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 	var air_time := 2.0 * local.jump_velocity / gravity
@@ -69,7 +71,6 @@ func _use_station() -> void:
 		return
 	_station_on = not _station_on
 	_world.set_station_active(_station_on)
-	_hud.toast("¡Eso es!")
 
 
 func _finish() -> void:
