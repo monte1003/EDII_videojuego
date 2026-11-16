@@ -24,6 +24,7 @@ func _ready() -> void:
 		tree.add_screen(&"lobby", info.id, info.title, info.scene_path)
 	tree.add_screen(&"lobby", &"round_results", "Resultados de la ronda", "res://scenes/menus/round_results.tscn")
 	tree.add_screen(&"lobby", &"podium", "Podio", "res://scenes/menus/podium.tscn")
+	tree.add_screen(&"lobby", &"rejoin", "De vuelta en la partida", "res://scenes/menus/rejoin_wait.tscn")
 	tree.add_screen(&"lobby", &"session_results", "Fin de la partida", "res://scenes/menus/session_results.tscn")
 	#Test menu of the main menu: opens any minigame straight away, outside a session
 	tree.add_screen(&"main_menu", &"test_games", "Test", "res://scenes/menus/test_menu.tscn")

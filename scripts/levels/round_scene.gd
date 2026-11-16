@@ -35,7 +35,11 @@ var _hidden_layers: Array[CanvasLayer] = []
 
 
 func _ready() -> void:
-	participants = GameSession.participants(default_character)
+	#In a room, whoever lost its connection does not play the rounds until it comes back
+	for slot in GameSession.participants(default_character):
+		if slot.connected or slot.player_id == GameSession.local_id:
+			participants.append(slot)
+	GameSession.net.player_left.connect(_on_net_player_left)
 	if _pause_menu != null:
 		_pause_menu.opened.connect(_on_pause_opened)
 		_pause_menu.closed.connect(_on_pause_closed)
@@ -249,9 +253,25 @@ func playing_area() -> AABB:
 	return area
 
 
-#The round freezes like in the pause menu while its help is open
+#The player of a computer that left: it hides here and the round stops waiting for it
+func _on_net_player_left(player_id: int) -> void:
+	var player: Player = everyone.get(player_id)
+	if player != null and is_instance_valid(player) and player.remote:
+		player.vanish()
+	_on_player_left(player_id)
+
+
+func _on_player_left(_player_id: int) -> void:
+	pass
+
+
+func _networked_round() -> bool:
+	return GameSession.is_networked() and not GameSession.practice
+
+
+#The round freezes like in the pause menu while its help is open (in a room the help does not open: the others keep playing)
 func open_help() -> void:
-	if filming or _help == null or _help.is_open() or not _help_allowed():
+	if filming or _networked_round() or _help == null or _help.is_open() or not _help_allowed():
 		return
 	paused = true
 	if _actors != null:
@@ -283,7 +303,12 @@ func _paused_changed(_is_paused: bool) -> void:
 	pass
 
 
+#In a room the pause menu does not stop the round, which goes on for the others: only the keys of this player rest while it is open
 func _on_pause_opened() -> void:
+	if _networked_round():
+		if _pose_player != null:
+			_pose_player.menu_open = true
+		return
 	paused = true
 	if _actors != null:
 		_actors.process_mode = Node.PROCESS_MODE_DISABLED
@@ -291,6 +316,10 @@ func _on_pause_opened() -> void:
 
 
 func _on_pause_closed() -> void:
+	if _networked_round():
+		if _pose_player != null:
+			_pose_player.menu_open = false
+		return
 	paused = false
 	if _actors != null:
 		_actors.process_mode = Node.PROCESS_MODE_INHERIT

@@ -73,6 +73,8 @@ var extras: Array[Vector3] = []
 var pedestal_kinds: Array[int] = []
 
 var _rng := RandomNumberGenerator.new()
+#The style of a pose comes from other dice: posing on one computer must not change where the frame goes on the others
+var _style_rng := RandomNumberGenerator.new()
 var _phase_total := 1.0
 var _wander := Vector2.ZERO
 var _feint := Vector2.ZERO
@@ -257,6 +259,14 @@ func set_posing(player_id: int, on: bool) -> bool:
 		return false
 	_set_pose(state, on)
 	return true
+
+
+#A player of another computer poses or not as its computer says; here it only counts for the photo
+func set_remote_pose(player_id: int, on: bool) -> void:
+	var state := state_of(player_id)
+	if state != null and state.posing != on:
+		state.posing = on
+		state.pose_time = 0.0
 
 
 #One press starts the pose and the next one ends it
@@ -476,7 +486,7 @@ func _set_pose(state: PlayerState, on: bool) -> void:
 	state.pose_time = 0.0
 	if on:
 		#Any style but the last one
-		var pick := _rng.randi() % maxi(settings.pose_styles - 1, 1)
+		var pick := _style_rng.randi() % maxi(settings.pose_styles - 1, 1)
 		state.pose_style = pick if pick < state.pose_style or state.pose_style < 0 or settings.pose_styles < 2 else pick + 1
 	pose_changed.emit(state.id, on, state.pose_style)
 

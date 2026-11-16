@@ -7,7 +7,7 @@ var enabled := true
 
 
 func _physics_process(_delta: float) -> void:
-	if not enabled:
+	if not enabled or _player.menu_open:
 		_player.move_input = Vector2.ZERO
 		return
 	_player.move_input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")

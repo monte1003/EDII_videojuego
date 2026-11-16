@@ -16,14 +16,15 @@ signal rooms_found
 signal state_received(player_id: int, state: Dictionary)
 signal hit_received(state: Dictionary)
 signal round_go
+#Somebody of the room lost its connection during the game: its player hides on every screen
+signal player_left(player_id: int)
 #The server: somebody voted to start in the warm-up. A client: the clock and the votes of the warm-up as the server has them
 signal vote_received(player_id: int)
 signal warm_received(seconds_left: float, votes: int, total: int)
 
 const CAPACITY := 4
-#A computer that says nothing for this long is gone
-const SILENCE_LIMIT := 3000
-const PING_EVERY := 1.0
+#A computer that says nothing for this long is gone: long enough for a Wi-Fi that stutters for a few seconds
+const SILENCE_LIMIT := 12000
 const ANNOUNCE_EVERY := 1000
 #How long the server waits for everybody at the start of a round and for the points at its end
 const GO_WAIT := 6.0
@@ -51,10 +52,11 @@ var _listening := false
 var _mutex := Mutex.new()
 var _accepted: Array[StreamPeerTCP] = []
 var _heard_rooms: Array[Dictionary] = []
-var _ping_left := PING_EVERY
 #Server: who has loaded the round, the seconds left to wait for them and the points of the round that came in
 var _loaded: Dictionary = {}
 var _wait_round := -1
+#Who is playing the round under way: the ones that loaded it; only their points are waited for
+var _round_members: Dictionary = {}
 var _go_left := -1.0
 var _points: Dictionary = {}
 var _points_left := -1.0
@@ -79,7 +81,7 @@ func host(shown_name: String, character: StringName) -> bool:
 	role = Role.HOST
 	started = false
 	_next_id = 2
-	room = [{"id": 1, "name": shown_name, "character": String(character), "ready": false}]
+	room = [{"id": 1, "name": shown_name, "character": String(character), "ready": false, "connected": true}]
 	GameSession.local_id = 1
 	_start_threads()
 	_publish_room()
@@ -202,6 +204,7 @@ func start_game(plan: Array[StringName], seeds: Array[int]) -> void:
 func report_loaded(round_index: int) -> void:
 	if role == Role.HOST:
 		_wait_round = round_index
+		_round_members = {1: true}
 		_loaded[1] = true
 		_go_left = GO_WAIT
 		_check_go()
@@ -255,6 +258,41 @@ func send_warm(seconds_left: float, votes: int, total: int) -> void:
 	_send_all({"t": "warm", "left": snappedf(seconds_left, 0.01), "votes": votes, "total": total})
 
 
+#A player coming back to a game under way: the one that left with the same name or, if there is only one gone, that one
+func _returning_member(shown_name: String) -> Dictionary:
+	if not started:
+		return {}
+	var gone: Array[Dictionary] = []
+	for member in room:
+		if not bool(member.get("connected", true)):
+			gone.append(member)
+			if str(member.get("name", "")).to_lower() == shown_name.strip_edges().to_lower():
+				return member
+	return gone[0] if gone.size() == 1 else {}
+
+
+#The player takes its place again and gets the game as it is: the order, the seeds, the round under way and the points so far. It plays
+#from the next round on
+func _take_back(link: NetLink, member: Dictionary) -> void:
+	link.id = int(member["id"])
+	link.send({"t": "welcome", "id": link.id})
+	var order: Array[String] = []
+	for id in GameSession.plan:
+		order.append(String(id))
+	var table: Array[Dictionary] = []
+	for result in GameSession.results:
+		var shared: Dictionary = {}
+		for id: int in result.points_by_player:
+			shared[str(id)] = result.points_by_player[id]
+		table.append(shared)
+	link.send({"t": "rejoin", "plan": order, "seeds": GameSession.seeds, "round": GameSession.round_index, "table": table})
+	#It waits out the round under way: nobody spawns its player until the server moves everybody to the next one, and its points of this
+	#round are not waited for
+	_round_members.erase(link.id)
+	_change_member(link.id, {"connected": true, "waiting": true})
+	_check_points()
+
+
 #Whoever comes in wears the first character nobody is wearing (with all of them taken, the first one in another colour)
 func _free_character() -> StringName:
 	for id in GameSession.CHARACTER_IDS:
@@ -268,8 +306,17 @@ func _free_character() -> StringName:
 
 #The server moves everybody on from the results of a round
 func advance_all() -> void:
-	if role == Role.HOST:
-		_send_all({"t": "advance"})
+	if role != Role.HOST:
+		return
+	#Whoever came back plays from this round on: the room says so before everybody loads it
+	var changed := false
+	for member in room:
+		if bool(member.get("waiting", false)):
+			member["waiting"] = false
+			changed = true
+	if changed:
+		_publish_room()
+	_send_all({"t": "advance"})
 
 
 func _process(delta: float) -> void:
@@ -278,21 +325,14 @@ func _process(delta: float) -> void:
 		for link in _links.duplicate():
 			for message in link.take():
 				_apply_from_client(link, message)
-			if link.is_closed() or Time.get_ticks_msec() - link.last_heard > SILENCE_LIMIT:
+			if link.is_closed() or link.heard_ago() > SILENCE_LIMIT:
 				_drop(link)
 		_tick_waits(delta)
 	elif role == Role.CLIENT and _host_link != null:
 		for message in _host_link.take():
 			_apply_from_host(message)
-		if role == Role.CLIENT and (_host_link.is_closed() or Time.get_ticks_msec() - _host_link.last_heard > SILENCE_LIMIT):
+		if role == Role.CLIENT and (_host_link.is_closed() or _host_link.heard_ago() > SILENCE_LIMIT):
 			_lose_host("Se perdió la conexión con la sala")
-	_ping_left -= delta
-	if _ping_left <= 0.0 and role != Role.OFFLINE:
-		_ping_left = PING_EVERY
-		if role == Role.HOST:
-			_send_all({"t": "ping"})
-		elif _host_link != null:
-			_host_link.send({"t": "ping"})
 	_collect_rooms()
 
 
@@ -393,19 +433,23 @@ func _apply_from_client(link: NetLink, message: Dictionary) -> void:
 		if kind != "hello":
 			return
 		var reason := ""
+		var returning := _returning_member(str(message.get("name", "")))
 		if int(message.get("v", 0)) != NetProtocol.VERSION:
 			reason = "La sala usa otra versión del juego"
-		elif started:
+		elif started and returning.is_empty():
 			reason = "La partida ya empezó"
 		elif room.size() >= CAPACITY:
 			reason = "La sala está llena"
 		if reason != "":
 			link.send({"t": "reject", "reason": reason})
 			return
+		if not returning.is_empty():
+			_take_back(link, returning)
+			return
 		link.id = _next_id
 		_next_id += 1
 		_mutex.lock()
-		room.append({"id": link.id, "name": _clean_name(message.get("name")), "character": String(_free_character()), "ready": false})
+		room.append({"id": link.id, "name": _clean_name(message.get("name")), "character": String(_free_character()), "ready": false, "connected": true})
 		_mutex.unlock()
 		link.send({"t": "welcome", "id": link.id})
 		_publish_room()
@@ -416,6 +460,7 @@ func _apply_from_client(link: NetLink, message: Dictionary) -> void:
 		"profile":
 			_change_member(link.id, {"name": _clean_name(message.get("name")), "character": _clean_character(message.get("character"))})
 		"loaded":
+			_round_members[link.id] = true
 			if int(message.get("round", -1)) <= go_round:
 				link.send({"t": "go", "round": go_round})
 			else:
@@ -431,8 +476,6 @@ func _apply_from_client(link: NetLink, message: Dictionary) -> void:
 			_gather_points(int(message.get("round", -1)), link.id, int(message.get("points", 0)))
 		"vote":
 			vote_received.emit(link.id)
-		"ping":
-			link.send({"t": "pong"})
 		"bye":
 			_drop(link)
 
@@ -477,8 +520,20 @@ func _apply_from_host(message: Dictionary) -> void:
 			GameSession.enter_warmup()
 		"warm":
 			warm_received.emit(float(message.get("left", 0.0)), int(message.get("votes", 0)), int(message.get("total", 1)))
-		"ping":
-			_host_link.send({"t": "pong"})
+		"left":
+			player_left.emit(int(message.get("id", 0)))
+		"rejoin":
+			var order: Array[StringName] = []
+			for id: Variant in message.get("plan", []):
+				order.append(StringName(str(id)))
+			var round_seeds: Array[int] = []
+			for value: Variant in message.get("seeds", []):
+				round_seeds.append(int(value))
+			var table: Array[Dictionary] = []
+			for points: Variant in message.get("table", []):
+				table.append(_read_points(points))
+			started = true
+			GameSession.rejoin(order, round_seeds, int(message.get("round", -1)), table)
 		"bye":
 			_lose_host("La sala se cerró")
 
@@ -530,6 +585,10 @@ func _drop(link: NetLink) -> void:
 		_mutex.unlock()
 		_publish_room()
 	else:
+		#During the game its place is kept: it may come back with the same name; meanwhile its player hides on every screen
+		_change_member(link.id, {"connected": false})
+		_send_all({"t": "left", "id": link.id})
+		player_left.emit(link.id)
 		_check_go()
 		_check_points()
 
@@ -587,7 +646,8 @@ func _check_points() -> void:
 		var here := id == 1
 		for link in _links:
 			here = here or link.id == id
-		if here and not _points.has(id):
+		var playing := (_round_members.is_empty() or _round_members.has(id)) and not bool(member.get("waiting", false))
+		if here and playing and not _points.has(id):
 			return
 	_publish_points()
 

@@ -107,6 +107,16 @@ func fall(player_id: int) -> bool:
 	return true
 
 
+#A racer whose computer left the game: out of the race, so the others do not wait for it at the goal
+func withdraw(player_id: int) -> void:
+	var state := state_of(player_id)
+	if state == null or not state.is_racing():
+		return
+	state.eliminated = true
+	racer_eliminated.emit(player_id)
+	_check_end()
+
+
 #A blow only lands when the racer is not protected nor still recovering from the last one
 func register_hit(player_id: int) -> bool:
 	var state := state_of(player_id)

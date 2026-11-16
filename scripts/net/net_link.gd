@@ -6,11 +6,11 @@ extends RefCounted
 #so it never waits for the network
 
 const CONNECT_TIMEOUT := 5000
+#The thread itself says "still here" this often, so the other side hears it even while this game is busy loading a round
+const PING_EVERY := 1000
 
 var id := 0
 var address := ""
-#Last time anything came from the other side, in milliseconds
-var last_heard := 0
 
 var _peer: StreamPeerTCP
 var _thread := Thread.new()
@@ -21,6 +21,8 @@ var _running := false
 var _open := false
 var _closed := false
 var _reader := NetProtocol.Reader.new()
+#Last time any byte came from the other side, written by the thread
+var _heard := 0
 
 
 #A link over a socket the server already accepted
@@ -46,7 +48,7 @@ func start() -> void:
 	if _closed:
 		return
 	_running = true
-	last_heard = Time.get_ticks_msec()
+	_heard = Time.get_ticks_msec()
 	_thread.start(_loop)
 
 
@@ -61,9 +63,15 @@ func take() -> Array[Dictionary]:
 	var messages := _inbox.duplicate()
 	_inbox.clear()
 	_mutex.unlock()
-	if not messages.is_empty():
-		last_heard = Time.get_ticks_msec()
 	return messages
+
+
+#Milliseconds since anything came from the other side
+func heard_ago() -> int:
+	_mutex.lock()
+	var heard := _heard
+	_mutex.unlock()
+	return Time.get_ticks_msec() - heard
 
 
 func is_open() -> bool:
@@ -94,6 +102,8 @@ func stop() -> void:
 
 func _loop() -> void:
 	var since := Time.get_ticks_msec()
+	var pinged := 0
+	var tuned := false
 	while _running:
 		_peer.poll()
 		var status := _peer.get_status()
@@ -104,11 +114,18 @@ func _loop() -> void:
 			continue
 		if status != StreamPeerTCP.STATUS_CONNECTED:
 			break
+		if not tuned:
+			#Small messages go out at once instead of waiting to be joined with others: less delay on a busy Wi-Fi
+			_peer.set_no_delay(true)
+			tuned = true
 		_mutex.lock()
 		_open = true
 		var outgoing := _outbox.duplicate()
 		_outbox.clear()
 		_mutex.unlock()
+		if Time.get_ticks_msec() - pinged >= PING_EVERY:
+			pinged = Time.get_ticks_msec()
+			outgoing.append(NetProtocol.pack({"t": "ping"}))
 		for bytes in outgoing:
 			if _peer.put_data(bytes) != OK:
 				_running = false
@@ -121,6 +138,7 @@ func _loop() -> void:
 					break
 				_mutex.lock()
 				_inbox.append_array(messages)
+				_heard = Time.get_ticks_msec()
 				_mutex.unlock()
 		OS.delay_msec(2)
 	_mutex.lock()

@@ -7,6 +7,8 @@ var player_id: int
 var display_name: String
 var character: CharacterData
 var ready := false
+#In a room, false while this player has lost its connection during the game
+var connected := true
 
 
 func _init(id: int, shown_name: String, chosen: CharacterData) -> void:

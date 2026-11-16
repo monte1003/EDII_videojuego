@@ -59,7 +59,9 @@ var _players: Array[Player] = []
 var _local: Player
 #Each player that fell, with the second of the round at which it did
 var _fallen: Dictionary = {}
+#The board draws from the seed of the room; effects (dust, sparks) from their own dice, so a landing here never changes the board there
 var _rng := RandomNumberGenerator.new()
+var _fx_rng := RandomNumberGenerator.new()
 var _phase_timer := 0.0
 var _memory_total := 1.0
 var _countdown_shown := 0
@@ -321,7 +323,7 @@ func _reaction_time(at: float) -> float:
 func _on_player_landed(at: Vector3, hard: bool, player: Player) -> void:
 	_world.press_tile(at)
 	if hard or player == _local:
-		ImpactFx.landing(self, player, hard, _rng)
+		ImpactFx.landing(self, player, hard, _fx_rng)
 
 
 #The opening film of the board comes from high over it, above the giant screens around it, and then down behind the player

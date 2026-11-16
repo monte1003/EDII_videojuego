@@ -11,7 +11,7 @@ const PORT := 47820
 const DISCOVERY_PORT := 47821
 const MAX_MESSAGE := 65536
 const TYPES: Array[String] = ["hello", "welcome", "reject", "room", "ready", "profile", "start", "loaded", "go", "st", "hit", "points",
-	"scores", "advance", "ping", "pong", "bye", "warmup", "vote", "warm"]
+	"scores", "advance", "ping", "pong", "bye", "warmup", "vote", "warm", "left", "rejoin"]
 
 
 static func pack(message: Dictionary) -> PackedByteArray:
