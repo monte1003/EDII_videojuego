@@ -107,6 +107,9 @@ var touching := false
 #Striking a pose: the player stands still and cannot jump while the round keeps it on; "pose_style" says which pose or dance
 var posing := false: set = _set_posing
 var pose_style := 0
+#What the keys asked for this frame, kept before a pose or a daze clears it, so the pose can end on a move or a jump
+var asked_move := Vector2.ZERO
+var asked_jump := false
 #Each round says whether its players can dive
 var dive_enabled := false
 #While something carries the body (the bubble of a deck), it does not move on its own: whoever carries it sets where it is
@@ -462,6 +465,8 @@ func _physics_process(delta: float) -> void:
 		_animate_body(delta)
 		return
 	_tick_stun(delta)
+	asked_move = move_input
+	asked_jump = jump_requested
 	if posing or _dazed:
 		move_input = Vector2.ZERO
 		jump_requested = false

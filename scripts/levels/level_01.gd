@@ -13,6 +13,8 @@ const FALL_Y := -12.0
 const IRIS_LEAD := 7.0
 #Meters between the starting places of the racers
 const START_SPREAD := 2.2
+#Seconds a racer stays protected (blinking) after it gets up from a blow, to step out of the way of what hit it
+const RECOVER_GRACE := 1.3
 #Each racer starts in front of one of the bridges that leave the start: this far from the middle toward the bridges to the sides and this
 #far back, so the one ahead is taken from behind the gate
 const START_INSET := 4.0
@@ -238,6 +240,7 @@ func _register_racer(player: Player, shown_name: String, id: int) -> void:
 	player.landed.connect(_on_racer_landed.bind(player))
 	player.floor_snap_length = SLIDE_SNAP
 	player.dive_enabled = true
+	player.invulnerable_time = RECOVER_GRACE
 
 
 func _locator_list() -> Array[PlayerLocator]:
@@ -373,7 +376,7 @@ func _apply_hazards() -> void:
 		var centre: Vector3 = Level01Layout.POSITIONS[locator.vertex]
 		if not Level01Hazards.hits(centre, spinner, rules.elapsed, player.global_position, player.global_position.y - centre.y):
 			continue
-		if not rules.register_hit(id):
+		if not _can_strike(id):
 			continue
 		var direction := Level01Hazards.push_direction(centre, spinner, player.global_position)
 		_hit_racer(player, direction * settings.spinner_push, SPINNER_STRENGTH, SPINNER_STUN)
@@ -415,7 +418,7 @@ func _apply_balls() -> void:
 			var floor_y: float = (Level01Layout.POSITIONS[ball["island"]] as Vector3).y
 			if not Level01Hazards.ball_hits(ball, rules.elapsed, player.global_position, player.global_position.y - floor_y):
 				continue
-			if not rules.register_hit(id):
+			if not _can_strike(id):
 				continue
 			var push := Level01Hazards.ball_push(ball, rules.elapsed, player.global_position)
 			_hit_racer(player, push * settings.spinner_push * BALL_PUSH_SHARE, BALL_STRENGTH, BALL_STUN)
@@ -438,7 +441,7 @@ func _apply_comments() -> void:
 			if not locator.on_bridge or Level01Layout.comment_of(locator.bridge_a, locator.bridge_b) != comment:
 				continue
 			var player := _players[id] as Player
-			if not Level01Hazards.comment_hits(comment, rules.elapsed, player.global_position) or not rules.register_hit(id):
+			if not Level01Hazards.comment_hits(comment, rules.elapsed, player.global_position) or not _can_strike(id):
 				continue
 			_hit_racer(player, Level01Hazards.comment_push(comment, rules.elapsed) * settings.push_speed * COMMENT_PUSH_SHARE, SOFT_STRENGTH, SOFT_STUN)
 			if id == _local_id:
@@ -477,7 +480,7 @@ func _apply_traps() -> void:
 				if rolls:
 					strength = SOFT_STRENGTH
 					stun = SOFT_STUN
-		if push == Vector3.ZERO or not rules.register_hit(id):
+		if push == Vector3.ZERO or not _can_strike(id):
 			continue
 		_hit_racer(player, push, strength, stun)
 		if id == _local_id:
@@ -598,7 +601,7 @@ func _apply_blocks() -> void:
 		var player := _players[id] as Player
 		if not Level01Hazards.block_hits(pusher, rules.elapsed, player.global_position):
 			continue
-		if not rules.register_hit(id):
+		if not _can_strike(id):
 			continue
 		_world.pulse_block(pusher)
 		_hit_racer(player, Level01Hazards.block_heading(pusher, rules.elapsed) * settings.spinner_push, SPINNER_STRENGTH, SPINNER_STUN)
@@ -758,6 +761,12 @@ func _on_racer_finished(player_id: int, place: int) -> void:
 	else:
 		_hud.toast("%s llegó %s" % [_names.get(player_id, "Alguien"), _ordinal(place)])
 	_update_standings()
+
+
+#A blow lands only on a racer that is on its feet and out of its protection: while it flies, lies on the floor and for RECOVER_GRACE
+#seconds after it gets up (blinking) nothing hits it again, so a row of swinging comments can never chain blows on it
+func _can_strike(id: int) -> bool:
+	return (_players[id] as Player).can_be_hit() and rules.register_hit(id)
 
 
 #Every blow of the level is the same hit as in the street: it throws the racer, flips it, leaves it lying and gets it up
