@@ -91,6 +91,10 @@ func _ready() -> void:
 	super()
 	if settings == null:
 		settings = Level01Settings.new()
+	#In a room the race is over when everybody has arrived or the time limit runs out, as in every other round
+	if GameSession.is_networked() and not GameSession.practice:
+		settings = settings.duplicate()
+		settings.finish_window = 0.0
 	if ScreenFlow.tree.has(SCREEN_ID):
 		ScreenFlow.mark_current(SCREEN_ID)
 	seed_rng(_rng, settings.random_seed)
@@ -749,6 +753,8 @@ func _on_racer_finished(player_id: int, place: int) -> void:
 		var player := _players[player_id] as Player
 		player.set_input_enabled(false)
 		_hud.warn("META" if total == 1 else _ordinal(place))
+		#In a room the race goes on until everybody arrives or time runs out: meanwhile this computer watches the others
+		start_spectating.call_deferred()
 	else:
 		_hud.toast("%s llegó %s" % [_names.get(player_id, "Alguien"), _ordinal(place)])
 	_update_standings()

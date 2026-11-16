@@ -448,8 +448,9 @@ func is_falling(player_id: int) -> bool:
 
 func _respawn(player_id: int) -> void:
 	var player: Player = players[player_id]
-	var place := layout.nearest_place(Vector3(player.global_position.x, ArenaLayout.GROUND, player.global_position.z))
-	player.global_position = layout.position_of(place) + Vector3(0.0, 0.1, 0.0)
+	#Nobody falls off these maps; if a body ever slips through something it goes back to the start
+	var place := layout.spawn_place
+	player.global_position = layout.position_of(place) + Vector3(rng.randf_range(-1.5, 1.5), 0.1, rng.randf_range(-1.5, 1.5))
 	player.clear_motion()
 	player.set_input_enabled(player_id == local_id and phase == Phase.RUNNING)
 	(locators[player_id] as PlayerLocator).force_vertex(place)

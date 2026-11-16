@@ -155,6 +155,8 @@ func _spawn_figure(entry: PodiumPlan.Entry) -> void:
 	add_child(figure.root)
 	figure.model = _character_of(entry.player_id).model_scene.instantiate() as CharacterModel
 	figure.root.add_child(figure.model)
+	if not _demo:
+		SkinVariant.apply(figure.model, GameSession.variant_of(entry.player_id))
 	var skeletons := figure.model.find_children("*", "Skeleton3D", true, false)
 	if not skeletons.is_empty():
 		figure.skeleton = skeletons[0] as Skeleton3D

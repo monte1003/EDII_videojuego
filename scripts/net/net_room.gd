@@ -16,6 +16,9 @@ signal rooms_found
 signal state_received(player_id: int, state: Dictionary)
 signal hit_received(state: Dictionary)
 signal round_go
+#The server: somebody voted to start in the warm-up. A client: the clock and the votes of the warm-up as the server has them
+signal vote_received(player_id: int)
+signal warm_received(seconds_left: float, votes: int, total: int)
 
 const CAPACITY := 4
 #A computer that says nothing for this long is gone
@@ -24,7 +27,8 @@ const PING_EVERY := 1.0
 const ANNOUNCE_EVERY := 1000
 #How long the server waits for everybody at the start of a round and for the points at its end
 const GO_WAIT := 6.0
-const POINTS_WAIT := 8.0
+#Players finish a round at different times (the others watch meanwhile); this only guards against a computer that never answers
+const POINTS_WAIT := 300.0
 
 var role := Role.OFFLINE
 #Everybody in the room: {"id", "name", "character", "ready"}, in the order they came in
@@ -231,6 +235,37 @@ func report_points(round_index: int, points: int) -> void:
 		_host_link.send({"t": "points", "round": round_index, "points": points})
 
 
+#The server sends everybody to the warm-up once they are all ready in the lobby
+func begin_warmup() -> void:
+	if role == Role.HOST:
+		started = true
+		_send_all({"t": "warmup"})
+
+
+#A vote to start from the warm-up: the server counts it there
+func vote() -> void:
+	if role == Role.HOST:
+		vote_received.emit(1)
+	elif role == Role.CLIENT:
+		_host_link.send({"t": "vote"})
+
+
+#The server tells everybody how long the warm-up has left and how many voted
+func send_warm(seconds_left: float, votes: int, total: int) -> void:
+	_send_all({"t": "warm", "left": snappedf(seconds_left, 0.01), "votes": votes, "total": total})
+
+
+#Whoever comes in wears the first character nobody is wearing (with all of them taken, the first one in another colour)
+func _free_character() -> StringName:
+	for id in GameSession.CHARACTER_IDS:
+		var taken := false
+		for member in room:
+			taken = taken or str(member.get("character", "")) == String(id)
+		if not taken:
+			return id
+	return GameSession.CHARACTER_IDS[0]
+
+
 #The server moves everybody on from the results of a round
 func advance_all() -> void:
 	if role == Role.HOST:
@@ -370,7 +405,7 @@ func _apply_from_client(link: NetLink, message: Dictionary) -> void:
 		link.id = _next_id
 		_next_id += 1
 		_mutex.lock()
-		room.append({"id": link.id, "name": _clean_name(message.get("name")), "character": _clean_character(message.get("character")), "ready": false})
+		room.append({"id": link.id, "name": _clean_name(message.get("name")), "character": String(_free_character()), "ready": false})
 		_mutex.unlock()
 		link.send({"t": "welcome", "id": link.id})
 		_publish_room()
@@ -394,6 +429,8 @@ func _apply_from_client(link: NetLink, message: Dictionary) -> void:
 			_deliver_hit(message)
 		"points":
 			_gather_points(int(message.get("round", -1)), link.id, int(message.get("points", 0)))
+		"vote":
+			vote_received.emit(link.id)
 		"ping":
 			link.send({"t": "pong"})
 		"bye":
@@ -435,6 +472,11 @@ func _apply_from_host(message: Dictionary) -> void:
 			GameSession.apply_round_points(int(message.get("round", -1)), _read_points(message.get("points", {})))
 		"advance":
 			GameSession.advance_now()
+		"warmup":
+			started = true
+			GameSession.enter_warmup()
+		"warm":
+			warm_received.emit(float(message.get("left", 0.0)), int(message.get("votes", 0)), int(message.get("total", 1)))
 		"ping":
 			_host_link.send({"t": "pong"})
 		"bye":

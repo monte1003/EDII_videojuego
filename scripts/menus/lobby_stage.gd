@@ -110,15 +110,16 @@ func _fill(place: Dictionary, slot: PlayerSlot, is_local: bool) -> void:
 		_text(place["status"], "", Palette.INK_SOFT)
 		return
 	place["player_id"] = slot.player_id
-	_set_model(place, slot.character)
+	_set_model(place, slot.character, GameSession.variant_of(slot.player_id))
 	_tint(place["ring"], slot.character.accent_color, 1.4 if slot.ready else 0.7)
 	_text(place["name"], slot.display_name + ("  ·  Tú" if is_local else ""), Palette.INK)
 	_text(place["status"], "Listo" if slot.ready else "", Palette.TEAL)
 
 
-func _set_model(place: Dictionary, character: CharacterData) -> void:
-	if place["character"] == character:
+func _set_model(place: Dictionary, character: CharacterData, variant := 0) -> void:
+	if place["character"] == character and int(place.get("variant", 0)) == variant:
 		return
+	place["variant"] = variant
 	if place["model"] != null:
 		(place["model"] as Node).queue_free()
 		place["model"] = null
@@ -128,6 +129,7 @@ func _set_model(place: Dictionary, character: CharacterData) -> void:
 	var model := character.model_scene.instantiate() as CharacterModel
 	var holder: Node3D = place["holder"]
 	holder.add_child(model)
+	SkinVariant.apply(model, variant)
 	place["model"] = model
 	holder.scale = Vector3.ONE * MODEL_SCALE * 0.6
 	create_tween().tween_property(holder, "scale", Vector3.ONE * MODEL_SCALE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

@@ -67,6 +67,13 @@ var _chosen := -1
 var _warned := false
 var _restored := false
 var _drops_survived := 0
+#One spare life: the first fall puts the player back on a safe card, but that drop does not count and costs some seconds; the second is out
+const SPARE_LIVES := 1
+const REVIVE_COST := 10.0
+var _spares_left := SPARE_LIVES
+var _penalty := 0.0
+var _missed_drop := false
+var _reviving := false
 var _hud_timer := 0.0
 var _tick_sound: AudioStreamPlayer
 var _stop_sound: AudioStreamPlayer
@@ -162,14 +169,44 @@ func _physics_process(delta: float) -> void:
 #A player that goes under the platform is out of the round; when it is the one at this screen, the round is over
 func _check_falls() -> void:
 	for player in _players:
+		#The puppet of another computer only hides while it is under the board (its spare life may bring it back)
+		if player.remote:
+			player.visible = player.global_position.y >= fall_y
+			continue
 		if _fallen.has(player.player_id) or player.global_position.y >= fall_y:
+			continue
+		if player == _local and (_reviving or _spares_left > 0):
+			if not _reviving:
+				_revive(player)
 			continue
 		_fallen[player.player_id] = elapsed
 		if player == _local:
+			#Out for good: the body stops where it is, under the board, while this computer watches the others
+			player.set_physics_process(false)
+			player.hide()
 			_finish(false, "Caída", "")
 			return
 		player.set_physics_process(false)
 		player.hide()
+
+
+#The spare life: the picture closes, the player comes back on a card of the icon of the screen (or its starting place) and it opens
+func _revive(player: Player) -> void:
+	_spares_left -= 1
+	_reviving = true
+	_penalty += REVIVE_COST
+	_missed_drop = true
+	iris.close(0.22)
+	var back := create_tween()
+	back.tween_interval(0.24)
+	back.tween_callback(func() -> void:
+		var spots := _world.spawn_points()
+		var at: Vector3 = _world.cell_position(_chosen, player.global_position) if _chosen >= 0 else spots[0]
+		player.global_position = at + Vector3(0.0, 0.6, 0.0)
+		player.clear_motion()
+		_reviving = false
+		iris.open(0.45, 0.1)
+		_world.screen_text("Última vida", Palette.CORAL))
 
 
 func _go() -> void:
@@ -250,7 +287,8 @@ func _update_react() -> void:
 func _update_rest() -> void:
 	if not _restored and _phase_timer <= rest_seconds - drop_hold:
 		_restored = true
-		_drops_survived += 1
+		_drops_survived += 0 if _missed_drop else 1
+		_missed_drop = false
 		_world.restore()
 		if _round_fits(elapsed + _phase_timer):
 			_world.screen_text("Otra", Palette.GOLD)
@@ -336,6 +374,8 @@ func _end_round(victory: bool, title: String, message: String) -> void:
 	var points: Dictionary = {}
 	for player in _players:
 		var held: float = _fallen.get(player.player_id, minf(elapsed, time_limit))
+		if player == _local:
+			held = maxf(held - _penalty, 0.0)
 		points[player.player_id] = sheet.drop_points(held / time_limit * sheet.drop_seconds)
 	var score := RoundScore.make(sheet, points[_local.player_id], "%d de %d s" % [floori(minf(elapsed, time_limit)), int(time_limit)])
 	if not finish_round(RoundResult.make(MINIGAME_ID, victory, title, message, lines).with_score(score, points)):

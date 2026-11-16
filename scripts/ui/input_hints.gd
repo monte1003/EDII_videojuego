@@ -3,7 +3,7 @@ extends RefCounted
 
 #Key names taken from the Input Map, so the texts follow any rebinding
 
-const NAMES := {KEY_SPACE: "ESPACIO", KEY_SHIFT: "MAYÚS", KEY_ENTER: "ENTER", KEY_KP_ENTER: "ENTER"}
+const NAMES := {KEY_SPACE: "ESPACIO", KEY_SHIFT: "SHIFT", KEY_ENTER: "ENTER", KEY_KP_ENTER: "ENTER"}
 
 
 static func key_label(action: StringName) -> String:
