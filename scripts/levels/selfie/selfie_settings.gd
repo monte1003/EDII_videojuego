@@ -38,8 +38,8 @@ extends Resource
 @export_range(0.0, 0.1) var air_share := 0.1
 
 @export_group("Pose")
-#Seconds a pose must have lasted at the shot to count
-@export var pose_hold := 0.8
+#Seconds a pose must have lasted at the shot to count: none, a pose struck the instant before the shot counts in full
+@export var pose_hold := 0.0
 #A shove pushes somebody who poses this much harder
 @export var pose_shove_scale := 1.5
 #How many poses and dances there are to pick from, and how hard the keys must be pressed for a move to end the pose

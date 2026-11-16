@@ -83,7 +83,7 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 #Builds the map and its set, puts the players on it and starts the countdown
 func setup_arena(arena: ArenaLayout) -> void:
 	layout = arena
-	rng.randomize()
+	seed_rng(rng)
 	world.build(layout)
 	_stage_set = _make_set()
 	context.graph = layout.build_graph(true)
@@ -154,6 +154,8 @@ func request_shove(player_id: int) -> bool:
 	var player: Player = players[player_id]
 	if player.is_down() or player.is_diving() or not _can_shove(player_id) or not brawl.use_shove(player_id):
 		return false
+	#Nobody shoves from a pose
+	poses.set_posing(player_id, false)
 	var facing := player.look_direction()
 	var target := shove_target(player_id)
 	player.squash(4.0)
@@ -162,9 +164,16 @@ func request_shove(player_id: int) -> bool:
 	SynthSound.play(self, SynthSound.tone(300.0, 0.14, -160.0, 0.5), -9.0, rng.randf_range(0.95, 1.1))
 	var landed := false
 	if target >= 0:
-		var away := (players[target] as Player).global_position - player.global_position
+		var victim := players[target] as Player
+		var away := victim.global_position - player.global_position
 		away.y = 0.0
-		landed = strike(target, away.normalized() * SHOVE_PUSH * _shove_scale(target), 0.35)
+		var push := away.normalized() * SHOVE_PUSH * _shove_scale(target)
+		if victim.remote:
+			#A player of another computer takes the blow there, with its own shield and its own rules
+			GameSession.net.send_hit({"to": target, "push": [push.x, push.y, push.z], "strength": 0.35})
+			landed = true
+		else:
+			landed = strike(target, push, 0.35)
 	elif target <= BOT_KEY:
 		var bot := bots[BOT_KEY - target]
 		var away := bot.global_position - player.global_position
@@ -212,7 +221,7 @@ func add_bot() -> void:
 
 func _physics_process(delta: float) -> void:
 	world.process_mode = Node.PROCESS_MODE_DISABLED if paused else Node.PROCESS_MODE_INHERIT
-	if paused:
+	if paused or filming:
 		return
 	match phase:
 		Phase.COUNTDOWN:
@@ -308,7 +317,7 @@ func _spawn_players() -> void:
 		var away := layout.radius_of(layout.spawn_place) * 0.62
 		points.append(centre + Vector3(cos(angle) * away, 0.05, sin(angle) * away))
 	var spawned := spawn_players(_actors, points)
-	local_id = spawned[0].player_id
+	local_id = RoundScene.local_of(spawned).player_id
 	for player in spawned:
 		players[player.player_id] = player
 		player.set_input_enabled(false)
@@ -330,7 +339,7 @@ func _spawn_players() -> void:
 		target.locator = locator
 		target.detection_radius = 200.0
 		context.targets.append(target)
-	spawned[0].view_camera().make_current()
+	RoundScene.local_of(spawned).view_camera().make_current()
 
 
 #The belts, the pads, the bars and the blocks act on every player; a piece that just appeared waits a moment first
@@ -424,9 +433,13 @@ func _check_falls(delta: float) -> void:
 			if float(_falling[id]) <= 0.0:
 				_falling.erase(id)
 				_respawn(id)
+				if id == local_id:
+					iris.open()
 			continue
 		if player.global_position.y < ArenaLayout.GROUND - SAFETY_DEPTH:
 			_falling[id] = RESPAWN_TIME
+			if id == local_id:
+				iris.close()
 
 
 func is_falling(player_id: int) -> bool:
@@ -446,6 +459,14 @@ func _respawn(player_id: int) -> void:
 
 func _on_shove_key() -> void:
 	request_shove(local_id)
+
+
+func _pose_allowed(player_id: int) -> bool:
+	return not paused and phase != Phase.ENDED and not _falling.has(player_id)
+
+
+func _pose_shown() -> bool:
+	return not paused and phase != Phase.ENDED
 
 
 #The bot shows its warning mark; a short rising note says it too

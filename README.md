@@ -8,11 +8,11 @@
 **RumbleNet** es un juego multijugador local (1 a 4 jugadores) tipo *party game* enfocado en la concientización del uso saludable de las redes sociales. El objetivo es divertirse en un entorno caótico y competitivo mientras los jugadores enfrentan obstáculos que simulan distracciones digitales, trolls, y notificaciones, fomentando la "desconexión" y los hábitos saludables.
 
 ### Características Principales:
-- **Formato por Partidas:** Cada partida consta de 4 rondas rápidas de 1.5 a 2 minutos.
+- **Formato por Partidas:** Cada partida consta de 5 rondas rápidas de 1.5 a 2 minutos: los 5 minijuegos, cada uno una vez, en un orden al azar.
 - **Variedad por Ronda:** Cada ronda ofrece un mapa diferente, modalidad, obstáculos, diseño único y un sistema de puntos independiente.
 - **Modos de Juego:**
   - **Singleplayer:** Permite jugar en solitario contra el entorno o bots. Al final, se guarda un resumen del rendimiento y efectividad del jugador.
-  - **Multiplayer:** Competencia local entre amigos. Al final de cada ronda se muestra un resumen de las posiciones y puntos actuales. Al concluir las 4 rondas, se realiza una sumatoria total y se muestra una **animación de podio** celebrando las posiciones finales.
+  - **Multiplayer:** Competencia local entre amigos. Al final de cada ronda se muestra un resumen de las posiciones y puntos actuales. Al concluir las 5 rondas, se realiza una sumatoria total y se muestra una **animación de podio** con coronas de bronce, plata, oro y diamante. Cada jugador juega en su propio portátil, conectados en red local con un esquema cliente-servidor (sockets TCP e hilos).
 - **Estilo Visual:** 3D Low Poly para garantizar un excelente rendimiento (incluso en hardware de bajos recursos) sin perder el estilo caótico, colorido y divertido.
 
 ---
@@ -27,7 +27,7 @@ De acuerdo con los lineamientos del **Laboratorio**, se debe evidenciar la imple
 - **Cómo se recorre:** Para mostrar las posiciones finales en el podio, se realiza un **recorrido Inorden (In-order)**. Este recorrido visita el subárbol izquierdo, luego la raíz, y finalmente el subárbol derecho, lo que devuelve los puntajes estructurados de menor a mayor (o mayor a menor, según la lógica de inserción), entregando el ranking de posiciones de forma directa.
 
 ### 2. Generación de Rondas y Mapas (Árbol de Decisión o Árbol General)
-- **Problema que resuelve:** El juego requiere estructurar 4 rondas distintas combinando mapas, modalidades y obstáculos de forma aleatoria pero coherente, asegurando que las rondas tengan una progresión o no repitan los mismos componentes.
+- **Problema que resuelve:** El juego requiere estructurar 5 rondas distintas combinando mapas, modalidades y obstáculos de forma aleatoria pero coherente, asegurando que las rondas tengan una progresión o no repitan los mismos componentes.
 - **Por qué se eligió esta variante:** Un árbol permite modelar los posibles caminos o combinaciones que puede tomar una partida. Cada nivel del árbol puede representar una ronda, y los nodos hijos las combinaciones de mapa y modalidad disponibles.
 - **Cómo se recorre:** Mediante un recorrido desde la raíz hasta una hoja, seleccionando nodos aleatorios en cada nivel, se construye dinámicamente la estructura completa de la partida antes de iniciar.
 

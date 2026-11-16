@@ -80,7 +80,7 @@ func _ready() -> void:
 	super()
 	if ScreenFlow.tree.has(MINIGAME_ID):
 		ScreenFlow.mark_current(MINIGAME_ID)
-	_rng.randomize()
+	seed_rng(_rng)
 	_world.build(icons, _rng)
 	_spawn_players()
 	_tick_sound = _make_sound(SynthSound.tone(1046.0, 0.08), -8.0)
@@ -112,7 +112,7 @@ func _help_allowed() -> bool:
 #Everybody stands on the platform at once, each with its own id and camera; this screen controls the first one
 func _spawn_players() -> void:
 	_players = spawn_players(_actors, _world.spawn_points())
-	_local = _players[0]
+	_local = RoundScene.local_of(_players)
 	for player in _players:
 		player.set_input_enabled(false)
 		player.frame_camera(camera_distance, camera_pitch)
@@ -123,7 +123,7 @@ func _spawn_players() -> void:
 func _physics_process(delta: float) -> void:
 	#The cards move with tweens of the world: they stop with the pause and the help too
 	_world.process_mode = Node.PROCESS_MODE_DISABLED if paused else Node.PROCESS_MODE_INHERIT
-	if paused or phase == Phase.ENDED:
+	if paused or filming or phase == Phase.ENDED:
 		return
 	_phase_timer -= delta
 	if phase == Phase.READY:
@@ -284,6 +284,26 @@ func _on_player_landed(at: Vector3, hard: bool, player: Player) -> void:
 	_world.press_tile(at)
 	if hard or player == _local:
 		ImpactFx.landing(self, player, hard, _rng)
+
+
+#The opening film of the board comes from high over it, above the giant screens around it, and then down behind the player
+func _film_shots() -> Array[RoundFilm.Shot]:
+	var shots := super()
+	if shots.is_empty():
+		return shots
+	var centre := playing_area().get_center()
+	var facing := _pose_player.look_direction()
+	var aside := Vector3(-facing.z, 0.0, facing.x)
+	shots[0] = RoundFilm.Shot.new(centre - facing * 6.0 + aside * 8.0 + Vector3(0.0, 24.0, 0.0), centre, centre - facing * 12.0 - aside * 4.0 + Vector3(0.0, 15.0, 0.0), centre, 3.6)
+	return shots
+
+
+func _pose_allowed(_player_id: int) -> bool:
+	return not paused and phase != Phase.ENDED
+
+
+func _pose_shown() -> bool:
+	return not paused and phase != Phase.ENDED
 
 
 func _finish(victory: bool, title: String, message: String) -> void:

@@ -16,7 +16,6 @@ var monitor: SelfieMonitor
 var marker: SelfieMarker
 var card: SelfieCard
 var roll: SelfieRoll
-var pose_chip: ActionChip
 var shove_chip: ActionChip
 
 var _photo_label: Label
@@ -56,9 +55,7 @@ func _ready() -> void:
 	_chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_chips.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_chips)
-	pose_chip = ActionChip.new(InputHints.key_label(&"interact"), "posar")
 	shove_chip = ActionChip.new(InputHints.key_label(&"shove"), SHOVE_KEY_WORD)
-	_chips.add_child(pose_chip)
 	_chips.add_child(shove_chip)
 	card = SelfieCard.new()
 	add_child(card)
@@ -114,14 +111,6 @@ func show_roll(photos: Array[Texture2D], numbers: Array[int]) -> void:
 	card.clear()
 	monitor.set_live(false)
 	roll.show_roll(photos, numbers)
-
-
-#The chip of the pose: near the player while the frame is there; lit while posing
-func set_pose_chip(shown: bool, posing: bool, at: Vector2) -> void:
-	pose_chip.set_word("soltar" if posing else "posar", posing)
-	pose_chip.set_shown(shown)
-	if shown:
-		pose_chip.place(at)
 
 
 #The chip of the shove: over the rival in reach or near the player, with its recharge

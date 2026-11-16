@@ -469,7 +469,7 @@ func _check_pose() -> void:
 	late.place(1, late.frame_center(), true, false)
 	late.set_posing(1, true)
 	late.tick(0.1)
-	_expect(late.state_of(1).poses == 0 and late.state_of(1).followers == 75, "una pose de última hora no cuenta: necesita %.1f s" % SETTINGS.pose_hold)
+	_expect(late.state_of(1).poses == 1 and late.state_of(1).followers == 195, "una pose de última hora cuenta entera (%d seguidores)" % late.state_of(1).followers)
 	var held := _rules([1])
 	_until(held, SelfieRules.Phase.LOCK)
 	held.place(1, held.frame_center(), true, false)

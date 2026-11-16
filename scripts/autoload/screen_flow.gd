@@ -5,6 +5,8 @@ signal screen_changed(id: StringName)
 var tree := ScreenTree.new()
 
 var current: StringName = &""
+#The music of the screens
+var music := MusicBox.new()
 
 #The screen being loaded and the last one asked for meanwhile; it opens when the wipe ends
 var _heading: StringName = &""
@@ -21,6 +23,7 @@ func _ready() -> void:
 	for info in MinigameCatalog.ENTRIES:
 		tree.add_screen(&"lobby", info.id, info.title, info.scene_path)
 	tree.add_screen(&"lobby", &"round_results", "Resultados de la ronda", "res://scenes/menus/round_results.tscn")
+	tree.add_screen(&"lobby", &"podium", "Podio", "res://scenes/menus/podium.tscn")
 	tree.add_screen(&"lobby", &"session_results", "Fin de la partida", "res://scenes/menus/session_results.tscn")
 	#Test menu of the main menu: opens any minigame straight away, outside a session
 	tree.add_screen(&"main_menu", &"test_games", "Test", "res://scenes/menus/test_menu.tscn")
@@ -29,6 +32,10 @@ func _ready() -> void:
 	tree.add_screen(&"options", &"graphics", "Gráficos", "res://scenes/menus/graphics_menu.tscn")
 	tree.add_screen(&"options", &"accessibility", "Accesibilidad", "res://scenes/menus/accessibility_menu.tscn")
 	current = tree.root.id
+	music.name = "Music"
+	add_child(music)
+	screen_changed.connect(music.play_for)
+	music.play_for.call_deferred(current)
 	#ScreenFader is the last autoload: connect once all of them exist
 	_connect_fader.call_deferred()
 

@@ -907,14 +907,17 @@ func _build_start_marks() -> void:
 		arrow.rotation_degrees.x = -90.0
 
 
-#The bar of each spinner island: a striped tube that sweeps the floor around a pole
+#The bars of each spinner island: striped tubes that sweep the floor around a pole, one per bar the hazard counts (two cross at right angles)
 func _build_spinners() -> void:
 	for id: StringName in Level01Layout.SPINNERS:
 		var spinner: Dictionary = Level01Layout.SPINNERS[id]
 		var pivot := Node3D.new()
 		pivot.position = Level01Layout.POSITIONS[id] + Vector3(0, 0.02, 0)
 		add_child(pivot)
-		pivot.add_child(PropKit.make(&"bumper", Vector3(float(spinner["arm"]) * 2.0, Level01Hazards.BAR_HEIGHT, 0.6)))
+		for bar in int(spinner.get("arms", 1)):
+			var tube := PropKit.make(&"bumper", Vector3(float(spinner["arm"]) * 2.0, Level01Hazards.BAR_HEIGHT, 0.6))
+			tube.rotation.y = -PI / 2.0 * bar
+			pivot.add_child(tube)
 		pivot.add_child(PropKit.make_tall(&"cone", 1.5))
 		_spinners[id] = pivot
 

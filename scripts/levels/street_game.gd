@@ -129,7 +129,7 @@ func _ready() -> void:
 	super()
 	if ScreenFlow.tree.has(SCREEN_ID):
 		ScreenFlow.mark_current(SCREEN_ID)
-	_rng.randomize()
+	seed_rng(_rng)
 	var half_width := lane_count * lane_width / 2.0
 	_world.build(half_width, sidewalk_width, lane_count, spawn_x - 10.0, despawn_x + 10.0, end_x)
 	_build_lanes(half_width)
@@ -167,6 +167,9 @@ func _build_lanes(half_width: float) -> void:
 
 func _spawn_runner(half_width: float) -> void:
 	var slot := participants[0]
+	for candidate in participants:
+		if candidate.player_id == GameSession.local_id:
+			slot = candidate
 	_runner = RUNNER_SCENE.instantiate() as StreetRunner
 	_runner.player_id = slot.player_id
 	var edge := half_width + sidewalk_width - _runner.radius
@@ -178,10 +181,11 @@ func _spawn_runner(half_width: float) -> void:
 	_runner.position = Vector3(start_x, 0.0, 0.0)
 	_runner.set_character(slot.character)
 	_runner.set_input_enabled(false)
+	add_poser(_runner, true)
 
 
 func _physics_process(delta: float) -> void:
-	if paused:
+	if paused or filming:
 		return
 	_clock += delta
 	match phase:
@@ -246,6 +250,24 @@ func _stop_belt() -> void:
 
 func _speed_scale() -> float:
 	return lerpf(start_speed_scale, end_speed_scale, clampf(elapsed / time_limit, 0.0, 1.0))
+
+
+#The opening film of the street stays down between its buildings: a low flight up the street toward the runner and a crane from the
+#sidewalk, so the edges of the map never show
+func _film_shots() -> Array[RoundFilm.Shot]:
+	var at := _runner.global_position
+	var shots: Array[RoundFilm.Shot] = []
+	shots.append(RoundFilm.Shot.new(at + Vector3(34.0, 2.6, -2.0), at + Vector3(0.0, 1.2, 0.0), at + Vector3(14.0, 3.4, 1.5), at + Vector3(-6.0, 1.0, 0.0), 3.6))
+	shots.append(RoundFilm.Shot.new(at + Vector3(5.0, 1.3, sidewalk_width + 2.5), at + Vector3(-4.0, 2.2, 0.0), at + Vector3(3.5, 3.6, 2.0), at + Vector3(0.0, 1.0, 0.0), 2.6))
+	return shots
+
+
+func _pose_allowed(_player_id: int) -> bool:
+	return not paused and phase != Phase.ENDED
+
+
+func _pose_shown() -> bool:
+	return not paused and phase != Phase.ENDED
 
 
 func _finish(victory: bool, title: String, message: String) -> void:

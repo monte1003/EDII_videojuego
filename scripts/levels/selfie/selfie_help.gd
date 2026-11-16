@@ -22,7 +22,7 @@ Salir vale %d seguidores, el círculo del centro suma %d y una foto en el aire, 
 		},
 		{
 			"title": "Pose y empujón",
-			"body": "%s una vez: una pose o un baile, sin moverse. Tras un momento posando, la foto suma %d. Se quita con %s o al moverse.
+			"body": "%s una vez: una pose o un baile, sin moverse. Si posas cuando sale la foto, aunque sea al último instante, suma %d. Se quita con %s o al moverte de nuevo.
 
 %s empuja a quien esté delante: sale despedido y aturdido un momento, y más lejos si posaba." % [
 				InputHints.key_markup(&"interact"), sheet.selfie_pose, InputHints.key_markup(&"interact"), InputHints.key_markup(&"shove")],

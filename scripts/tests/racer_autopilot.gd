@@ -339,6 +339,7 @@ func _toward(point: Vector3) -> Vector3:
 	return flat.normalized()
 
 
-#The camera of the racer never turns, so the move input is the direction on the ground
+#The move input goes in the space of the camera of the racer, which starts looking at its bridge
 func _set_move(direction: Vector3) -> void:
-	_player.move_input = Vector2(direction.x, direction.z)
+	var local := (_player.get_node("CameraRig") as PlayerCamera).get_yaw_basis().inverse() * direction
+	_player.move_input = Vector2(local.x, local.z)

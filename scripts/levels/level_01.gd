@@ -9,8 +9,14 @@ enum Phase { COUNTDOWN, RUNNING, ENDED }
 
 const SCREEN_ID := &"level_01"
 const FALL_Y := -12.0
+#The picture starts to close this far over FALL_Y while the racer of this screen falls, so it is dark when it comes back
+const IRIS_LEAD := 7.0
 #Meters between the starting places of the racers
 const START_SPREAD := 2.2
+#Each racer starts in front of one of the bridges that leave the start: this far from the middle toward the bridges to the sides and this
+#far back, so the one ahead is taken from behind the gate
+const START_INSET := 4.0
+const START_BACK := 1.2
 #How hard a blow feels and how long it leaves the racer lying: a bar, an axe, a like and a giant ball hit hard, a comment and a scroll
 #wheel softer
 const SPINNER_STRENGTH := 0.9
@@ -87,10 +93,7 @@ func _ready() -> void:
 		settings = Level01Settings.new()
 	if ScreenFlow.tree.has(SCREEN_ID):
 		ScreenFlow.mark_current(SCREEN_ID)
-	if settings.random_seed != 0:
-		_rng.seed = settings.random_seed
-	else:
-		_rng.randomize()
+	seed_rng(_rng, settings.random_seed)
 
 	graph = Level01Layout.build_graph()
 	_deck_lifts = Level01Layout.deck_lifts()
@@ -99,7 +102,7 @@ func _ready() -> void:
 	var human_ids: Array[int] = []
 	for slot in participants:
 		human_ids.append(slot.player_id)
-	_local_id = human_ids[0]
+	_local_id = GameSession.local_id if human_ids.has(GameSession.local_id) else human_ids[0]
 	rules = Level01Rules.new(settings, human_ids, Level01Layout.START)
 	rules.outcome_decided.connect(_on_outcome)
 	rules.player_fell.connect(_on_player_fell)
@@ -150,7 +153,7 @@ func set_bridge_closed(a: StringName, b: StringName, closed: bool) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if paused:
+	if paused or filming:
 		return
 	_debug.tick(delta)
 	match phase:
@@ -181,22 +184,40 @@ func _measure_the_course() -> void:
 
 
 func _spawn_racers() -> void:
-	var points := _start_slots(participants.size())
-	for player in spawn_players(_actors, points):
+	var slots := _start_slots(participants.size())
+	var points: Array[Vector3] = []
+	for slot in slots:
+		points.append(slot[0])
+	var spawned := spawn_players(_actors, points)
+	for index in spawned.size():
+		var player := spawned[index]
+		player.face(slots[index][1])
 		player.set_input_enabled(false)
-		_register_racer(player, GameState.get_player_name(player.player_id), player.player_id)
-		_names[player.player_id] = "TÚ" if player.player_id == _local_id else GameState.get_player_name(player.player_id)
+		var shown := participants[index].display_name
+		_register_racer(player, shown, player.player_id)
+		_names[player.player_id] = "TÚ" if player.player_id == _local_id else shown
 
 
-#Free places across the start, the middle ones first
-func _start_slots(count: int) -> Array[Vector3]:
-	var offsets: Array[float] = []
+#Where each racer starts and where it looks: in front of one of the three bridges that leave the start, in a random order every race
+#so nobody always takes the middle one; with more racers than bridges the next ones stand beside the first
+func _start_slots(count: int) -> Array[Array]:
+	var centre := _spawn_position(Level01Layout.START)
+	var mouths: Array[Vector3] = []
+	for edge: Array in Level01Layout.EDGES:
+		if edge[0] == Level01Layout.START:
+			var to: Vector3 = Level01Layout.POSITIONS[edge[1]]
+			mouths.append(Vector3(to.x - centre.x, 0.0, to.z - centre.z).normalized())
+	for index in range(mouths.size() - 1, 0, -1):
+		var other := _rng.randi() % (index + 1)
+		var kept := mouths[index]
+		mouths[index] = mouths[other]
+		mouths[other] = kept
+	var slots: Array[Array] = []
 	for index in count:
-		offsets.append(START_SPREAD * (index - (count - 1) / 2.0))
-	offsets.sort_custom(func(a: float, b: float) -> bool: return absf(a) < absf(b))
-	var slots: Array[Vector3] = []
-	for offset in offsets:
-		slots.append(_spawn_position(Level01Layout.START) + Vector3(offset, 0.0, 0.0))
+		var way := mouths[index % mouths.size()]
+		var across := Vector3(-way.z, 0.0, way.x)
+		var row := floori(float(index) / mouths.size())
+		slots.append([centre + way * START_INSET * absf(way.x) + Vector3(0.0, 0.0, START_BACK) + across * START_SPREAD * row, way])
 	return slots
 
 
@@ -262,7 +283,10 @@ func _update_running(delta: float) -> void:
 	for id: int in _players.keys():
 		if not _players.has(id):
 			continue
-		if (_players[id] as Player).global_position.y < FALL_Y:
+		var falling_player := _players[id] as Player
+		if id == _local_id and falling_player.global_position.y < FALL_Y + IRIS_LEAD and falling_player.velocity.y < 0.0:
+			iris.close()
+		if falling_player.global_position.y < FALL_Y:
 			rules.fall(id)
 			if phase != Phase.RUNNING:
 				return
@@ -668,6 +692,7 @@ func _hint_once(key: StringName, text: String) -> void:
 func _on_player_fell(player_id: int, attempts_left: int) -> void:
 	if player_id == _local_id:
 		_hud.set_attempts(attempts_left, settings.attempts)
+		iris.open()
 	if attempts_left <= 0:
 		if player_id != _local_id:
 			_retire(player_id)
@@ -692,6 +717,27 @@ func _retire(player_id: int) -> void:
 	_locators[player_id].queue_free()
 	_locators.erase(player_id)
 	player.queue_free()
+
+
+#The opening film of the race: high over the goal, then a sweep along the course back toward the start
+func _film_shots() -> Array[RoundFilm.Shot]:
+	var goal: Vector3 = Level01Layout.POSITIONS[Level01Layout.GOAL]
+	var start: Vector3 = Level01Layout.POSITIONS[Level01Layout.START]
+	var middle := (goal + start) / 2.0
+	var shots: Array[RoundFilm.Shot] = []
+	shots.append(RoundFilm.Shot.new(goal + Vector3(-34.0, 46.0, -40.0), goal + Vector3(0.0, 4.0, 10.0), goal + Vector3(30.0, 40.0, -22.0), goal + Vector3(0.0, 6.0, 30.0), 3.8))
+	shots.append(RoundFilm.Shot.new(middle + Vector3(-58.0, 40.0, -40.0), middle + Vector3(0.0, 0.0, -10.0), middle + Vector3(-46.0, 34.0, 50.0), middle + Vector3(0.0, 4.0, 60.0), 3.6))
+	shots.append(RoundFilm.Shot.new(start + Vector3(0.0, 26.0, 34.0), start, start + Vector3(0.0, 10.0, 16.0), start + Vector3(0.0, 1.0, 0.0), 2.6))
+	return shots
+
+
+#Racers pose at the start line, along the way and at the goal, until the race is over
+func _pose_allowed(_player_id: int) -> bool:
+	return not paused and phase != Phase.ENDED
+
+
+func _pose_shown() -> bool:
+	return not paused and phase != Phase.ENDED
 
 
 func _on_racer_finished(player_id: int, place: int) -> void:

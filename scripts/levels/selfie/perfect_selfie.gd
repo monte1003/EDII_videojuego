@@ -46,6 +46,10 @@ var _spot_paints: Array[StandardMaterial3D] = []
 var _photos: Array[Texture2D] = []
 var _numbers: Array[int] = []
 var _waiting: Dictionary = {}
+#Per player: the move keys were down when its pose started, seconds left of a pose key pressed in the air, seconds off the floor
+var _pose_held: Dictionary = {}
+var _pose_wanted: Dictionary = {}
+var _air: Dictionary = {}
 
 
 func _ready() -> void:
@@ -90,7 +94,6 @@ func _ready() -> void:
 	_powers = SelfiePowers.new()
 	world.add_child(_powers)
 	_powers.build(_studio.pedestals, rules.pedestal_kinds)
-	keys.interact_pressed.connect(toggle_pose.bind(local_id))
 	_help.setup(SelfieHelp.pages(settings, GameSession.score_sheet))
 	_spawn_trolls()
 	_selfie_hud.set_photo(1, rules.photo_count())
@@ -114,10 +117,35 @@ func request_pose(player_id: int, on: bool) -> void:
 	var player: Player = players[player_id]
 	if on and (player.is_down() or player.is_diving()):
 		return
-	rules.set_posing(player_id, on)
+	_pose_wanted.erase(player_id)
+	if not rules.set_posing(player_id, on) and on and not player.is_on_floor():
+		#Pressed in the air: the pose waits a moment for the landing
+		_pose_wanted[player_id] = PoseKeeper.PRESS_BUFFER
 
 
-#The chips of the two actions: the pose near the player while the frame is there and the shove over the rival in reach, or near
+#The pose of the photo is kept by the rules, not by the keeper of the other rounds: the key and the dock go to them
+func add_poser(player: Player, local: bool) -> void:
+	everyone[player.player_id] = player
+	if local:
+		_pose_local = player.player_id
+		_pose_player = player
+
+
+func press_pose() -> void:
+	toggle_pose(local_id)
+
+
+func pose_state() -> int:
+	if rules == null or not _pose_shown():
+		return PoseDock.State.HIDDEN
+	if rules.is_posing(local_id):
+		return PoseDock.State.POSING
+	var player := local_player()
+	var free := PoseKeeper.is_free(player, float(_air.get(local_id, 0.0))) and not is_falling(local_id)
+	return PoseDock.State.READY if free and rules.phase != SelfieRules.Phase.WAITING else PoseDock.State.BLOCKED
+
+
+#The chip of the shove: over the rival in reach, or near
 #the player while there are rivals in the frame, with its recharge. They hide when the local player cannot act
 func _tick_chips() -> void:
 	var player := local_player()
@@ -128,7 +156,6 @@ func _tick_chips() -> void:
 	var here := camera.unproject_position(head) if visible_head else Vector2.ZERO
 	var in_frame := rules.frame_visible() and (rules.is_inside(player.global_position) \
 		or Vector2(player.global_position.x - rules.frame_center().x, player.global_position.z - rules.frame_center().z).length() < rules.frame_size() * 0.5 + 4.0)
-	_selfie_hud.set_pose_chip(visible_head and in_frame, rules.is_posing(local_id), here + Vector2(96.0, -6.0))
 	var target := shove_target(local_id)
 	var reach := target != NOBODY
 	var crowded := in_frame and _rival_in_frame()
@@ -180,11 +207,19 @@ func _tick_round(delta: float) -> void:
 	_floor.clock = clock
 	for id: int in players:
 		var player: Player = players[id]
-		#Trying to move or to jump drops the pose
-		if rules.is_posing(id) and (player.move_input.length() > settings.pose_break_input or player.jump_requested):
+		_air[id] = 0.0 if player.is_on_floor() else float(_air.get(id, 0.0)) + delta
+		#A new press of the move keys or a jump drops the pose; keys held down since it started do not
+		if rules.is_posing(id) and (PoseKeeper.moves(_pose_held, id, player.move_input, settings.pose_break_input) or player.jump_requested):
 			rules.set_posing(id, false)
+		if _pose_wanted.has(id):
+			_pose_wanted[id] = float(_pose_wanted[id]) - delta
+			if player.is_on_floor():
+				request_pose(id, true)
+			if float(_pose_wanted.get(id, 0.0)) <= 0.0:
+				_pose_wanted.erase(id)
 		_apply_floor(id, player, delta)
-		rules.place(id, player.global_position, player.is_on_floor(), is_falling(id))
+		#A floor that bumps the player for a frame does not count as leaving it
+		rules.place(id, player.global_position, float(_air[id]) < PoseKeeper.AIR_GRACE, is_falling(id))
 	rules.extras.clear()
 	for bot in bots:
 		rules.extras.append(bot.global_position)
@@ -366,6 +401,7 @@ func _on_pose_changed(player_id: int, posing: bool, style: int) -> void:
 	player.posing = posing
 	(_glitter[player_id] as CPUParticles3D).emitting = posing
 	if posing:
+		_pose_held[player_id] = player.move_input.length() > settings.pose_break_input
 		player.squash(3.0)
 		_face_camera(player)
 		if player_id == local_id:

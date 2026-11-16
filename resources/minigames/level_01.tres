@@ -7,7 +7,7 @@
 script = ExtResource("1_script")
 id = &"level_01"
 title = "Carrera del feed"
-tagline = "Llega primero a la desconexión: cintas, puentes que caen y bots"
+tagline = "Llega primero a la desconexión: cintas, barras que giran y puentes que caen"
 scene_path = "res://scenes/levels/level_01.tscn"
 accent = Color(0.882, 0.294, 0.416, 1)
 ready = true

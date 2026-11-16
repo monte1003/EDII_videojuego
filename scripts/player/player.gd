@@ -58,6 +58,8 @@ const BUMP_HOP := 1.6
 const DUST_EVERY := 0.26
 #A pose: how far the body leans from side to side and how much taller it stands
 const POSE_LEAN := 0.2
+#How fast a puppet of another computer catches up with the place it was told
+const REMOTE_FOLLOW := 14.0
 const POSE_STRETCH := 0.07
 #A cannon shot: how much of its own speed the player can steer with in the air, the seconds before landing can end it, and how much of the
 #speed of the flight it keeps as a skid when it lands
@@ -109,6 +111,8 @@ var pose_style := 0
 var dive_enabled := false
 #While something carries the body (the bubble of a deck), it does not move on its own: whoever carries it sets where it is
 var carried := false
+#A player of another computer: it follows the states that come from there instead of its own physics and ignores the blows of this one
+var remote := false
 var dive_phase := Dive.NONE
 #The pull of the ground: 1 down or -1 up, and how strong it is. Only set_gravity_state changes them
 var gravity_sign := 1.0
@@ -150,6 +154,10 @@ var _dive_used := false
 var _air_time := 0.0
 var _dive_wanted_left := 0.0
 var _pose_playing := false
+var _remote_at := Vector3.ZERO
+var _remote_yaw := 0.0
+var _remote_moving := false
+var _remote_airborne := false
 var _dazed := false
 var _halo: Node3D
 #How far the body is turned over by a gravity that pulls up, from 0 to PI, and a fall back to normal that is still held soft
@@ -186,6 +194,14 @@ func set_character(character: CharacterData) -> void:
 #Where the model looks, on the ground
 func look_direction() -> Vector3:
 	return Basis(Vector3.UP, _model_pivot.rotation.y) * Vector3.BACK
+
+
+#Turns the camera and the model to look along "direction" on the ground, as when a round places the player
+func face(direction: Vector3) -> void:
+	if Vector2(direction.x, direction.z).length() < 0.01:
+		return
+	_camera_rig.rotation.y = atan2(-direction.x, -direction.z)
+	_model_pivot.rotation.y = _camera_rig.rotation.y + PI
 
 
 func view_camera() -> Camera3D:
@@ -257,7 +273,46 @@ func play_shove() -> void:
 
 
 #A plain shove: the horizontal part fades out and the vertical part is a small hop
+#Turns this player into the puppet of a player of another computer
+func make_remote() -> void:
+	remote = true
+	set_input_enabled(false)
+	_remote_at = global_position
+
+
+#The last state its computer sent: where it is, where it looks, whether it moves, flies or poses
+func set_remote_state(at: Vector3, yaw: float, moving: bool, airborne: bool, pose_on: bool, style: int) -> void:
+	_remote_at = at
+	_remote_yaw = yaw
+	_remote_moving = moving
+	_remote_airborne = airborne
+	if pose_on != posing or (pose_on and style != pose_style):
+		pose_style = style
+		posing = false
+		posing = pose_on
+
+
+#What this computer sends of its own player
+func remote_state() -> Dictionary:
+	var at := global_position
+	return {"p": [snappedf(at.x, 0.01), snappedf(at.y, 0.01), snappedf(at.z, 0.01)], "r": snappedf(_model_pivot.rotation.y, 0.01),
+		"m": Vector2(velocity.x, velocity.z).length() > 0.4, "a": not is_on_floor(), "po": posing, "ps": pose_style}
+
+
+#A puppet glides to the last place it was told (a jump of more than 4 m is a teleport) and turns and moves its model the same way
+func _follow_remote(delta: float) -> void:
+	if global_position.distance_to(_remote_at) > 4.0:
+		global_position = _remote_at
+	else:
+		global_position = global_position.lerp(_remote_at, 1.0 - exp(-REMOTE_FOLLOW * delta))
+	_model_pivot.rotation.y = lerp_angle(_model_pivot.rotation.y, _remote_yaw, 1.0 - exp(-REMOTE_FOLLOW * delta))
+	if _model != null and not posing:
+		_model.set_state(_remote_moving, _remote_airborne)
+
+
 func apply_push(impulse: Vector3) -> void:
+	if remote:
+		return
 	push_velocity = Vector3(impulse.x, 0.0, impulse.z)
 	velocity.y = maxf(velocity.y, impulse.y)
 	if impulse.y > 3.0:
@@ -299,6 +354,8 @@ func squash(amount: float) -> void:
 
 #A blow: it throws the player, then it flips or staggers and gets up
 func take_hit(hit: Hit) -> void:
+	if remote:
+		return
 	if hit.dazes:
 		_daze(hit)
 		return
@@ -394,6 +451,9 @@ func set_input_enabled(enabled: bool) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if remote:
+		_follow_remote(delta)
+		return
 	if carried:
 		velocity = Vector3.ZERO
 		if _model:

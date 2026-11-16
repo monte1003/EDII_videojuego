@@ -31,7 +31,6 @@ func _ready() -> void:
 	var jump_height := local.jump_velocity * local.jump_velocity / (2.0 * gravity)
 	_world.build(jump_height, local.move_speed * air_time)
 	_keys.ready_pressed.connect(cast_vote.bind(local.player_id))
-	_keys.interact_pressed.connect(_use_station)
 	_hud.set_time(_time_left)
 	_hud.set_votes(0, participants.size(), false)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -43,8 +42,12 @@ func _physics_process(delta: float) -> void:
 	_time_left -= delta
 	_hud.set_time(maxf(_time_left, 0.0))
 	for index in _players.size():
+		if index == 0 and _players[index].global_position.y < FALL_Y + 5.0 and _players[index].velocity.y < 0.0:
+			iris.close(0.25)
 		if _players[index].global_position.y < FALL_Y:
 			_respawn(_players[index], SPAWN_POINTS[mini(index, SPAWN_POINTS.size() - 1)])
+			if index == 0:
+				iris.open()
 	if _time_left <= 0.0:
 		_finish()
 
@@ -65,12 +68,27 @@ func _respawn(player: Player, point: Vector3) -> void:
 	_hud.toast("Otra vez")
 
 
-func _use_station() -> void:
+#Next to the station the key turns it on and off; anywhere else it strikes a pose
+func press_pose() -> void:
+	if not _use_station():
+		super()
+
+
+func _use_station() -> bool:
 	var flat := Vector2(_players[0].global_position.x - _world.station_position.x, _players[0].global_position.z - _world.station_position.z)
 	if flat.length() > STATION_RADIUS:
-		return
+		return false
 	_station_on = not _station_on
 	_world.set_station_active(_station_on)
+	return true
+
+
+func _pose_allowed(_player_id: int) -> bool:
+	return not paused and not _done
+
+
+func _pose_shown() -> bool:
+	return not paused and not _done
 
 
 func _finish() -> void:

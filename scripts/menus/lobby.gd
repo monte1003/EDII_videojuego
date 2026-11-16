@@ -14,6 +14,8 @@ var _name_field: LineEdit
 var _countdown: Tween
 var _local_id := GameState.PLAYER_ONE
 var _links: Array[TextButton] = []
+var _practice: TextButton
+var _net_panel: NetPanel
 
 
 func _ready() -> void:
@@ -24,12 +26,13 @@ func _ready() -> void:
 	_build_interface()
 	_restyle_texts()
 	GameSession.lobby.changed.connect(_refresh)
+	GameSession.net.left.connect(_on_room_left)
 	_refresh()
 	_ready_button.grab_focus()
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("menu_confirm") and not _name_field.has_focus():
+	if event.is_action_pressed("menu_confirm") and not _name_field.has_focus() and not _net_panel.is_picking():
 		get_viewport().set_input_as_handled()
 		_toggle_ready()
 	else:
@@ -110,12 +113,12 @@ func _build_interface() -> void:
 	links.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	links.alignment = BoxContainer.ALIGNMENT_CENTER
 	actions.add_child(links)
-	var practice := UiKit.text_button("Practicar", Palette.TEAL, 22)
-	practice.pressed.connect(ScreenFlow.open.bind(&"practice"))
-	links.add_child(practice)
-	_links.append(practice)
+	_practice = UiKit.text_button("Practicar", Palette.TEAL, 22)
+	_practice.pressed.connect(ScreenFlow.open.bind(&"practice"))
+	links.add_child(_practice)
+	_links.append(_practice)
 	var back := UiKit.text_button("Atrás", Palette.INK_SOFT, 22)
-	back.pressed.connect(ScreenFlow.back)
+	back.pressed.connect(_back)
 	links.add_child(back)
 	_links.append(back)
 
@@ -182,7 +185,7 @@ func _build_name_row() -> VBoxContainer:
 	_name_field.placeholder_text = "Tu nombre"
 	_name_field.custom_minimum_size = Vector2(260, 42)
 	_name_field.max_length = GameState.MAX_NAME_LENGTH
-	_name_field.text = GameState.get_player_name(_local_id)
+	_name_field.text = GameState.get_player_name(GameState.PLAYER_ONE)
 	_name_field.add_theme_font_override("font", UiKit.BOLD_FONT)
 	_name_field.add_theme_font_size_override("font_size", 28)
 	_name_field.add_theme_color_override("font_color", Palette.INK)
@@ -192,6 +195,9 @@ func _build_name_row() -> VBoxContainer:
 	_name_field.text_changed.connect(_on_name_changed)
 	_name_field.text_submitted.connect(func(_text: String) -> void: _name_field.release_focus())
 	box.add_child(_name_field)
+	_net_panel = NetPanel.new()
+	box.add_child(_net_panel)
+	box.move_child(_net_panel, 0)
 	return box
 
 
@@ -209,7 +215,10 @@ func _underline(color: Color) -> StyleBoxFlat:
 
 
 func _on_name_changed(new_text: String) -> void:
-	GameState.set_player_name(_local_id, new_text)
+	GameState.set_player_name(GameState.PLAYER_ONE, new_text)
+	if GameSession.is_networked():
+		GameSession.net.set_profile(GameState.get_player_name(GameState.PLAYER_ONE), NetPanel.local_character())
+		return
 	var slot := GameSession.lobby.find(_local_id)
 	if slot != null:
 		slot.display_name = GameState.get_player_name(_local_id)
@@ -220,12 +229,20 @@ func _toggle_ready() -> void:
 	var slot := GameSession.lobby.find(_local_id)
 	if slot == null or not accepts_confirm():
 		return
+	if GameSession.is_networked():
+		#In a room the server keeps who is ready; the change comes back with the room
+		GameSession.net.set_ready(not slot.ready)
+		if not slot.ready:
+			_stage.cheer(_local_id)
+		return
 	GameSession.lobby.set_ready(_local_id, not slot.ready)
 	if slot.ready:
 		_stage.cheer(_local_id)
 
 
 func _refresh() -> void:
+	_local_id = GameSession.local_id
+	_practice.visible = not GameSession.is_networked()
 	var lobby := GameSession.lobby
 	_stage.show_slots(lobby.slots, _local_id)
 	_count_label.text = "%d/%d" % [lobby.ready_count(), lobby.slots.size()]
@@ -237,10 +254,22 @@ func _refresh() -> void:
 		dot.add_theme_stylebox_override("panel", UiKit.box(color, 6))
 	var mine := lobby.find(_local_id)
 	_ready_button.set_caption("Cancelar" if mine != null and mine.ready else "Listo")
-	if lobby.all_ready():
+	if lobby.all_ready() and (not GameSession.is_networked() or GameSession.net.is_host()):
 		_begin_countdown()
 	else:
 		_cancel_countdown()
+
+
+#Leaving the lobby leaves the room too
+func _back() -> void:
+	if GameSession.is_networked():
+		GameSession.net.close()
+	ScreenFlow.back()
+
+
+func _on_room_left(reason: String) -> void:
+	GameSession.prepare_lobby()
+	_net_panel.say(reason)
 
 
 func _begin_countdown() -> void:

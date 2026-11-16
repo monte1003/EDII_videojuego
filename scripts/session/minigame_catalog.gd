@@ -4,7 +4,7 @@ extends RefCounted
 #Every minigame of the game; a session only draws from the ones that are ready.
 #To add one: a MinigameInfo in resources/minigames and one line in ENTRIES.
 
-const PLANNED := 6
+const PLANNED := 5
 const ENTRIES: Array[MinigameInfo] = [
 	preload("res://resources/minigames/level_01.tres"),
 	preload("res://resources/minigames/street_game.tres"),
