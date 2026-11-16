@@ -12,6 +12,10 @@ signal session_finished(results: Array[RoundResult])
 const ROUND_COUNT := 5
 #For a lobby opened on its own, without going through the character select
 const DEFAULT_CHARACTER: CharacterData = preload("res://resources/characters/fire.tres")
+#Every character that can be picked, in the order of the character select
+const CHARACTER_IDS: Array[StringName] = [&"fire", &"water", &"plant", &"lightning"]
+#Seconds the results of a round stay on screen in a room before the next round
+const NET_RESULTS_SECONDS := 8
 
 var lobby := LobbyState.new()
 var phase := Phase.IDLE
@@ -103,11 +107,9 @@ func start_session() -> void:
 		return
 	seeds.clear()
 	if is_networked():
-		#In a room there is no warm-up: the server sends the order and the seeds and every computer starts the first round
-		for index in plan.size():
-			seeds.append(_rng.randi_range(1, 2147483646))
-		net.start_game(plan, seeds)
-		begin_networked(plan, seeds)
+		#In a room everybody goes to the warm-up first; the order and the seeds go out when it ends
+		net.begin_warmup()
+		enter_warmup()
 		return
 	results.clear()
 	round_index = -1
@@ -150,8 +152,50 @@ func start_practice(id: StringName) -> void:
 
 
 func finish_warmup() -> void:
-	if phase == Phase.WARMUP:
+	if phase != Phase.WARMUP:
+		return
+	if not is_networked():
 		_select_next_round()
+		return
+	#In a room the server draws the order of the rounds and their seeds and sends them; the others wait for them
+	if not net.is_host():
+		return
+	_rng.randomize()
+	plan = RoundPlanner.plan(MinigameCatalog.ready_entries(), ROUND_COUNT, _rng)
+	seeds.clear()
+	for index in plan.size():
+		seeds.append(_rng.randi_range(1, 2147483646))
+	net.start_game(plan, seeds)
+	begin_networked(plan, seeds)
+
+
+#Everybody of a room goes to the warm-up together
+func enter_warmup() -> void:
+	results.clear()
+	plan.clear()
+	round_index = -1
+	practice = false
+	_set_phase(Phase.WARMUP)
+	ScreenFlow.open(&"warmup")
+
+
+#Which colour of its character a player wears: the first one with a character wears it as it is, the next ones with the same, others
+func variant_of(player_id: int) -> int:
+	var slot := lobby.find(player_id)
+	if slot == null or slot.character == null:
+		return 0
+	var before := 0
+	for other in lobby.slots:
+		if other == slot:
+			break
+		if other.character != null and other.character.id == slot.character.id:
+			before += 1
+	return before
+
+
+static func character_by_id(id: StringName) -> CharacterData:
+	var path := "res://resources/characters/%s.tres" % id
+	return load(path) as CharacterData if ResourceLoader.exists(path) else DEFAULT_CHARACTER
 
 
 #The intro screen calls it when its animation ends: the round starts

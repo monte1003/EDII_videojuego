@@ -183,11 +183,12 @@ func _ready() -> void:
 	_camera_height = _camera_rig.position.y
 
 
-func set_character(character: CharacterData) -> void:
+func set_character(character: CharacterData, variant := 0) -> void:
 	if _model:
 		_model.queue_free()
 	_model = character.model_scene.instantiate() as CharacterModel
 	_tumble.add_child(_model)
+	SkinVariant.apply(_model, variant)
 	_model.position = Vector3(0.0, -TUMBLE_CENTER, 0.0)
 
 

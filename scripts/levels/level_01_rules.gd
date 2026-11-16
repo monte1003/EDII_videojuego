@@ -134,7 +134,7 @@ func reach_goal(player_id: int) -> void:
 	state.place = _arrived
 	state.finish_time = elapsed
 	racer_finished.emit(player_id, state.place)
-	if window_left < 0.0 and not _all_arrived():
+	if window_left < 0.0 and not _all_arrived() and settings.finish_window > 0.0:
 		window_left = settings.finish_window
 		window_opened.emit(window_left)
 	_check_end()

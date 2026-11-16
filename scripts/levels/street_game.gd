@@ -179,9 +179,26 @@ func _spawn_runner(half_width: float) -> void:
 	_runner.max_x = end_x + 10.0
 	_actors.add_child(_runner)
 	_runner.position = Vector3(start_x, 0.0, 0.0)
-	_runner.set_character(slot.character)
+	_runner.set_character(slot.character, GameSession.variant_of(slot.player_id))
 	_runner.set_input_enabled(false)
 	add_poser(_runner, true)
+	#In a room the runners of the other computers run beside, as puppets: whoever the street takes watches them
+	if GameSession.is_networked() and not GameSession.practice:
+		for other in participants:
+			if other.player_id == slot.player_id:
+				continue
+			var puppet := RUNNER_SCENE.instantiate() as StreetRunner
+			puppet.player_id = other.player_id
+			puppet.min_z = -edge
+			puppet.max_z = edge
+			puppet.min_x = start_x - back_limit
+			puppet.max_x = end_x + 10.0
+			_actors.add_child(puppet)
+			puppet.position = Vector3(start_x, 0.0, 0.0)
+			puppet.set_character(other.character, GameSession.variant_of(other.player_id))
+			puppet.make_remote()
+			add_poser(puppet, false)
+		_runner.view_camera().make_current()
 
 
 func _physics_process(delta: float) -> void:

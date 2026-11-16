@@ -16,6 +16,7 @@ var _local_id := GameState.PLAYER_ONE
 var _links: Array[TextButton] = []
 var _practice: TextButton
 var _net_panel: NetPanel
+var _character_label: Label
 
 
 func _ready() -> void:
@@ -35,6 +36,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("menu_confirm") and not _name_field.has_focus() and not _net_panel.is_picking():
 		get_viewport().set_input_as_handled()
 		_toggle_ready()
+	elif (event.is_action_pressed("move_left") or event.is_action_pressed("move_right")) and not _name_field.has_focus() and not _net_panel.is_picking():
+		get_viewport().set_input_as_handled()
+		_cycle_character(-1 if event.is_action_pressed("move_left") else 1)
 	else:
 		super(event)
 
@@ -195,6 +199,17 @@ func _build_name_row() -> VBoxContainer:
 	_name_field.text_changed.connect(_on_name_changed)
 	_name_field.text_submitted.connect(func(_text: String) -> void: _name_field.release_focus())
 	box.add_child(_name_field)
+	#The character is picked here too, with the keys to each side of its name; everybody in the room sees the change at once
+	var picker := HBoxContainer.new()
+	picker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picker.add_theme_constant_override("separation", 10)
+	picker.add_child(UiKit.key_chip(InputHints.key_label(&"move_left"), 14))
+	_character_label = UiKit.label("", UiKit.BOLD_FONT, 22, Palette.INK)
+	_character_label.custom_minimum_size = Vector2(120, 0)
+	_character_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	picker.add_child(_character_label)
+	picker.add_child(UiKit.key_chip(InputHints.key_label(&"move_right"), 14))
+	box.add_child(picker)
 	_net_panel = NetPanel.new()
 	box.add_child(_net_panel)
 	box.move_child(_net_panel, 0)
@@ -253,11 +268,30 @@ func _refresh() -> void:
 			color = Palette.TEAL if lobby.slots[index].ready else Color(Palette.INK, 0.35)
 		dot.add_theme_stylebox_override("panel", UiKit.box(color, 6))
 	var mine := lobby.find(_local_id)
+	if mine != null and mine.character != null:
+		_character_label.text = mine.character.display_name.to_upper()
 	_ready_button.set_caption("Cancelar" if mine != null and mine.ready else "Listo")
 	if lobby.all_ready() and (not GameSession.is_networked() or GameSession.net.is_host()):
 		_begin_countdown()
 	else:
 		_cancel_countdown()
+
+
+#The next or the previous character; two players may wear the same one, the second in another colour
+func _cycle_character(step: int) -> void:
+	var slot := GameSession.lobby.find(_local_id)
+	if slot == null or not accepts_confirm():
+		return
+	var ids := GameSession.CHARACTER_IDS
+	var at := ids.find(slot.character.id if slot.character != null else ids[0])
+	var next := GameSession.character_by_id(ids[posmod(at + step, ids.size())])
+	GameState.select_character(GameState.PLAYER_ONE, next)
+	SynthSound.play(self, SynthSound.tone(660.0 if step > 0 else 587.0, 0.08, 0.0, 0.3), -12.0)
+	if GameSession.is_networked():
+		GameSession.net.set_profile(GameState.get_player_name(GameState.PLAYER_ONE), next.id)
+		return
+	slot.character = next
+	GameSession.lobby.changed.emit()
 
 
 #Leaving the lobby leaves the room too

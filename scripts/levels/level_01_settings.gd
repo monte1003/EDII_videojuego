@@ -7,7 +7,7 @@ extends Resource
 @export var time_limit := 150.0
 @export var attempts := 3
 @export var countdown_seconds := 3.0
-#Seconds the rest have to arrive once somebody did; then the doors of the goal close
+#Seconds the rest have to arrive once somebody did; then the doors of the goal close (0: the race waits for everybody until the time limit)
 @export var finish_window := 20.0
 #0 picks a different random feed each round; any other value repeats it
 @export var random_seed := 0

@@ -30,6 +30,8 @@ var _overlay: CanvasLayer
 var _bars: Array[ColorRect] = []
 var _card: VBoxContainer
 var _hint: Control
+#In a room the film cannot be skipped: it plays at once on every computer and the countdown starts after it on all of them
+var skippable := true
 var _skipped := false
 var _over := false
 var _timer: Timer
@@ -63,7 +65,7 @@ func play(shots: Array[Shot], title: String, tagline: String, step: String, hand
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("menu_confirm") and not _skipped:
+	if skippable and event.is_action_pressed("menu_confirm") and not _skipped:
 		get_viewport().set_input_as_handled()
 		_skipped = true
 		if _timer != null:
@@ -138,7 +140,7 @@ func _build_overlay(title: String, tagline: String, step: String) -> void:
 	row.anchor_bottom = 1.0
 	row.offset_left = -190.0
 	row.offset_top = -46.0
-	row.modulate.a = 0.55
+	row.modulate.a = 0.55 if skippable else 0.0
 	_overlay.add_child(row)
 	_hint = row
 

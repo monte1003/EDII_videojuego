@@ -18,6 +18,8 @@ var iris := IrisFade.new()
 static var films_enabled := true
 #True while the opening film plays: the round waits as in the pause, but its world keeps moving
 var filming := false
+#In a room, after its own player is done, this computer watches the others until the round is over
+var spectating := false
 
 #Every player of the round by id, the one of this screen and the puppets of the other computers
 var everyone: Dictionary = {}
@@ -61,9 +63,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		_pose_dock.press()
 
 
-#Reports the result: inside a session the results screen takes over, on its own it returns false
+#Reports the result: inside a session the results screen takes over, on its own it returns false. In a room the results come once
+#everybody is done, and meanwhile this computer watches the others
 func finish_round(result: RoundResult) -> bool:
-	return GameSession.report_result(result)
+	var reported := GameSession.report_result(result)
+	if reported and GameSession.is_networked() and not GameSession.practice:
+		start_spectating()
+	return reported
+
+
+func start_spectating() -> void:
+	if spectating or not GameSession.is_networked():
+		return
+	spectating = true
+	poses.stop_all()
+	var view := SpectatorView.new()
+	add_child(view)
+	view.begin(self)
 
 
 #One Player per participant, each at its own point; the first one is the one this screen controls
@@ -76,7 +92,7 @@ func spawn_players(parent: Node3D, points: Array[Vector3]) -> Array[Player]:
 		parent.add_child(player)
 		player.global_position = points[mini(index, points.size() - 1)]
 		if slot.character != null:
-			player.set_character(slot.character)
+			player.set_character(slot.character, GameSession.variant_of(slot.player_id))
 		var local := slot.player_id == GameSession.local_id or (index == 0 and not GameSession.is_networked())
 		player.set_input_enabled(local)
 		if GameSession.is_networked() and not local:
@@ -125,7 +141,7 @@ func _pose_allowed(_player_id: int) -> bool:
 
 #Whether the dock shows at all: it hides while the round is paused or over
 func _pose_shown() -> bool:
-	return not paused and not filming
+	return not paused and not filming and not spectating
 
 
 func pose_state() -> int:
@@ -140,13 +156,19 @@ func pose_state() -> int:
 #camera of the player
 func _open_film() -> void:
 	var info := MinigameCatalog.find(ScreenFlow.current) if ScreenFlow.current != &"" else null
-	if GameSession.is_networked() and not GameSession.practice:
+	var networked := GameSession.is_networked() and not GameSession.practice
+	if networked:
 		add_child(NetPuppets.new())
+	if networked and info != null:
+		#The art of the round covers the screen until every computer has loaded it; then the film starts on all of them at once
+		filming = true
+		var cover := LoadingCover.new()
+		add_child(cover)
+		cover.show_round(info, _step_text())
+		await _wait_for_everybody()
+		cover.lift()
 	if not films_enabled or info == null or _pose_player == null or DisplayServer.get_name() == "headless":
-		if GameSession.is_networked() and info != null:
-			filming = true
-			await _wait_for_everybody()
-			filming = false
+		filming = false
 		return
 	var shots := _film_shots()
 	if shots.is_empty():
@@ -159,14 +181,11 @@ func _open_film() -> void:
 			_hidden_layers.append(canvas)
 	if _pause_menu != null:
 		_pause_menu.set_process_unhandled_input(false)
-	var step := ""
-	if not GameSession.practice and GameSession.round_index >= 0 and not GameSession.plan.is_empty():
-		step = "RONDA %d DE %d" % [GameSession.round_index + 1, GameSession.plan.size()]
 	var film := RoundFilm.new()
+	film.skippable = not networked
 	add_child(film)
-	film.play(shots, info.title, info.tagline, step, _pose_player.view_camera())
+	film.play(shots, info.title, info.tagline, _step_text(), _pose_player.view_camera())
 	await film.finished
-	await _wait_for_everybody()
 	filming = false
 	for canvas in _hidden_layers:
 		if is_instance_valid(canvas):
@@ -174,6 +193,12 @@ func _open_film() -> void:
 	_hidden_layers.clear()
 	if _pause_menu != null:
 		_pause_menu.set_process_unhandled_input(true)
+
+
+func _step_text() -> String:
+	if GameSession.practice or GameSession.round_index < 0 or GameSession.plan.is_empty():
+		return ""
+	return "RONDA %d DE %d" % [GameSession.round_index + 1, GameSession.plan.size()]
 
 
 #In a room every computer waits here until the server lets all of them start the round together

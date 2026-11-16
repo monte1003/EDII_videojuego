@@ -26,11 +26,24 @@ func _ready() -> void:
 	_build()
 	_animate_in()
 	_button.grab_focus()
+	if GameSession.is_networked() and not GameSession.practice:
+		_count_down()
+
+
+#In a room the results stay NET_RESULTS_SECONDS and then the server moves everybody on; the button shows the seconds left
+func _count_down() -> void:
+	var tween := create_tween()
+	for left in range(GameSession.NET_RESULTS_SECONDS, 0, -1):
+		tween.tween_callback(_button.set_caption.bind("%s · %d" % [_next_text(), left]))
+		tween.tween_interval(1.0)
+	tween.tween_callback(func() -> void:
+		if GameSession.net.is_host():
+			GameSession.advance())
 
 
 #Going back makes no sense here: Enter goes on
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("menu_confirm") and (not GameSession.is_networked() or GameSession.net.is_host() or GameSession.practice):
+	if event.is_action_pressed("menu_confirm") and (not GameSession.is_networked() or GameSession.practice):
 		get_viewport().set_input_as_handled()
 		_confirm()
 
@@ -145,8 +158,6 @@ func _with_article(medal: int) -> String:
 func _next_text() -> String:
 	if GameSession.practice:
 		return "VOLVER A LA SALA"
-	if GameSession.is_networked() and not GameSession.net.is_host():
-		return "ESPERANDO AL ANFITRIÓN"
 	return "VER RESULTADOS" if GameSession.is_last_round() else "SIGUIENTE RONDA"
 
 
