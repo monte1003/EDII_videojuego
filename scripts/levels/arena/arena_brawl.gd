@@ -6,6 +6,12 @@ extends RefCounted
 
 enum Outcome { IGNORED, BLOCKED, STRUCK }
 
+#A shove dazes: it throws the victim back about 3.9 m on flat ground (some 60 % of the blow of a car in the street) and leaves it
+#without hands for this long. Whoever shoves steps back about 0.4 m
+const SHOVE_PUSH := 11.7
+const SHOVE_STUN := 0.6
+const SHOVE_RECOIL := 3.8
+
 #Seconds a shove rests, seconds nobody can strike the same player again, how far a shove reaches and how wide it is (cosine of half its angle)
 var shove_rest := 0.8
 var grace := 1.5

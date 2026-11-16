@@ -10,13 +10,19 @@ const BOT_SCENE := preload("res://scenes/bots/chaser_bot.tscn")
 #The map is solid, so nobody falls out of it; this is only a net far under the ground for whatever goes wrong
 const SAFETY_DEPTH := 6.0
 const RESPAWN_TIME := 1.2
-const SHOVE_PUSH := 9.0
-const SHOVE_STUN := 0.35
+const SHOVE_PUSH := ArenaBrawl.SHOVE_PUSH
+const SHOVE_STUN := ArenaBrawl.SHOVE_STUN
+const SHOVE_RECOIL := ArenaBrawl.SHOVE_RECOIL
 #A shoved bot is thrown this fast and cannot walk or push for this long
 const BOT_SHOVE_PUSH := 8.0
 const BOT_SHOVE_STUN := 1.1
-const HAZARD_PUSH := 11.0
+#What moves on the map dazes too, a little less than a shove, and never flips anyone; a round may make it harder
+const HAZARD_PUSH := 9.5
 const HAZARD_STUN := 0.5
+#A roller or a bar that turns hits like a car in the street: it throws far, flips the player and leaves it on the floor a moment
+const ROLLER_PUSH := 13.0
+const ROLLER_STUN := 0.6
+const ROLLER_STRENGTH := 0.85
 #Seconds a piece that just appeared takes before it can hit, so it is seen first
 const STAGE_GRACE := 1.0
 #Seconds a pad ignores the player it just threw
@@ -35,6 +41,12 @@ const BOT_KEY := -10
 @export var bots_enabled := true
 #Speed of the bots as a share of a player's
 @export var bot_speed_ratio := 0.64
+#How hard what moves on the map throws and how long it dazes
+@export var hazard_push := HAZARD_PUSH
+@export var hazard_stun := HAZARD_STUN
+#How hard what turns on the map throws and how long it leaves the player down after the flip
+@export var roller_push := ROLLER_PUSH
+@export var roller_stun := ROLLER_STUN
 #A bot warns for this long before it pushes, rests this long between pushes and stands still this long after one lands
 @export var bot_windup := 0.8
 @export var bot_cooldown := 3.6
@@ -63,7 +75,7 @@ var _phase_timer := 0.0
 var _stage_set: ArenaStage
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
-@onready var world: ArenaWorld = $World
+@onready var world: ArenaGround = $World
 @onready var hud: RoundHud = $Hud
 @onready var keys: LevelInput = $LevelInput
 
@@ -73,9 +85,7 @@ func setup_arena(arena: ArenaLayout) -> void:
 	layout = arena
 	rng.randomize()
 	world.build(layout)
-	_stage_set = ArenaStage.new()
-	world.add_child(_stage_set)
-	_stage_set.build(layout.reach(), 47, layout.top_height())
+	_stage_set = _make_set()
 	context.graph = layout.build_graph(true)
 	for id: StringName in layout.places:
 		context.positions[id] = layout.position_of(id)
@@ -100,7 +110,16 @@ func _any_player() -> Player:
 
 
 func cheer(power: float) -> void:
-	_stage_set.cheer(power)
+	if _stage_set != null:
+		_stage_set.cheer(power)
+
+
+#The decor of a contest around the map; a round that brings a set of its own builds it and returns null
+func _make_set() -> ArenaStage:
+	var stage_set := ArenaStage.new()
+	world.add_child(stage_set)
+	stage_set.build(layout.reach(), 47, layout.top_height())
+	return stage_set
 
 
 func set_stage(value: int) -> void:
@@ -138,7 +157,7 @@ func request_shove(player_id: int) -> bool:
 	var facing := player.look_direction()
 	var target := shove_target(player_id)
 	player.squash(4.0)
-	player.apply_push(facing * 2.5)
+	player.apply_push(-facing * SHOVE_RECOIL)
 	player.play_shove()
 	SynthSound.play(self, SynthSound.tone(300.0, 0.14, -160.0, 0.5), -9.0, rng.randf_range(0.95, 1.1))
 	var landed := false
@@ -169,7 +188,7 @@ func strike(player_id: int, push: Vector3, strength: float) -> bool:
 			_on_shield_broken(player_id)
 			return false
 	_on_struck(player_id, true, push)
-	_hit(player, push, strength, SHOVE_STUN, false)
+	_daze(player, push, strength, SHOVE_STUN)
 	return true
 
 
@@ -340,7 +359,7 @@ func _apply_hazards(delta: float) -> void:
 			continue
 		for spinner in layout.spinners:
 			if _hazard_on(spinner, live) and ArenaHazards.spinner_hits(spinner, clock, at):
-				_hazard_hit(id, Level01Hazards.push_direction(spinner["at"], spinner, at))
+				_hazard_hit(id, Level01Hazards.push_direction(spinner["at"], spinner, at), float(spinner.get("push", 1.0)), true)
 		for sweeper in layout.sweepers:
 			if _hazard_on(sweeper, live) and ArenaHazards.block_hits(sweeper, clock, at):
 				_hazard_hit(id, (ArenaHazards.block_heading(sweeper, clock) + Vector3(0.0, 0.0, 0.001)).normalized())
@@ -364,24 +383,35 @@ func _hazard_on(entry: Dictionary, live: bool) -> bool:
 	return stage > from or (stage == from and (live or from == 0))
 
 
-#A bar or a block hits: a shield takes it, otherwise the player flies
-func _hazard_hit(player_id: int, direction: Vector3) -> void:
+#A bar or a block hits: a shield takes it, otherwise the player flies. What turns ("rolls") flips it like a car; the rest dazes it
+#"share" scales the throw of one piece: a bar over a slippery floor throws softer, since the floor already carries a body far
+func _hazard_hit(player_id: int, direction: Vector3, share := 1.0, rolls := false) -> void:
 	var player: Player = players[player_id]
 	if brawl.has_shield(player_id):
 		brawl.give_shield(player_id, 0.0)
 		_on_shield_broken(player_id)
 		player.apply_push(direction * 4.0)
 		return
-	_on_struck(player_id, false, direction * HAZARD_PUSH)
-	_hit(player, direction * HAZARD_PUSH, 0.7, HAZARD_STUN, true)
+	if not rolls:
+		_on_struck(player_id, false, direction * hazard_push * share)
+		_daze(player, direction * hazard_push * share, 0.6, hazard_stun)
+		return
+	var hit := Player.Hit.new()
+	hit.push = direction * roller_push * share
+	hit.stun = roller_stun
+	hit.flips = true
+	hit.strength = ROLLER_STRENGTH
+	_on_struck(player_id, false, hit.push)
+	player.take_hit(hit)
 
 
-func _hit(player: Player, push: Vector3, strength: float, stun: float, flips: bool) -> void:
+#Every blow of an arena is a daze: the player staggers back on its feet, sees stars and gets its hands back soon
+func _daze(player: Player, push: Vector3, strength: float, stun: float) -> void:
 	var hit := Player.Hit.new()
 	hit.push = push
 	hit.strength = strength
 	hit.stun = stun
-	hit.flips = flips
+	hit.dazes = true
 	player.take_hit(hit)
 
 
@@ -479,13 +509,13 @@ func _nearest_locator(point: Vector3) -> PlayerLocator:
 
 
 #A word or a number that pops over a head, rises and fades
-func pop_text(at: Vector3, text: String, color: Color, size := 96, rise := 1.2) -> void:
+func pop_text(at: Vector3, text: String, color: Color, size := 72, rise := 1.0) -> void:
 	var label := Label3D.new()
 	label.text = text
 	label.font = UiKit.HEADING_FONT
 	label.font_size = size
-	label.pixel_size = 0.008
-	label.outline_size = 26
+	label.pixel_size = 0.0055
+	label.outline_size = 20
 	label.modulate = color
 	label.outline_modulate = Palette.EDGE
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED

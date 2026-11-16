@@ -1,9 +1,10 @@
 class_name ArenaWorld
-extends Node3D
+extends ArenaGround
 
-#Builds an arena map from its layout: the ground, the terraces, ramps, drums and walls on it, the fence around it all, and what
-#moves (turning bars, sweeping blocks, trampolines, cannons and belts). The static pieces are joined in a few meshes and collide
-#as plain boxes, prisms and cylinders, with no gap between them; nothing here decides a rule
+#Builds an arena map from its layout: the ground and its fence, or the floating islands and their bridges; the terraces, ramps,
+#drums and walls on them, drawn with the candy ground of the game; and what moves (turning bars, sweeping blocks, trampolines,
+#cannons and belts). The static pieces are joined in a few meshes and collide as plain boxes, prisms and cylinders, with no gap
+#between them; nothing here decides a rule
 
 const BOARD_TEXTURE: Texture2D = preload("res://assets/textures/board_checker.png")
 const BELT_TEXTURE: Texture2D = preload("res://assets/textures/belt_chevrons.png")
@@ -48,7 +49,7 @@ const BELT_LIFT := 0.035
 #The padded block: across its way, high and along its way, which is what the hit test measures
 const BLOCK_SIZE := Vector3(ArenaHazards.BLOCK_ACROSS, 0.9, ArenaHazards.BLOCK_ALONG)
 const BAR_HEIGHT := 0.6
-const HOOPS := 5
+const HOOPS := 2
 #Seconds before a turn in which a belt blinks
 const BELT_WARNING := 1.5
 #Seconds a piece takes to pop in when its stage starts
@@ -57,6 +58,7 @@ const POP_TIME := 0.5
 var layout: ArenaLayout
 
 var _merger := MeshMerger.new()
+var _terrain: CandyTerrain
 var _merged_materials: Dictionary = {}
 var _place_areas: Dictionary = {}
 var _link_areas: Array[Array] = []
@@ -73,20 +75,26 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
 func build(arena: ArenaLayout) -> void:
 	layout = arena
-	_build_ground()
+	_terrain = CandyTerrain.new(self)
+	if layout.islands.is_empty():
+		_build_ground()
+		_build_fence()
+	else:
+		_build_islands()
 	for block in layout.blocks:
 		_build_block(block)
 	for ramp in layout.ramps:
 		_build_ramp(ramp)
 	for drum in layout.drums:
 		_build_drum(drum)
-	_build_fence()
 	for id: StringName in layout.places:
 		_build_place(id)
 	for entry in layout.links:
 		_build_link(entry)
 	_merger.commit(self)
-	add_child(PartyKit.bulbs(_bulb_spots, _bulb_colors, _bulb_phases))
+	_terrain.commit()
+	if not _bulb_spots.is_empty():
+		add_child(PartyKit.bulbs(_bulb_spots, _bulb_colors, _bulb_phases))
 	_build_spinners()
 	_build_blocks()
 	_build_pads()
@@ -175,117 +183,78 @@ func _build_ground() -> void:
 	_merger.add(&"ground", _merged(&"board"), false, plane, Transform3D(Basis.IDENTITY, Vector3(0.0, ArenaLayout.GROUND, 0.0)), layout.ground_color)
 
 
-#A terrace or a deck: a box with a lighter layer on top. A wall is a plain box with a pale cap
+#The floating islands, each with its striped bumper and bulbs and an unseen wall all around except where a bridge comes in, and the
+#bridges between them with a candy rail and an unseen wall along each side
+func _build_islands() -> void:
+	for island in layout.islands:
+		var mouths: Array[Vector3] = []
+		var outline: PackedVector2Array = island["outline"]
+		for bridge in layout.bridges:
+			for end: Vector3 in [bridge["from"], bridge["to"]]:
+				if _near_outline(outline, Vector2(end.x, end.z), 1.5):
+					mouths.append(Vector3(end.x, end.z, float(bridge["width"]) / 2.0 + 0.4))
+		_terrain.wall_height = 6.0
+		_terrain.island(outline, island["top"], layout.color_of_zone(island["zone"]), island["rim"], mouths, true)
+	_terrain.wall_height = CandyTerrain.WALL_HEIGHT
+	for bridge in layout.bridges:
+		var from: Vector3 = bridge["from"]
+		var to: Vector3 = bridge["to"]
+		var width: float = bridge["width"]
+		var way := Vector3(to.x - from.x, 0.0, to.z - from.z).normalized()
+		var side := Vector3(-way.z, 0.0, way.x)
+		_terrain.ramp(from - way * 0.6, to + way * 0.6, width, WALKWAY_COLOR, EDGE_COLOR, 0.0)
+		for sign_side: float in [-1.0, 1.0]:
+			var offset := side * (width / 2.0 - 0.15) * sign_side
+			_terrain.rail(PackedVector3Array([from + offset + Vector3(0.0, 0.32, 0.0), to + offset + Vector3(0.0, 0.32, 0.0)]),
+				layout.color_of_zone(bridge["zone"]), true)
+			var edge_from := from + side * (width / 2.0) * sign_side
+			var edge_to := to + side * (width / 2.0) * sign_side
+			_terrain.wall(Vector2(edge_from.x, edge_from.z), Vector2(edge_to.x, edge_to.z), minf(from.y, to.y), 6.0)
+
+
+func _near_outline(outline: PackedVector2Array, point: Vector2, reach: float) -> bool:
+	for index in outline.size():
+		var nearest := Geometry2D.get_closest_point_to_segment(point, outline[index], outline[(index + 1) % outline.size()])
+		if point.distance_to(nearest) <= reach:
+			return true
+	return false
+
+
+#A box of ground turned "yaw" radians, as the corners of its outline
+func _box_outline(center: Vector2, size: Vector2, yaw: float) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for corner: Vector2 in [Vector2(-1.0, -1.0), Vector2(1.0, -1.0), Vector2(1.0, 1.0), Vector2(-1.0, 1.0)]:
+		points.append(center + (corner * size / 2.0).rotated(-yaw))
+	return points
+
+
+#A terrace or a deck: a candy block with its striped rim and bulbs. A wall is a tall block with only a rim
 func _build_block(block: Dictionary) -> void:
-	var center: Vector2 = block["center"]
-	var size: Vector2 = block["size"]
-	var top: float = block["top"]
-	var bottom: float = block["bottom"]
-	var height := top - bottom
-	var basis := Basis(Vector3.UP, float(block["yaw"]))
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(size.x, height, size.y)
-	_body(shape, Transform3D(basis, Vector3(center.x, bottom + height / 2.0, center.y)))
 	var color := layout.color_of_zone(block["zone"])
+	var outline := _box_outline(block["center"], block["size"], float(block["yaw"]))
 	if block["wall"]:
-		_merger.add(&"board", _merged(&"board"), true, _box(shape.size), Transform3D(basis, Vector3(center.x, bottom + height / 2.0, center.y)), color.darkened(0.08))
-		_merger.add(&"board", _merged(&"board"), false, _box(Vector3(size.x + 0.18, 0.2, size.y + 0.18)),
-			Transform3D(basis, Vector3(center.x, top - 0.02, center.y)), color.lightened(0.6))
-		return
-	var lip := minf(LIP, height)
-	if height - lip > 0.02:
-		_merger.add(&"board", _merged(&"board"), true, _box(Vector3(size.x, height - lip, size.y)),
-			Transform3D(basis, Vector3(center.x, bottom + (height - lip) / 2.0, center.y)), color.darkened(BODY_SHADE))
-	_merger.add(&"board", _merged(&"board"), true, _box(Vector3(size.x + LIP_OUT * 2.0, lip, size.y + LIP_OUT * 2.0)),
-		Transform3D(basis, Vector3(center.x, top - lip / 2.0, center.y)), color)
+		_terrain.platform(outline, block["top"], block["bottom"], color.darkened(0.05), color.lightened(0.55), [], false)
+	else:
+		_terrain.platform(outline, block["top"], block["bottom"], color, color.lightened(0.55))
 
 
-#A slope. Solid, it is a prism filled down to the ground (smooth or with steps); otherwise a thin walkway with lights on its sides
+#A slope: a solid wedge down to the floor under its low end, or a thin walkway with lights on its sides and room under it
 func _build_ramp(ramp: Dictionary) -> void:
 	var from: Vector3 = ramp["from"]
 	var to: Vector3 = ramp["to"]
-	var width: float = ramp["width"]
-	var run := Vector3(to.x - from.x, 0.0, to.z - from.z)
-	var length := run.length()
-	var direction := run / maxf(length, 0.001)
-	var slope := (to.y - from.y) / maxf(length, 0.001)
-	var low := from - direction * OVERLAP - Vector3(0.0, slope * OVERLAP, 0.0)
-	var high := to + direction * OVERLAP + Vector3(0.0, slope * OVERLAP, 0.0)
-	var color := layout.color_of_zone(ramp["zone"])
-	if not ramp["solid"]:
-		var basis := Basis.looking_at((high - low).normalized(), Vector3.UP)
-		var span := low.distance_to(high)
-		var centre := (low + high) / 2.0 - basis.y * WALK_THICKNESS / 2.0
-		var shape := BoxShape3D.new()
-		shape.size = Vector3(width, WALK_THICKNESS, span)
-		_body(shape, Transform3D(basis, centre))
-		_merger.add(&"board", _merged(&"board"), true, _box(shape.size), Transform3D(basis, centre), WALKWAY_COLOR)
-		var edge := _box(Vector3(EDGE_WIDTH, EDGE_HEIGHT, span - 2.0 * OVERLAP - 0.4))
-		for way: float in [-1.0, 1.0]:
-			var edge_at := centre + basis * Vector3(way * (width / 2.0 - EDGE_WIDTH / 2.0), WALK_THICKNESS / 2.0 + EDGE_HEIGHT / 2.0, 0.0)
-			_merger.add(&"glow", _merged(&"glow"), false, edge, Transform3D(basis, edge_at), EDGE_COLOR)
-		return
-	low.y = maxf(low.y, ArenaLayout.GROUND)
-	var side := Vector3(-direction.z, 0.0, direction.x) * width / 2.0
-	var floor_y := ArenaLayout.GROUND
-	var corners: Array[Vector3] = [low - side, low + side, high + side, high - side]
-	var points := PackedVector3Array()
-	for corner in corners:
-		points.append(corner)
-		points.append(Vector3(corner.x, floor_y, corner.z))
-	var shape := ConvexPolygonShape3D.new()
-	shape.points = points
-	_body(shape, Transform3D.IDENTITY)
-	if ramp["steps"]:
-		_build_steps(low, high, width, color)
-		return
-	var tool := SurfaceTool.new()
-	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var down := Vector3(0.0, floor_y, 0.0)
-	var feet: Array[Vector3] = []
-	for corner in corners:
-		feet.append(Vector3(corner.x, 0.0, corner.z) + down)
-	var up := Vector3(-direction.x * slope, 1.0, -direction.z * slope).normalized()
-	_quad(tool, corners[0], corners[1], corners[2], corners[3], up)
-	_quad(tool, feet[0], corners[0], corners[3], feet[3], -side.normalized())
-	_quad(tool, feet[1], corners[1], corners[2], feet[2], side.normalized())
-	_quad(tool, feet[3], corners[3], corners[2], feet[2], direction)
-	_quad(tool, feet[0], corners[0], corners[1], feet[1], -direction)
-	_merger.add(&"board", _merged(&"board"), true, tool.commit(), Transform3D.IDENTITY, color.lightened(0.12))
+	var color := layout.color_of_zone(ramp["zone"]).lightened(0.12)
+	if ramp["solid"]:
+		_terrain.wedge(from, to, ramp["width"], color, ArenaLayout.GROUND, EDGE_COLOR)
+	else:
+		_terrain.ramp(from, to, ramp["width"], WALKWAY_COLOR, EDGE_COLOR)
 
 
-#A staircase over the slope of a ramp: boxes that rise one after the other, in two tones so each step reads
-func _build_steps(low: Vector3, high: Vector3, width: float, color: Color) -> void:
-	var count := maxi(ceili((high.y - low.y) / STEP_RISE), 2)
-	var run := Vector3(high.x - low.x, 0.0, high.z - low.z)
-	var basis := Basis(Vector3.UP, atan2(run.x, run.z))
-	var depth := run.length() / count
-	for step in count:
-		var top := lerpf(low.y, high.y, (step + 0.5) / count)
-		var middle := low + run * ((step + 0.5) / count)
-		var height := maxf(top - ArenaLayout.GROUND, 0.05)
-		_merger.add(&"board", _merged(&"board"), true, _box(Vector3(width, height, depth)),
-			Transform3D(basis, Vector3(middle.x, ArenaLayout.GROUND + height / 2.0, middle.z)), color.lightened(0.3) if step % 2 == 0 else color.lightened(0.05))
-
-
-#A round pillar to stand on, with the same lighter layer on top as the blocks
+#A round pillar to stand on, with its striped rim and bulbs
 func _build_drum(drum: Dictionary) -> void:
 	var center: Vector2 = drum["center"]
 	var radius: float = drum["radius"]
-	var top: float = drum["top"]
-	var bottom: float = drum["bottom"]
-	var height := top - bottom
-	var shape := CylinderShape3D.new()
-	shape.radius = radius
-	shape.height = height
-	_body(shape, Transform3D(Basis.IDENTITY, Vector3(center.x, bottom + height / 2.0, center.y)))
 	var color := layout.color_of_zone(drum["zone"])
-	var lip := minf(LIP, height)
-	if height - lip > 0.02:
-		_merger.add(&"board", _merged(&"board"), true, _disc(radius, radius, height - lip),
-			Transform3D(Basis.IDENTITY, Vector3(center.x, bottom + (height - lip) / 2.0, center.y)), color.darkened(BODY_SHADE))
-	_merger.add(&"board", _merged(&"board"), true, _disc(radius + LIP_OUT, radius + LIP_OUT, lip),
-		Transform3D(Basis.IDENTITY, Vector3(center.x, top - lip / 2.0, center.y)), color)
+	_terrain.platform(CandyTerrain.circle(center, radius, maxi(roundi(radius * 6.0), 16)), drum["top"], drum["bottom"], color, color.lightened(0.55))
 
 
 #The fence along every side of the outline: an unseen wall, a curb, a candy rail with lights and a post at each corner
@@ -460,8 +429,8 @@ func _build_arc(node: Node3D, pad: Dictionary) -> void:
 	var mark := _piece(node, arrow, PartyKit.paint(PartyKit.WHITE, 0.8, 0.3), Vector3(0.0, 0.25, 0.0))
 	mark.basis = Basis.looking_at(aim, Vector3.UP) * Basis(Vector3.RIGHT, -PI / 2.0)
 	var hoop := TorusMesh.new()
-	hoop.inner_radius = 1.25
-	hoop.outer_radius = 1.6
+	hoop.inner_radius = 1.0
+	hoop.outer_radius = 1.14
 	hoop.rings = 24
 	hoop.ring_segments = 6
 	var time: float = pad["time"]

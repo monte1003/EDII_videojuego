@@ -18,9 +18,8 @@ const STAND_TIERS := 4
 const GATE_HALF_WIDTH := 6.2
 const GATE_HEIGHT := 6.4
 const CHEER_TIME := 1.6
-const HEADING_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 #Islands that have balloons tied to their rim, and how many
-const BALLOON_ISLANDS: Array[StringName] = [&"D", &"G", &"H", &"J", &"K", &"A", &"C"]
+const BALLOON_ISLANDS: Array[StringName] = [&"Aw", &"Ce", &"Ax", &"Cx", &"An", &"Cn", &"Ay", &"Cy"]
 const BALLOON_COUNT := 4
 #The big wheels far from the course: where each stands, how big it is and the point on the course it looks at (x, z)
 const WHEELS: Array[Dictionary] = [
@@ -53,6 +52,10 @@ func build() -> void:
 	_build_goal()
 	_build_balloons()
 	_build_backdrop()
+	var moving: Array[Node] = []
+	for entry in _beams:
+		moving.append(entry["pivot"])
+	StaticBatch.join(self, moving, false)
 
 
 #The crowd jumps higher for a moment
@@ -163,18 +166,12 @@ func _build_gate() -> void:
 	plate.material_override = PartyKit.paint(PartyKit.INK, 0.0, 0.5)
 	plate.position = Vector3(0.0, GATE_HEIGHT + 0.2, 0.0)
 	gate.add_child(plate)
+	#The name in letters with volume on both faces of the plate
 	for side: float in [-1.0, 1.0]:
-		var label := Label3D.new()
-		label.text = "SALIDA"
-		label.font = HEADING_FONT
-		label.font_size = 150
-		label.pixel_size = 0.0085
-		label.modulate = PartyKit.WHITE
-		label.outline_size = 18
-		label.outline_modulate = PartyKit.INK
-		label.position = Vector3(0.0, GATE_HEIGHT + 0.2, side * 0.27)
-		label.rotation.y = 0.0 if side > 0.0 else PI
-		gate.add_child(label)
+		var word := Word3D.make("SALIDA", 0.95, GATE_HALF_WIDTH * 1.35 - 0.8, PartyKit.PINK, 0.16, PartyKit.WHITE)
+		word.position = Vector3(0.0, GATE_HEIGHT + 0.2, side * 0.32)
+		word.rotation.y = 0.0 if side > 0.0 else PI
+		gate.add_child(word)
 	for index in 3:
 		var bulb := MeshInstance3D.new()
 		var sphere := SphereMesh.new()

@@ -1,18 +1,21 @@
 class_name SelfieHud
 extends RoundHud
 
-#The selfie screen: which photo it is, very small, and your followers. The rest is information that lives in the world and shows only
-#when it matters: the viewfinder of the drone with its live picture, the message that tells the camera is moving, the photo that
-#comes out of the viewfinder at the shot, and the chips of the two actions (pose and shove) near the player or over the rival
+#The selfie screen: which photo it is, very small, and the followers of its player. The rest shows only when it matters: the badge
+#that says where the next photo is, the live picture of the drone in a corner while a photo is coming, the message that tells the
+#camera is moving and to which set, the photo that takes its place at the shot and shrinks into the corner, the chips of the two
+#actions (pose and shove) and the roll of photos at the end
 
 const CAMERA_HOLD := 2.4
 const CAMERA_IN := 0.24
 const CAMERA_OUT := 0.4
-const VISOR_MARGIN := 28.0
+const MONITOR_MARGIN := 26.0
 const SHOVE_KEY_WORD := "empujar"
 
-var viewfinder: SelfieViewfinder
-var snapshot: SelfieSnapshot
+var monitor: SelfieMonitor
+var marker: SelfieMarker
+var card: SelfieCard
+var roll: SelfieRoll
 var pose_chip: ActionChip
 var shove_chip: ActionChip
 
@@ -20,6 +23,7 @@ var _photo_label: Label
 var _followers_label: Label
 var _gain_label: Label
 var _camera_box: VBoxContainer
+var _camera_hint: Label
 var _camera_tween: Tween
 var _chips: Control
 var _shown := 0
@@ -45,7 +49,9 @@ func _ready() -> void:
 	_gain_label.modulate.a = 0.0
 	row.add_child(_gain_label)
 	_build_camera_message()
-	_build_viewfinder()
+	marker = SelfieMarker.new()
+	add_child(marker)
+	_build_monitor()
 	_chips = Control.new()
 	_chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_chips.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -54,8 +60,10 @@ func _ready() -> void:
 	shove_chip = ActionChip.new(InputHints.key_label(&"shove"), SHOVE_KEY_WORD)
 	_chips.add_child(pose_chip)
 	_chips.add_child(shove_chip)
-	snapshot = SelfieSnapshot.new()
-	add_child(snapshot)
+	card = SelfieCard.new()
+	add_child(card)
+	roll = SelfieRoll.new()
+	add_child(roll)
 
 
 func set_photo(number: int, total: int) -> void:
@@ -77,8 +85,10 @@ func set_followers(total: int, gained: int) -> void:
 	fade.tween_property(_gain_label, "modulate:a", 0.0, 0.4)
 
 
-#The drone sets off for the next place: two short lines at the top say the camera moves and to go toward it
-func announce_camera() -> void:
+#The drone sets off for the next place: two short lines at the top say the camera moves and to which set
+func announce_camera(set_name: String) -> void:
+	_camera_hint.text = "ve a %s" % set_name
+	monitor.set_title(set_name)
 	if _camera_tween != null and _camera_tween.is_valid():
 		_camera_tween.kill()
 	_camera_box.show()
@@ -94,12 +104,16 @@ func announce_camera() -> void:
 	_camera_tween.chain().tween_callback(_camera_box.hide)
 
 
-#The shot: the last picture of the viewfinder comes out as a photo that gets close, stays and leaves
-func reveal_photo(followers: int, inside: bool, posed: bool, hold := SelfieSnapshot.HOLD) -> void:
-	var photo := viewfinder.snapshot()
-	var from := viewfinder.get_global_rect()
-	viewfinder.dismiss()
-	snapshot.play(photo, from, followers, inside, posed, hold)
+#The photo comes out where the live picture was, with what it gave
+func show_photo(photo: Texture2D, followers: int, inside: bool, posed: bool) -> void:
+	card.play(photo, monitor.get_global_rect().position + Vector2(monitor.size.x - SelfieCard.CARD.x, 0.0), followers, inside, posed)
+
+
+#The end of the round: the small copy leaves and the roll of every photo comes in
+func show_roll(photos: Array[Texture2D], numbers: Array[int]) -> void:
+	card.clear()
+	monitor.set_live(false)
+	roll.show_roll(photos, numbers)
 
 
 #The chip of the pose: near the player while the frame is there; lit while posing
@@ -134,18 +148,18 @@ func _build_camera_message() -> void:
 	var title := _text("CÁMARA EN MOVIMIENTO", UiKit.BUTTON_FONT, 20, Palette.PAPER)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_camera_box.add_child(title)
-	var hint := _text("ve hacia ella", UiKit.BODY_FONT, 22, Palette.GOLD)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_camera_box.add_child(hint)
+	_camera_hint = _text("", UiKit.BODY_FONT, 22, Palette.GOLD)
+	_camera_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_camera_box.add_child(_camera_hint)
 	_top.add_child(_camera_box)
 	_top.move_child(_camera_box, 2)
 
 
-func _build_viewfinder() -> void:
-	viewfinder = SelfieViewfinder.new()
-	add_child(viewfinder)
-	viewfinder.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	viewfinder.offset_left = -SelfieViewfinder.SHOWN.x - VISOR_MARGIN
-	viewfinder.offset_right = -VISOR_MARGIN
-	viewfinder.offset_top = VISOR_MARGIN
-	viewfinder.offset_bottom = VISOR_MARGIN + SelfieViewfinder.SHOWN.y
+func _build_monitor() -> void:
+	monitor = SelfieMonitor.new()
+	add_child(monitor)
+	monitor.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	monitor.offset_left = -SelfieMonitor.SHOWN.x - MONITOR_MARGIN
+	monitor.offset_right = -MONITOR_MARGIN
+	monitor.offset_top = MONITOR_MARGIN
+	monitor.offset_bottom = MONITOR_MARGIN + SelfieMonitor.SHOWN.y

@@ -32,9 +32,9 @@ func _expect(condition: bool, label: String) -> void:
 
 func _setup() -> void:
 	_context = ChaseContext.new()
-	_context.graph = Level01Layout.build_graph(false, false)
+	_context.graph = Level01Layout.build_graph(false)
 	_context.positions = Level01Layout.POSITIONS
-	_context.forbidden = Level01Layout.BOT_FORBIDDEN
+	_context.forbidden = [&"M"]
 	_context.goal = Level01Layout.GOAL
 	_locator = PlayerLocator.new()
 	_player = Node3D.new()
@@ -62,85 +62,85 @@ func _player_at(vertex: StringName) -> void:
 
 
 func _check_chase() -> void:
-	var bot := _bot(BotRole.Kind.CHASE, &"B")
-	_player_at(&"H")
-	_expect(bot.role.pick_target(bot, _context, _target) == &"H", "el perseguidor va a la plataforma del jugador")
+	var bot := _bot(BotRole.Kind.CHASE, &"N")
+	_player_at(&"A3")
+	_expect(bot.role.pick_target(bot, _context, _target) == &"A3", "el perseguidor va a la plataforma del jugador")
 	_locator.on_bridge = true
-	_locator.bridge_a = &"E"
-	_locator.bridge_b = &"H"
-	_expect(bot.role.pick_target(bot, _context, _target) == &"H", "con el puente abierto va al extremo lejano para cruzarlo")
-	_context.graph.set_edge_enabled(&"E", &"H", false)
-	_expect(bot.role.pick_target(bot, _context, _target) == &"E", "con el puente cerrado espera en el extremo cercano")
-	_context.graph.set_edge_enabled(&"E", &"H", true)
+	_locator.bridge_a = &"A2"
+	_locator.bridge_b = &"A3"
+	_expect(bot.role.pick_target(bot, _context, _target) == &"A3", "con el puente abierto va al extremo lejano para cruzarlo")
+	_context.graph.set_edge_enabled(&"A2", &"A3", false)
+	_expect(bot.role.pick_target(bot, _context, _target) == &"A2", "con el puente cerrado espera en el extremo cercano")
+	_context.graph.set_edge_enabled(&"A2", &"A3", true)
 
 
 func _check_ambush() -> void:
-	var bot := _bot(BotRole.Kind.AMBUSH, &"D")
-	_player_at(&"S")
-	_expect(bot.role.pick_target(bot, _context, _target) == &"E", "el emboscador espera dos plataformas por delante del jugador")
-	var near := _bot(BotRole.Kind.AMBUSH, &"B")
-	_expect(near.role.pick_target(near, _context, _target) == &"S", "si ya está cerca, deja la emboscada y persigue")
-	_player_at(&"L")
-	_expect(bot.role.pick_target(bot, _context, _target) == &"L", "ante la meta no espera dentro de ella: persigue")
+	var bot := _bot(BotRole.Kind.AMBUSH, &"A3")
+	_player_at(&"N")
+	_expect(bot.role.pick_target(bot, _context, _target) == &"C1", "el emboscador espera dos plataformas por delante del jugador")
+	var near := _bot(BotRole.Kind.AMBUSH, &"B1")
+	_expect(near.role.pick_target(near, _context, _target) == &"N", "si ya está cerca, deja la emboscada y persigue")
+	_player_at(&"E")
+	_expect(bot.role.pick_target(bot, _context, _target) == &"E", "ante la meta no espera dentro de ella: persigue")
 	var rival := ChaseTarget.new()
 	rival.node = _player
 	rival.locator = PlayerLocator.new()
 	_nodes.append(rival.locator)
-	rival.locator.vertex = &"I"
+	rival.locator.vertex = &"S"
 	rival.progress = 1.0
 	_target.progress = 9.0
 	_context.targets.append(rival)
-	_expect(bot.role.pick_target(bot, _context, _target) == &"K", "el emboscador espera al que va primero, no al que lo está mirando")
+	_expect(bot.role.pick_target(bot, _context, _target) == &"B5", "el emboscador espera al que va primero, no al que lo está mirando")
 	_context.targets.erase(rival)
 
 
 func _check_guard() -> void:
-	var guard := _bot(BotRole.Kind.GUARD, &"K")
+	var guard := _bot(BotRole.Kind.GUARD, &"E")
 	_expect(not guard.role.needs_sight(), "el guardián no necesita ver al jugador")
 	_player_at(&"S")
 	var post: StringName = guard.role.pick_target(guard, _context, _target)
-	_expect(post == &"K" or post == &"L", "el guardián espera en una puerta de la meta: %s" % post)
-	_player_at(&"L")
-	_expect(guard.role.pick_target(guard, _context, _target) == &"L", "si el jugador llega a una puerta, el guardián va por él")
-	var free: Array[StringName] = [&"A"]
-	_expect(guard.role.spawn_vertex(free, _context) == &"K", "el guardián empieza en una puerta de la meta")
-	_expect(guard.role.release_delay(5.0) == 0.0 and _bot(BotRole.Kind.CHASE, &"A").role.release_delay(5.0) == 5.0,
+	_expect(post == &"E", "el guardián espera en la puerta de la meta: %s" % post)
+	_player_at(&"E")
+	_expect(guard.role.pick_target(guard, _context, _target) == &"E", "si el jugador llega a la puerta, el guardián va por él")
+	var free: Array[StringName] = [&"A1"]
+	_expect(guard.role.spawn_vertex(free, _context) == &"E", "el guardián empieza en la puerta de la meta")
+	_expect(guard.role.release_delay(5.0) == 0.0 and _bot(BotRole.Kind.CHASE, &"A1").role.release_delay(5.0) == 5.0,
 		"el guardián sale al empezar y el perseguidor tras la ventaja")
 
 
 func _check_flank() -> void:
-	var lead := _bot(BotRole.Kind.CHASE, &"B")
-	var flanker := _bot(BotRole.Kind.FLANK, &"G")
+	var lead := _bot(BotRole.Kind.CHASE, &"N")
+	var flanker := _bot(BotRole.Kind.FLANK, &"B2")
 	_context.bots.assign([lead, flanker])
-	_player_at(&"E")
+	_player_at(&"A2")
 	var pick := flanker.role.pick_target(flanker, _context, _target)
-	_expect(_context.graph.neighbors(&"E").has(pick) and _context.cost(&"B", pick) > _context.cost(&"B", &"E"),
+	_expect(_context.graph.neighbors(&"A2").has(pick) and _context.cost(&"N", pick) > _context.cost(&"N", &"A2"),
 		"el que rodea va a una vecina del jugador más lejos del perseguidor que el jugador: %s" % pick)
 	_context.bots.clear()
 
 
 func _check_traffic() -> void:
-	var first := _bot(BotRole.Kind.CHASE, &"B")
-	var second := _bot(BotRole.Kind.CHASE, &"A")
+	var first := _bot(BotRole.Kind.CHASE, &"B1")
+	var second := _bot(BotRole.Kind.CHASE, &"A1")
 	first.state = ChaserBot.State.CHASE
-	first.route.assign([&"E"])
+	first.route.assign([&"N"])
 	_context.bots.assign([first, second])
 	var penalties := _context.traffic_for(second)
-	_expect(penalties.get(&"B", 0.0) == ChaseContext.TRAFFIC_COST and penalties.get(&"E", 0.0) == ChaseContext.TRAFFIC_COST,
+	_expect(penalties.get(&"B1", 0.0) == ChaseContext.TRAFFIC_COST and penalties.get(&"N", 0.0) == ChaseContext.TRAFFIC_COST,
 		"un bot penaliza la plataforma donde está otro y la siguiente de su ruta")
-	_expect(not _context.traffic_for(first).has(&"A"), "un bot inactivo no cuenta como tráfico")
-	second.target_vertex = &"E"
-	_expect(not _context.traffic_for(second).has(&"E"), "el destino propio nunca se penaliza")
+	_expect(not _context.traffic_for(first).has(&"A1"), "un bot inactivo no cuenta como tráfico")
+	second.target_vertex = &"N"
+	_expect(not _context.traffic_for(second).has(&"N"), "el destino propio nunca se penaliza")
 	_context.bots.clear()
 
 
 func _check_penalties() -> void:
-	var graph := Level01Layout.build_graph(false, false)
-	var plain := graph.shortest_path(&"B", &"L")
-	_expect(plain.path == [&"B", &"F", &"J", &"L"] and plain.cost == 10.5 and plain.penalty == 0.0, "sin penalizaciones B a L sigue siendo B-F-J-L por 10,5")
-	var avoided := graph.shortest_path(&"B", &"L", [], {&"J": 10.0})
-	_expect(avoided.found and not avoided.path.has(&"J"), "una plataforma muy cargada se rodea: %s" % [avoided.path])
-	_expect(avoided.cost == 11.0 and avoided.penalty == 0.0, "el costo informado son los puentes: 11 y sin penalización")
-	var forced := graph.shortest_path(&"B", &"L", [], {&"J": 0.25})
-	_expect(forced.path == [&"B", &"F", &"J", &"L"] and forced.cost == 10.5 and is_equal_approx(forced.penalty, 0.25),
+	var graph := Level01Layout.build_graph(false)
+	var plain := graph.shortest_path(&"N", &"S")
+	_expect(plain.path.has(&"C3") and is_equal_approx(plain.cost, 14.0) and plain.penalty == 0.0, "sin penalizaciones de N a S va por Scroll por 14,0")
+	var avoided := graph.shortest_path(&"N", &"S", [], {&"C3": 10.0})
+	_expect(avoided.found and not avoided.path.has(&"C3"), "una plataforma muy cargada se rodea: %s" % [avoided.path])
+	_expect(is_equal_approx(avoided.cost, 14.4) and avoided.penalty == 0.0, "el costo informado son los puentes: 14,4 por Comentarios y sin penalización")
+	var forced := graph.shortest_path(&"N", &"S", [], {&"C3": 0.25})
+	_expect(forced.path.has(&"C3") and is_equal_approx(forced.cost, 14.0) and is_equal_approx(forced.penalty, 0.25),
 		"una penalización pequeña no cambia la ruta y se informa aparte")

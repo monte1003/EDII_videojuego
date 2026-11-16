@@ -12,10 +12,14 @@ const WALK := &"walk"
 const BELT := &"belt"
 const DROP := &"drop"
 const LAUNCH := &"launch"
+#A small jump up onto something lower than a jump, both ways: players take it, bots (which never jump) do not
+const HOP := &"hop"
 #Speed of somebody on foot, to turn meters into seconds of travel
 const WALK_SPEED := 5.0
 #Height of the ground everything stands on
 const GROUND := 0.0
+#Under a map of floating islands there is nothing: this is the height of nothing
+const VOID := -60.0
 #How much farther than its distance on the ground a place feels for each meter it is above or below
 const HEIGHT_WEIGHT := 8.0
 
@@ -58,6 +62,11 @@ var zone_colors: Array[Color] = []
 var ground_color := Color("d9ccff")
 #The fence: the corners of the map on the ground, in order. Nothing can be walked outside it
 var outline: PackedVector2Array = PackedVector2Array()
+#A map of floating islands has no ground: each island is a convex outline with its top, and wide bridges join them. With none, the
+#ground runs everywhere inside the fence. An island: {"outline", "top", "zone", "rim": Color}; a bridge: {"from", "to" (the middles of
+#its two ends, on its floor), "width", "zone"}
+var islands: Array[Dictionary] = []
+var bridges: Array[Dictionary] = []
 #The terrain. Block: {"center": Vector2, "size": Vector2, "top", "bottom", "yaw", "zone", "wall": bool}.
 #Ramp: {"from": Vector3, "to": Vector3, "width", "zone", "steps": bool, "solid": bool}. Drum: {"center": Vector2, "radius", "top", "bottom", "zone"}
 var blocks: Array[Dictionary] = []
@@ -118,6 +127,16 @@ func add_ramp(from: Vector3, to: Vector3, width: float, zone: int, steps := fals
 	ramps.append({"from": from, "to": to, "width": width, "zone": zone, "steps": steps, "solid": solid})
 
 
+#A floating island of a convex outline, its top at "top"
+func add_island(shape: PackedVector2Array, top: float, zone: int, rim: Color) -> void:
+	islands.append({"outline": shape, "top": top, "zone": zone, "rim": rim})
+
+
+#A wide bridge between two islands, from the middle of one end of its floor to the middle of the other
+func add_bridge(from: Vector3, to: Vector3, width: float, zone: int) -> void:
+	bridges.append({"from": from, "to": to, "width": width, "zone": zone})
+
+
 #A round pillar to stand on
 func add_drum(center: Vector2, radius: float, top: float, zone: int, bottom := GROUND) -> void:
 	drums.append({"center": center, "radius": radius, "top": top, "bottom": bottom, "zone": zone})
@@ -148,8 +167,8 @@ func link_between(a: StringName, b: StringName) -> Link:
 
 #How high the floor is at a point of the map: the highest piece of terrain that is under it and not above "ceiling"
 func height_at(x: float, z: float, ceiling := INF) -> float:
-	var best := GROUND
 	var point := Vector2(x, z)
+	var best := _base_height(point, ceiling)
 	for block in blocks:
 		var top: float = block["top"]
 		if top > best and top <= ceiling and _in_block(block, point):
@@ -165,9 +184,17 @@ func height_at(x: float, z: float, ceiling := INF) -> float:
 	return best
 
 
-#Whether a point of the ground is inside the fence, "margin" meters or more away from it
+#Whether a point of the ground is inside the fence (or on an island or a bridge), "margin" meters or more away from its edge
 func is_inside(x: float, z: float, margin := 0.0) -> bool:
 	var point := Vector2(x, z)
+	if not islands.is_empty():
+		for island in islands:
+			if _in_outline(island["outline"], point, margin):
+				return true
+		for bridge in bridges:
+			if _bridge_share(bridge, point, margin) >= 0.0:
+				return true
+		return false
 	var turn := 0.0
 	for index in outline.size():
 		var from := outline[index]
@@ -183,11 +210,60 @@ func is_inside(x: float, z: float, margin := 0.0) -> bool:
 	return true
 
 
+#The floor under a point with nothing else on it: the ground, or the island or bridge it is over (the void elsewhere)
+func _base_height(point: Vector2, ceiling: float) -> float:
+	if islands.is_empty():
+		return GROUND
+	var best := VOID
+	for island in islands:
+		var top: float = island["top"]
+		if top > best and top <= ceiling and Geometry2D.is_point_in_polygon(point, island["outline"]):
+			best = top
+	for bridge in bridges:
+		var share := _bridge_share(bridge, point, 0.0)
+		if share >= 0.0:
+			var height := lerpf((bridge["from"] as Vector3).y, (bridge["to"] as Vector3).y, share)
+			if height > best and height <= ceiling:
+				best = height
+	return best
+
+
+#How far along a bridge a point is (0 to 1), or -1 when it is off it ("margin" meters in from its sides)
+func _bridge_share(bridge: Dictionary, point: Vector2, margin: float) -> float:
+	var from := Vector2((bridge["from"] as Vector3).x, (bridge["from"] as Vector3).z)
+	var to := Vector2((bridge["to"] as Vector3).x, (bridge["to"] as Vector3).z)
+	var length := from.distance_to(to)
+	var way := (to - from) / maxf(length, 0.01)
+	var offset := point - from
+	var along := offset.dot(way)
+	if along < 0.0 or along > length or absf(way.cross(offset)) > float(bridge["width"]) / 2.0 - margin:
+		return -1.0
+	return along / maxf(length, 0.01)
+
+
+#Whether a point is inside a convex outline, "margin" meters or more from its edges
+func _in_outline(shape: PackedVector2Array, point: Vector2, margin: float) -> bool:
+	if not Geometry2D.is_point_in_polygon(point, shape):
+		return false
+	if margin <= 0.0:
+		return true
+	for index in shape.size():
+		var nearest := Geometry2D.get_closest_point_to_segment(point, shape[index], shape[(index + 1) % shape.size()])
+		if point.distance_to(nearest) < margin:
+			return false
+	return true
+
+
 #How far the map reaches from its middle
 func reach() -> float:
 	var far := 0.0
 	for corner in outline:
 		far = maxf(far, corner.length())
+	if not islands.is_empty():
+		far = 0.0
+		for island in islands:
+			for corner: Vector2 in island["outline"]:
+				far = maxf(far, corner.length())
 	return far
 
 
@@ -228,7 +304,7 @@ func build_graph(for_bots := false) -> WeightedGraph:
 	for id: StringName in places:
 		graph.add_vertex(id)
 	for entry in links:
-		if for_bots and (entry.kind == DROP or entry.kind == LAUNCH):
+		if for_bots and (entry.kind == DROP or entry.kind == LAUNCH or entry.kind == HOP):
 			continue
 		graph.add_edge(entry.a, entry.b, entry.seconds, false)
 		if entry.back >= 0.0:

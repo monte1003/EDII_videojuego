@@ -1,8 +1,8 @@
 extends SceneTree
 
-#Checks the two solid maps (La Plaza and El Estudio) with real physics: the collisions match the layout and leave no hole, nobody
-#gets past the fence or under the ground even with a jump and a dive, every link of the graph can really be walked, every place
-#can be reached, and climbing back after a fall takes a short while.
+#Checks the solid map of the trend war (La Plaza) with real physics: the collisions match the layout and leave no hole, nobody gets
+#past the fence or under the ground even with a jump and a dive, every link of the graph can really be walked, every place can be
+#reached, climbing back after a fall takes a short while, and every trampoline of the tower lands on the floor it aims at.
 #Run: godot --headless --fixed-fps 60 --path . --script res://scripts/tests/terrain_check.gd
 
 const GRID := 1.5
@@ -33,9 +33,8 @@ func _frames(count: int) -> void:
 
 func _run() -> void:
 	await _check_map("La Plaza", TrendLayout.new())
-	await _check_map("El Estudio", SelfieLayout.new())
-	_check_sets(SelfieLayout.new())
 	_check_points(TrendLayout.new())
+	await _check_pads(TrendLayout.new())
 	print("terrain_check: %s" % ("OK" if _failures == 0 else "%d FALLOS" % _failures))
 	quit(1 if _failures > 0 else 0)
 
@@ -143,21 +142,41 @@ func _clear_of_edges(layout: ArenaLayout, x: float, z: float) -> bool:
 	return true
 
 
-#Players run at the fence from the inside all around the map, jump and dive: none gets out and none ends under the ground
+#Players run at the edge from the inside all around every island and across every bridge, jump and dive: none gets out and none
+#ends under the floor
 func _check_fence(title: String, layout: ArenaLayout) -> void:
 	var runners: Array[Player] = []
-	var count := layout.outline.size()
-	for index in count:
-		var from := layout.outline[index]
-		var to := layout.outline[(index + 1) % count]
-		var steps := maxi(roundi(from.distance_to(to) / FENCE_STEP), 1)
-		for step in steps:
-			var edge := from.lerp(to, (step + 0.5) / steps)
-			var inward := -edge.normalized()
-			var start := edge + inward * 7.0
-			var player := _player(Vector3(start.x, layout.height_at(start.x, start.y) + 0.1, start.y))
-			(player.get_node("CameraRig") as Node3D).rotation.y = atan2(inward.x, inward.y)
-			runners.append(player)
+	var starts: Array[Array] = []
+	for island in layout.islands:
+		var shape: PackedVector2Array = island["outline"]
+		var middle := Vector2.ZERO
+		for corner in shape:
+			middle += corner / shape.size()
+		var travelled := 0.0
+		for index in shape.size():
+			var from := shape[index]
+			var to := shape[(index + 1) % shape.size()]
+			var length := from.distance_to(to)
+			while travelled < length:
+				var edge := from.lerp(to, travelled / length)
+				var inward := (middle - edge).normalized()
+				starts.append([edge + inward * 5.0 + Vector2(0.13, 0.17), inward])
+				travelled += FENCE_STEP
+			travelled -= length
+	for bridge in layout.bridges:
+		var from: Vector3 = bridge["from"]
+		var to: Vector3 = bridge["to"]
+		var way := Vector2(to.x - from.x, to.z - from.z).normalized()
+		for share: float in [0.3, 0.5, 0.7]:
+			var at := Vector2(from.x, from.z).lerp(Vector2(to.x, to.z), share)
+			for side: float in [-1.0, 1.0]:
+				starts.append([at, Vector2(-way.y, way.x) * -side])
+	for start: Array in starts:
+		var spot: Vector2 = start[0]
+		var inward: Vector2 = start[1]
+		var player := _player(Vector3(spot.x, layout.height_at(spot.x, spot.y) + 0.1, spot.y))
+		(player.get_node("CameraRig") as Node3D).rotation.y = atan2(inward.x, inward.y)
+		runners.append(player)
 	await _frames(10)
 	for step in 260:
 		for player in runners:
@@ -175,7 +194,7 @@ func _check_fence(title: String, layout: ArenaLayout) -> void:
 		if at.y < -0.2:
 			under += 1
 		player.queue_free()
-	_check(out == 0, "%s: %d corredores contra la valla con salto y barrido, ninguno sale (%d fuera)" % [title, runners.size(), out])
+	_check(out == 0, "%s: %d corredores contra el borde de cada isla y de cada puente, con salto y barrido: ninguno sale (%d fuera)" % [title, runners.size(), out])
 	_check(under == 0, "%s: ninguno queda bajo el suelo" % title)
 	#From the top of every block, a jump and a dive outward always end on the ground
 	var jumpers: Array[Player] = []
@@ -248,38 +267,57 @@ func _walker(layout: ArenaLayout, a: StringName, b: StringName, seconds: float) 
 		"limit": seconds + WALK_SLACK, "done": false}
 
 
-#The eight sets of the selfie are flat and bigger than the biggest frame
-func _check_sets(layout: SelfieLayout) -> void:
-	var settings := SelfieSettings.new()
-	var biggest := settings.frame_start * 1.22
-	var flat := true
-	for spot in layout.spots:
-		var centre := layout.position_of(spot)
-		for corner: Vector2 in [Vector2(1, 1), Vector2(1, -1), Vector2(-1, 1), Vector2(-1, -1)]:
-			var x := centre.x + corner.x * biggest / 2.0
-			var z := centre.z + corner.y * biggest / 2.0
-			flat = flat and absf(layout.height_at(x, z) - centre.y) < 0.01 and layout.is_inside(x, z, 0.3)
-	_check(layout.spots.size() == 8 and flat, "El Estudio: los 8 sets son claros planos mayores que el marco más grande (%.1f m)" % biggest)
-	var heights: Dictionary = {}
-	for spot in layout.spots:
-		heights[layout.position_of(spot).y] = true
-	_check(heights.size() >= 4, "El Estudio: los sets están repartidos en %d alturas" % heights.size())
-	var room := true
-	for spot in layout.spots:
-		room = room and layout.frame_room(spot, settings.frame_end) >= settings.feint_shift
-	_check(room, "El Estudio: en todos cabe el marco pequeño con su finta")
-
-
-#Every point where a bubble is born stands on the floor of its place, inside the fence
+#Every point where a bubble is born belongs to its zone and floats over the floor it names, inside the fence
 func _check_points(layout: TrendLayout) -> void:
 	var fine := true
 	var zones: Dictionary = {}
-	for point in layout.points:
-		var at: Vector3 = point["position"]
-		fine = fine and layout.is_inside(at.x, at.z, 1.0) and absf(layout.height_at(at.x, at.z) - at.y) < 0.01
-		zones[point["zone"]] = int(zones.get(point["zone"], 0)) + 1
-	_check(fine and layout.points.size() >= 30, "La Plaza: sus %d puntos de burbuja están sobre el piso y dentro de la valla" % layout.points.size())
-	_check(zones.size() == 6, "La Plaza: hay puntos en las cinco zonas y en la plaza %s" % zones)
+	var sample := ""
+	for slot in layout.slots:
+		var at: Vector3 = slot["position"]
+		var zone: int = slot["zone"]
+		var floor_height: float = slot["floor"]
+		var ok := layout.is_inside(at.x, at.z, 1.0) and layout.in_zone(zone, at) and layout.zone_at(at) == zone and at.y > floor_height
+		#The ones of the archipelago float over a platform, the rest over the terrain
+		if zone != TrendLayout.Zone.ISLANDS:
+			ok = ok and absf(layout.height_at(at.x, at.z) - floor_height) < 0.01
+		if not ok and sample == "":
+			sample = "%s en la zona %d" % [at.snappedf(0.1), zone]
+		fine = fine and ok
+		zones[zone] = int(zones.get(zone, 0)) + 1
+	_check(fine, "La Plaza: sus %d puntos de burbuja están dentro de su zona, sobre su piso y dentro de la valla %s" % [layout.slots.size(), sample])
+	var each := zones.size() == TrendLayout.ZONE_COUNT
+	for zone: int in zones:
+		each = each and int(zones[zone]) >= 9
+	_check(each, "La Plaza: cada una de las cinco zonas tiene de 9 puntos en adelante %s" % zones)
+
+
+#Every trampoline of the tower throws a real body along its arc onto the floor it aims at, clear of the edge of that floor
+func _check_pads(layout: TrendLayout) -> void:
+	_scene = Node3D.new()
+	root.add_child(_scene)
+	var world := ArenaWorld.new()
+	_scene.add_child(world)
+	world.build(layout)
+	await _frames(5)
+	var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+	var flyers: Array[Player] = []
+	for pad in layout.pads:
+		var player := _player((pad["at"] as Vector3) + Vector3(0.0, 0.05, 0.0))
+		flyers.append(player)
+	await _frames(3)
+	for index in flyers.size():
+		flyers[index].launch(ArenaHazards.pad_launch(layout.pads[index], gravity))
+	await _frames(150)
+	var missed: Array[String] = []
+	for index in flyers.size():
+		var to: Vector3 = layout.pads[index]["to"]
+		var at := flyers[index].global_position
+		if absf(at.y - to.y) > 0.1 or Vector2(at.x - to.x, at.z - to.z).length() > 1.2:
+			missed.append("%s->%s" % [at.snappedf(0.1), to.snappedf(0.1)])
+		flyers[index].queue_free()
+	_check(missed.is_empty(), "La Plaza: los %d trampolines de la torre dejan a un cuerpo en el piso al que apuntan %s" % [layout.pads.size(), missed])
+	_scene.queue_free()
+	await _frames(3)
 
 
 func _capsule() -> CharacterBody3D:

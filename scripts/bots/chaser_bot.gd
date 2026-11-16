@@ -40,6 +40,8 @@ const KNOCK_DECAY := 14.0
 @export var push_enabled := true
 @export var push_trigger_range := 2.8
 @export var push_hit_range := 3.2
+#A bot only shoves whoever is less than this much higher or lower than itself
+@export var push_reach_height := 1.5
 @export var push_windup := 0.55
 @export var push_cooldown := 1.8
 
@@ -468,7 +470,7 @@ func _update_push(delta: float) -> void:
 		if candidate.protected:
 			continue
 		var offset := candidate.node.global_position - global_position
-		if _flat(offset).length() <= push_trigger_range and absf(offset.y) < 1.5:
+		if _flat(offset).length() <= push_trigger_range and absf(offset.y) < push_reach_height:
 			_push_target = candidate
 			_windup_left = push_windup
 			_look().set_alert(true)
@@ -482,7 +484,7 @@ func _resolve_push() -> void:
 	_push_cooldown_left = push_cooldown
 	var victim := _push_target
 	_push_target = null
-	if victim == null or victim.protected:
+	if victim == null or victim.protected or absf(victim.node.global_position.y - global_position.y) >= push_reach_height:
 		return
 	var offset := _flat(victim.node.global_position - global_position)
 	if offset.length() <= push_hit_range:

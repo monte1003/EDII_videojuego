@@ -1,9 +1,10 @@
 class_name SelfieRules
 extends RefCounted
 
-#The rules of the perfect selfie with no nodes and by player id: a drone takes one photo on each spot of the map, in a shuffled
-#order with no repeats. Whoever stands inside the frame at the shot gets followers: more in the centre, more while posing and more
-#the fewer are in the photo. It also keeps the power-ups. Every change is told with a signal
+#The rules of the perfect selfie with no nodes and by player id: a drone takes its photos on the sets of the studio, all of them,
+#never the same one twice in a row and each within reach on foot of the one before. Whoever is inside the frame at the shot gets followers: more in the
+#centre, more while posing and more the fewer are in the photo. Inside counts in the air too, up to a jump and a meter over the
+#floor of the set. It also keeps the power-ups. Every change is told with a signal
 
 enum Phase { WAITING, TRAVEL, FRAME, LOCK, REVEAL, DONE }
 enum Power { JUMP, SPEED, SHIELD }
@@ -22,13 +23,15 @@ const POWER_COUNT := 3
 #Seconds the frame takes to glide to where a feint sends it
 const FEINT_GLIDE := 0.35
 
-#How one player came out in one photo
+#How one player came out in one photo, and where it was when the shot was taken
 class Shot:
 	var inside := false
 	var centered := false
 	var posing := false
+	var airborne := false
 	var crowd := 0
 	var followers := 0
+	var at := Vector3.ZERO
 
 
 class PlayerState:
@@ -55,6 +58,10 @@ var settings: SelfieSettings
 var sheet: ScoreSheet
 var layout: SelfieLayout
 var players: Dictionary = {}
+#How high the feet of a player rise in a jump; the scene measures it from its players
+var jump_height := 1.03
+#Feet of everybody who came out in the last photo (players and bots), as the shot saw them
+var photo_feet: Array[Vector3] = []
 var phase := Phase.WAITING
 var photo_index := -1
 #The spots in the order of the photos
@@ -80,10 +87,20 @@ func _init(round_settings: SelfieSettings, score_sheet: ScoreSheet, map: SelfieL
 	_rng.seed = seed_value
 	for id in ids:
 		players[id] = PlayerState.new(id)
-	order = reachable_order(shuffled_spots(layout.spots, _rng), layout.travel_table(layout.build_graph()), layout.spawn_place, settings.reach_seconds)
+	var table := layout.travel_table(layout.build_graph())
+	order = photo_order(layout.spots, settings.photo_count, table, layout.spawn_place, settings.reach_seconds, _rng)
+	with_troll(order, table, layout.spawn_place, settings.reach_seconds, settings.troll_photo)
 	for index in layout.pedestals.size():
 		pedestal_kinds.append(index % POWER_COUNT)
 		_pedestal_left.append(0.0)
+
+
+#How high the feet rise in a plain jump of "jump_velocity": the steps of the physics add half a step of speed to the curve of the
+#jump (1.07 m for 4.5 m/s, as measured with a body)
+static func jump_height_of(jump_velocity: float) -> float:
+	var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+	var step := 1.0 / Engine.physics_ticks_per_second
+	return jump_velocity * jump_velocity / (2.0 * gravity) + jump_velocity * step / 2.0
 
 
 #Every spot once, in a random order: the bag is only refilled when it is empty
@@ -97,27 +114,87 @@ static func shuffled_spots(spots: Array[StringName], rng: RandomNumberGenerator)
 	return bag
 
 
-#Puts a shuffled bag in an order that can be walked: after each spot comes the first one left in the bag that is within "reach" seconds
-#on foot, or the closest one when none is. Every spot still comes once
-static func reachable_order(bag: Array[StringName], table: Dictionary, origin: StringName, reach: float) -> Array[StringName]:
-	var left := bag.duplicate()
-	var result: Array[StringName] = []
+#The sets of the photos in an order that can be walked: a random walk from set to set where every leg takes at most "reach"
+#seconds on foot, never stays on the same set and passes by no set more than twice. The first walk that goes through every set with
+#no leg too long wins; with none, the one that went through most sets with the fewest long legs
+static func photo_order(spots: Array[StringName], count: int, table: Dictionary, origin: StringName, reach: float, rng: RandomNumberGenerator) -> Array[StringName]:
+	var best: Array[StringName] = []
+	var best_score := -INF
+	for attempt in 300:
+		var walk := _walk(spots, count, table, origin, reach, rng)
+		var late := 0
+		var at := origin
+		for entry in walk:
+			late += int(float(table[at][entry]) > reach)
+			at = entry
+		var score := _distinct(walk) * 100.0 - late
+		if score > best_score:
+			best = walk
+			best_score = score
+		if late == 0 and _distinct(walk) == mini(spots.size(), count):
+			break
+	return best
+
+
+#Every round has a photo in the troll zone: when the walk left it out, it takes the place of the photo "wanted" or, if the way there or
+#on from there is too long, of the first other one where both ways are short
+static func with_troll(walk: Array[StringName], table: Dictionary, origin: StringName, reach: float, wanted: int) -> void:
+	if walk.has(&"Z") or not table.has(&"Z") or walk.is_empty():
+		return
+	var choices: Array[int] = [clampi(wanted, 0, walk.size() - 1)]
+	for index in walk.size():
+		if not choices.has(index):
+			choices.append(index)
+	for index in choices:
+		var before: StringName = origin if index == 0 else walk[index - 1]
+		var fine := before != &"Z" and float(table[before][&"Z"]) <= reach
+		if index + 1 < walk.size():
+			fine = fine and float(table[&"Z"][walk[index + 1]]) <= reach
+		if fine:
+			walk[index] = &"Z"
+			return
+	walk[choices[0]] = &"Z"
+
+
+static func _walk(spots: Array[StringName], count: int, table: Dictionary, origin: StringName, reach: float, rng: RandomNumberGenerator) -> Array[StringName]:
+	var walk: Array[StringName] = []
+	var times: Dictionary = {}
+	var limit := ceili(float(count) / maxf(spots.size(), 1.0))
 	var at := origin
-	while not left.is_empty():
-		var pick: StringName = left[0]
-		var nearest := INF
-		for candidate: StringName in left:
-			var seconds: float = table[at][candidate]
-			if seconds <= reach:
-				pick = candidate
-				break
-			if seconds < nearest:
-				nearest = seconds
-				pick = candidate
-		left.erase(pick)
-		result.append(pick)
+	while walk.size() < count and not spots.is_empty():
+		var near: Array[StringName] = []
+		var fresh: Array[StringName] = []
+		var allowed: Array[StringName] = []
+		for candidate in spots:
+			if (candidate == at and spots.size() > 1) or int(times.get(candidate, 0)) >= limit:
+				continue
+			allowed.append(candidate)
+			if float(table[at][candidate]) <= reach:
+				near.append(candidate)
+				if not times.has(candidate):
+					fresh.append(candidate)
+		var options := fresh if not fresh.is_empty() else near
+		var pick: StringName
+		if not options.is_empty():
+			pick = options[rng.randi() % options.size()]
+		elif not allowed.is_empty():
+			pick = allowed[0]
+			for candidate in allowed:
+				if float(table[at][candidate]) < float(table[at][pick]):
+					pick = candidate
+		else:
+			pick = spots[rng.randi() % spots.size()]
+		walk.append(pick)
+		times[pick] = int(times.get(pick, 0)) + 1
 		at = pick
-	return result
+	return walk
+
+
+static func _distinct(walk: Array[StringName]) -> int:
+	var seen: Dictionary = {}
+	for entry in walk:
+		seen[entry] = true
+	return seen.size()
 
 
 func photo_count() -> int:
@@ -159,7 +236,7 @@ func tick(delta: float) -> void:
 				_announce(photo_index + 1)
 
 
-#The scene says where a player is, whether it stands on the floor and whether it fell off the map
+#The scene says where a player is (its feet), whether it stands on the floor and whether it fell off the map
 func place(player_id: int, position: Vector3, grounded: bool, out: bool) -> void:
 	var state := state_of(player_id)
 	if state == null:
@@ -247,11 +324,21 @@ func lock_share() -> float:
 	return 1.0 - clampf(time_left / _phase_total, 0.0, 1.0) if phase == Phase.LOCK else 0.0
 
 
-#Whether a point on the floor is inside the frame as it is now
+#Whether some feet are inside the frame as it is now
 func is_inside(point: Vector3) -> bool:
-	var centre := frame_center()
-	var half := frame_size() / 2.0
-	return absf(point.x - centre.x) <= half and absf(point.z - centre.z) <= half
+	return in_frame(point, frame_center(), frame_size())
+
+
+#Inside a frame: over its square on the ground and, in height, from a little under the floor of its set up to a jump and a meter
+#more over it, so a jump at the shot still comes out
+func in_frame(point: Vector3, centre: Vector3, size: float) -> bool:
+	var rise := point.y - centre.y
+	return absf(point.x - centre.x) <= size / 2.0 and absf(point.z - centre.z) <= size / 2.0 		and rise >= -settings.below_floor and rise <= ceiling()
+
+
+#How high over the floor of the set somebody still comes out in the photo
+func ceiling() -> float:
+	return jump_height + settings.air_room
 
 
 #Takes the power-up of a pedestal; false when it is gone. Jump and speed are kept here, the shield goes to whoever keeps the blows
@@ -343,15 +430,19 @@ func _shoot() -> void:
 	var centre := frame_center()
 	var size := final_size(photo_index)
 	var crowd := 0
+	photo_feet.clear()
 	for point in extras:
-		if _in_frame(point, centre, size):
+		if in_frame(point, centre, size):
 			crowd += 1
+			photo_feet.append(point)
 	var shots: Dictionary = {}
 	for state: PlayerState in players.values():
 		var shot := Shot.new()
-		shot.inside = not state.out and state.grounded and _in_frame(state.position, centre, size)
+		shot.at = state.position
+		shot.inside = not state.out and in_frame(state.position, centre, size)
 		if shot.inside:
 			crowd += 1
+			photo_feet.append(state.position)
 		shots[state.id] = shot
 	for state: PlayerState in players.values():
 		var shot: Shot = shots[state.id]
@@ -361,7 +452,8 @@ func _shoot() -> void:
 		var away := Vector2(state.position.x - centre.x, state.position.z - centre.z).length()
 		shot.centered = away <= size * settings.center_share
 		shot.posing = state.posing and state.pose_time >= settings.pose_hold
-		shot.followers = sheet.selfie_followers(shot.centered, shot.posing, crowd)
+		shot.airborne = not state.grounded
+		shot.followers = sheet.selfie_followers(shot.centered, shot.posing, crowd) + air_bonus(shot.airborne, crowd)
 		state.followers += shot.followers
 		state.photos += 1
 		state.poses += int(shot.posing)
@@ -370,8 +462,11 @@ func _shoot() -> void:
 	photo_taken.emit(photo_index, shots)
 
 
-func _in_frame(point: Vector3, centre: Vector3, size: float) -> bool:
-	return absf(point.x - centre.x) <= size / 2.0 and absf(point.z - centre.z) <= size / 2.0 and absf(point.y - centre.y) < 1.5
+#A photo in the air adds a small share of what a pose gives, as crowded as the photo is
+func air_bonus(airborne: bool, crowd: int) -> int:
+	if not airborne:
+		return 0
+	return roundi(sheet.selfie_pose * settings.air_share * sheet.selfie_crowd[clampi(crowd - 1, 0, sheet.selfie_crowd.size() - 1)])
 
 
 func _set_pose(state: PlayerState, on: bool) -> void:

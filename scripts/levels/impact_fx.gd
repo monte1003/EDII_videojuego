@@ -131,6 +131,41 @@ static func stars(parent: Node3D, at: Vector3, amount := 7) -> void:
 	_release(parent, burst, at, burst.lifetime)
 
 
+#The stars that turn over the head of a dazed player: three small gold stars on a ring and one little swirl, all facing the camera.
+#The player turns the ring and shows or hides it
+static func daze_halo() -> Node3D:
+	var halo := Node3D.new()
+	var star := star_texture()
+	for index in 3:
+		var sprite := Sprite3D.new()
+		sprite.texture = star
+		sprite.pixel_size = 0.2 / STAR_SIZE
+		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sprite.shaded = false
+		sprite.double_sided = true
+		sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var angle := TAU * index / 3.0
+		sprite.position = Vector3(cos(angle) * 0.34, 0.06 * sin(angle * 2.0), sin(angle) * 0.34)
+		halo.add_child(sprite)
+	var swirl := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.3
+	torus.outer_radius = 0.34
+	torus.rings = 18
+	torus.ring_segments = 6
+	swirl.mesh = torus
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = Color(Palette.GOLD, 0.45)
+	swirl.material_override = material
+	swirl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	swirl.rotation = Vector3(0.18, 0.0, 0.1)
+	halo.add_child(swirl)
+	halo.visible = false
+	return halo
+
+
 #Paper confetti shot up from a cannon: it spins while it falls
 static func confetti(parent: Node3D, at: Vector3, amount := 90, spread := 50.0, speed := 9.0) -> void:
 	var burst := CPUParticles3D.new()

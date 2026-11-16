@@ -294,9 +294,9 @@ func _run() -> void:
 	_check(off["dives"] == 0 and absf(float(off["reach"]) - jump) < 0.02,
 		"con dive_enabled apagado el salto es idéntico (%.3f m contra %.3f m)" % [off["reach"], jump])
 
-	#The leap of the course: the gap of the layout is too wide for a jump, and a dive pressed in a wide stretch of the jump lands on the ledge
-	var hop: Dictionary = Level01Layout.HOPS[0]
-	var rim := Level01Layout.radius_of(hop["from"])
+	#A gap too wide for a jump: a dive pressed in a wide stretch of the jump lands on the ledge
+	var hop := {"gap": 6.0, "radius": 3.2}
+	var rim := 6.0
 	_disc(Vector3(0.0, HOP_TOP, HOP_Z), rim)
 	_disc(Vector3(0.0, HOP_TOP, HOP_Z - rim - float(hop["gap"]) - float(hop["radius"])), float(hop["radius"]))
 	await _frames(5)

@@ -13,6 +13,10 @@ signal bumped(other: Player, strength: float)
 signal dive_started(direction: Vector3)
 signal dive_landed(at: Vector3)
 signal dive_ended
+#A daze starts or ends
+signal dazed_changed(dazed: bool)
+#The pull of the ground changed: "pull_sign" is 1 (down) or -1 (up) and "pull_scale" how strong it is
+signal gravity_changed(pull_sign: float, pull_scale: float)
 
 #The parts of a dive: in the air, sliding on the belly, lying still and getting up
 enum Dive { NONE, FLIGHT, SLIDE, DOWN, RISE }
@@ -26,6 +30,8 @@ class Hit:
 	var flips := false
 	#How hard it feels, from 0 to 1: the hop, the shake of the camera and the effects
 	var strength := 0.0
+	#A daze never flips: the player staggers back on its feet, cannot act for "stun" seconds and sees stars
+	var dazes := false
 
 @export var move_speed := 5.0
 @export var jump_velocity := 4.5
@@ -75,6 +81,17 @@ const DIVE_FOV_KICK := 4.0
 const SLIDE_DUST_EVERY := 0.08
 #Seconds of the clip of getting up, which is played faster to fit the rise
 const RISE_CLIP_TIME := 0.45
+#A daze: the little hop it gives, how far the body leans back, where the stars turn and the grace after it in which nothing dazes again
+const DAZE_HOP := 1.3
+const DAZE_LEAN := 0.42
+const DAZE_HALO_HEIGHT := 0.72
+const DAZE_HALO_SPIN := 7.0
+const DAZE_GUARD := 0.25
+#A turned or weaker gravity: the body turns over in this time, its vertical speed stays under this, and a fall back to the
+#normal gravity is held under this speed until it lands
+const GRAVITY_TURN_TIME := 0.25
+const FLOAT_MAX_SPEED := 7.0
+const SAFE_FALL_SPEED := 7.0
 
 var player_id := 0
 var move_input := Vector2.ZERO
@@ -90,7 +107,12 @@ var posing := false: set = _set_posing
 var pose_style := 0
 #Each round says whether its players can dive
 var dive_enabled := false
+#While something carries the body (the bubble of a deck), it does not move on its own: whoever carries it sets where it is
+var carried := false
 var dive_phase := Dive.NONE
+#The pull of the ground: 1 down or -1 up, and how strong it is. Only set_gravity_state changes them
+var gravity_sign := 1.0
+var gravity_scale := 1.0
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _model: CharacterModel
@@ -128,6 +150,13 @@ var _dive_used := false
 var _air_time := 0.0
 var _dive_wanted_left := 0.0
 var _pose_playing := false
+var _dazed := false
+var _halo: Node3D
+#How far the body is turned over by a gravity that pulls up, from 0 to PI, and a fall back to normal that is still held soft
+var _turn := 0.0: set = _set_turn
+var _turn_tween: Tween
+var _camera_height := 0.0
+var _safe_fall := false
 
 @onready var _model_pivot: Node3D = $ModelPivot
 @onready var _camera_rig: PlayerCamera = $CameraRig
@@ -143,6 +172,7 @@ func _ready() -> void:
 	_tumble = Node3D.new()
 	_tumble.position = Vector3(0.0, TUMBLE_CENTER, 0.0)
 	_body.add_child(_tumble)
+	_camera_height = _camera_rig.position.y
 
 
 func set_character(character: CharacterData) -> void:
@@ -176,6 +206,43 @@ func can_be_hit() -> bool:
 
 func is_down() -> bool:
 	return _stun_left > 0.0
+
+
+func is_dazed() -> bool:
+	return _dazed
+
+
+#Not dazed and past the grace that follows a daze
+func can_be_dazed() -> bool:
+	return not _dazed and not _invulnerable
+
+
+#The one place where the pull of the ground changes. With "pull_sign" -1 the player falls up and stands on what is over it; the body
+#turns over smoothly, and when it comes back to 1 it turns back and lands softly
+func set_gravity_state(pull_sign: float, pull_scale: float) -> void:
+	var new_sign := -1.0 if pull_sign < 0.0 else 1.0
+	var new_scale := clampf(pull_scale, 0.05, 1.0)
+	if new_sign == gravity_sign and new_scale == gravity_scale:
+		return
+	var was_normal := is_gravity_normal()
+	var turned := new_sign != gravity_sign
+	gravity_sign = new_sign
+	gravity_scale = new_scale
+	up_direction = Vector3.UP * gravity_sign
+	_peak_fall = 0.0
+	_safe_fall = not was_normal and is_gravity_normal() and not is_on_floor()
+	if turned:
+		_cancel_dive()
+		if _turn_tween != null and _turn_tween.is_valid():
+			_turn_tween.kill()
+		_turn_tween = create_tween()
+		_turn_tween.tween_property(self, "_turn", PI if gravity_sign < 0.0 else 0.0, GRAVITY_TURN_TIME) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	gravity_changed.emit(gravity_sign, gravity_scale)
+
+
+func is_gravity_normal() -> bool:
+	return gravity_sign > 0.0 and gravity_scale >= 1.0
 
 
 #From the leap of a dive until the player is back on its feet
@@ -232,6 +299,9 @@ func squash(amount: float) -> void:
 
 #A blow: it throws the player, then it flips or staggers and gets up
 func take_hit(hit: Hit) -> void:
+	if hit.dazes:
+		_daze(hit)
+		return
 	_end_flight(false)
 	_cancel_dive()
 	if not hit.flips and _model != null and not posing:
@@ -249,10 +319,54 @@ func take_hit(hit: Hit) -> void:
 	hit_taken.emit(hit)
 
 
+#A daze: the player is thrown back on its feet, staggers with stars over its head and gets its hands back after "stun" seconds;
+#a short grace follows in which nothing dazes it again. While dazed or in that grace a new daze does nothing
+func _daze(hit: Hit) -> void:
+	if not can_be_dazed():
+		return
+	_end_flight(false)
+	_cancel_dive()
+	if _model != null and not posing:
+		_model.play_move(CharacterModel.STAGGER, false, 0.05)
+	push_velocity = hit.push
+	if gravity_sign > 0.0:
+		velocity.y = maxf(velocity.y, DAZE_HOP)
+	else:
+		velocity.y = minf(velocity.y, -DAZE_HOP)
+	_stun_left = hit.stun
+	_dazed = true
+	_invulnerable = true
+	_invulnerable_left = hit.stun + DAZE_GUARD
+	_apply_input()
+	_play_stagger(hit)
+	_show_halo(true)
+	_camera_rig.shake(0.25 + 0.4 * hit.strength)
+	hit_taken.emit(hit)
+	dazed_changed.emit(true)
+
+
+func _end_daze() -> void:
+	if not _dazed:
+		return
+	_dazed = false
+	_show_halo(false)
+	dazed_changed.emit(false)
+
+
+func _show_halo(on: bool) -> void:
+	if on and _halo == null:
+		_halo = ImpactFx.daze_halo()
+		_tumble.add_child(_halo)
+		_halo.position = Vector3(0.0, DAZE_HALO_HEIGHT, 0.0)
+	if _halo != null:
+		_halo.visible = on
+
+
 #Stops every kind of motion, used when the player is put back somewhere
 func clear_motion() -> void:
 	_end_flight(false)
 	_cancel_dive()
+	set_gravity_state(1.0, 1.0)
 	_dive_used = false
 	_dive_wanted_left = 0.0
 	velocity = Vector3.ZERO
@@ -267,6 +381,7 @@ func reset_hit_state() -> void:
 	_stun_left = 0.0
 	_invulnerable = false
 	_hit_flight = false
+	_end_daze()
 	_reset_tumble()
 	if _model_pivot != null:
 		_model_pivot.visible = true
@@ -279,18 +394,28 @@ func set_input_enabled(enabled: bool) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if carried:
+		velocity = Vector3.ZERO
+		if _model:
+			_model.set_state(false, true)
+		_animate_body(delta)
+		return
 	_tick_stun(delta)
-	if posing:
+	if posing or _dazed:
 		move_input = Vector2.ZERO
 		jump_requested = false
 	if not is_on_floor():
-		velocity.y -= _gravity * delta
+		velocity.y -= _gravity * gravity_scale * gravity_sign * delta
 	_tick_dive(delta)
 
 	if jump_requested and is_on_floor() and dive_phase == Dive.NONE:
-		velocity.y = jump_velocity
+		velocity.y = jump_velocity * gravity_sign
 		_squash_speed += 5.0
 	jump_requested = false
+	if not is_gravity_normal():
+		velocity.y = clampf(velocity.y, -FLOAT_MAX_SPEED, FLOAT_MAX_SPEED)
+	elif _safe_fall:
+		velocity.y = maxf(velocity.y, -SAFE_FALL_SPEED)
 
 	if _flying:
 		_flight_age += delta
@@ -307,7 +432,7 @@ func _physics_process(delta: float) -> void:
 	velocity.z = direction.z * move_speed * control + push_velocity.z + external_velocity.z + _flight.z + _dive_velocity.z
 	_intended = Vector3(velocity.x, 0.0, velocity.z)
 	if not is_on_floor():
-		_peak_fall = maxf(_peak_fall, -velocity.y)
+		_peak_fall = maxf(_peak_fall, -velocity.y * gravity_sign)
 	#Each part of the push fades on its own, so a blow along the street stops sooner sideways than forward
 	push_velocity.x = move_toward(push_velocity.x, 0.0, push_decay * delta)
 	push_velocity.z = move_toward(push_velocity.z, 0.0, push_decay * delta)
@@ -325,6 +450,8 @@ func _physics_process(delta: float) -> void:
 	_tick_grace(delta)
 	_animate_body(delta)
 	_kick_dust(delta)
+	if _dazed and _halo != null:
+		_halo.rotate_y(DAZE_HALO_SPIN * delta)
 
 
 #A press of the jump in the air dives, once per jump; then the dive goes through its parts by itself
@@ -366,7 +493,7 @@ func _tick_dive(delta: float) -> void:
 
 
 func _can_dive() -> bool:
-	return dive_enabled and not _dive_used and _air_time >= DIVE_ARM_TIME and _stun_left <= 0.0 and not _flying \
+	return dive_enabled and gravity_sign > 0.0 and not _dive_used and _air_time >= DIVE_ARM_TIME and _stun_left <= 0.0 and not _flying \
 		and not _hit_flight and not posing and not _celebrating
 
 
@@ -431,6 +558,7 @@ func _tick_stun(delta: float) -> void:
 	_stun_left -= delta
 	if _stun_left <= 0.0:
 		_apply_input()
+		_end_daze()
 
 
 func _track_landing() -> void:
@@ -441,6 +569,7 @@ func _track_landing() -> void:
 		_peak_fall = 0.0
 		landed.emit(global_position, _hit_flight)
 		_hit_flight = false
+		_safe_fall = false
 	_was_airborne = not grounded
 
 
@@ -518,8 +647,15 @@ func _animate_body(delta: float) -> void:
 	if posing and not calm and not _pose_playing:
 		breath = POSE_STRETCH + 0.03 * sin(Time.get_ticks_msec() * 0.008)
 	var stretch := _squash + breath
-	_body.basis = Basis(Vector3.UP, _spin) * Basis(Vector3.RIGHT, _lean.x) * Basis(Vector3.BACK, _lean.y) \
+	var soft := Basis(Vector3.UP, _spin) * Basis(Vector3.RIGHT, _lean.x) * Basis(Vector3.BACK, _lean.y) \
 		* Basis.from_scale(Vector3(1.0 - 0.5 * stretch, 1.0 + stretch, 1.0 - 0.5 * stretch))
+	if _turn == 0.0:
+		_body.basis = soft
+	else:
+		#Turned over around its middle, so the feet go where the head was
+		var over := Basis(Vector3.BACK, _turn)
+		var middle := Vector3(0.0, TUMBLE_CENTER, 0.0)
+		_body.transform = Transform3D(over, middle - over * middle) * Transform3D(soft, Vector3.ZERO)
 
 
 #A little puff under the feet now and then while it runs
@@ -551,16 +687,22 @@ func _set_posing(value: bool) -> void:
 		_model.stop_move()
 
 
+#The stagger of a daze: the body leans back from the blow, wobbles and straightens while the daze lasts
+func _play_stagger(hit: Hit) -> void:
+	if _tumble_tween != null and _tumble_tween.is_valid():
+		_tumble_tween.kill()
+	_aim_tumble(hit)
+	_tumble_tween = create_tween()
+	_tumble_tween.tween_property(self, "_tumble_angle", DAZE_LEAN, 0.12).set_ease(Tween.EASE_OUT)
+	_tumble_tween.tween_property(self, "_tumble_angle", 0.0, maxf(hit.stun - 0.12, 0.2)) \
+		.set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+
+
 #A flip is a somersault toward where the blow sends the player, a lie on the ground and a get-up; a stagger is a quick lean
 func _play_tumble(hit: Hit, air: float) -> void:
 	if _tumble_tween != null and _tumble_tween.is_valid():
 		_tumble_tween.kill()
-	var knock := Vector3(hit.push.x, 0.0, hit.push.z).normalized()
-	var local := Basis(Vector3.UP, _model_pivot.rotation.y).inverse() * knock
-	_tumble_axis = Vector3(local.z, 0.0, -local.x)
-	if _tumble_axis.length() < 0.01:
-		_tumble_axis = Vector3.RIGHT
-	_tumble_axis = _tumble_axis.normalized()
+	_aim_tumble(hit)
 	_tumble_tween = create_tween()
 	if not hit.flips:
 		_tumble_tween.tween_property(self, "_tumble_angle", 0.5, 0.1).set_ease(Tween.EASE_OUT)
@@ -576,6 +718,16 @@ func _play_tumble(hit: Hit, air: float) -> void:
 	_tumble_tween.tween_callback(_reset_tumble)
 
 
+#The body tips toward where the blow sends it
+func _aim_tumble(hit: Hit) -> void:
+	var knock := Vector3(hit.push.x, 0.0, hit.push.z).normalized()
+	var local := Basis(Vector3.UP, _model_pivot.rotation.y).inverse() * knock
+	_tumble_axis = Vector3(local.z, 0.0, -local.x)
+	if _tumble_axis.length() < 0.01:
+		_tumble_axis = Vector3.RIGHT
+	_tumble_axis = _tumble_axis.normalized()
+
+
 func _reset_tumble() -> void:
 	if _tumble_tween != null and _tumble_tween.is_valid():
 		_tumble_tween.kill()
@@ -588,3 +740,10 @@ func _set_tumble_angle(value: float) -> void:
 	_tumble_angle = value
 	if _tumble != null:
 		_tumble.basis = Basis(_tumble_axis, value)
+
+
+#The body turns over with the gravity and the camera stays at the same height over the middle of the body
+func _set_turn(value: float) -> void:
+	_turn = value
+	if _camera_rig != null:
+		_camera_rig.position.y = lerpf(_camera_height, 2.0 * TUMBLE_CENTER - _camera_height, _turn / PI)

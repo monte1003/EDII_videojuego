@@ -1,7 +1,7 @@
 class_name GraphDebugView
 extends Node3D
 
-#Draws the graph the bots really use: vertex ids, bridges with their costs and every bot's route
+#Draws the graph of the course: vertex ids, bridges with their costs and the routes Dijkstra finds
 
 const OPEN_COLOR := Color("3ddc84")
 const BLOCKED_COLOR := Color("ff3b3b")
@@ -39,7 +39,8 @@ func setup(graph: WeightedGraph, positions: Dictionary) -> void:
 		_edge_labels[key] = label
 
 
-func redraw(bots: Array[ChaserBot]) -> void:
+#Each route is {"path": the vertices in order, "color", "from": where whoever follows it stands}
+func redraw(routes: Array[Dictionary]) -> void:
 	_mesh.clear_surfaces()
 	var quads := 0
 	_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -58,19 +59,17 @@ func redraw(bots: Array[ChaserBot]) -> void:
 		var label := _edge_labels[_edge_key(edge["a"], edge["b"])] as Label3D
 		label.text = "%s-%s: %s%s" % [edge["a"], edge["b"], String.num(edge["weight"], 0), "" if open else " BLOQ."]
 		label.modulate = color
-	for index in bots.size():
-		var bot := bots[index]
-		if not bot.route_found:
-			continue
-		var color := bot.appearance.debug_color
-		var path := bot.planned_vertices()
+	for index in routes.size():
+		var route: Dictionary = routes[index]
+		var color: Color = route["color"]
+		var path: Array = route["path"]
 		var height := 0.55 + index * 0.18
 		for step in range(path.size() - 1):
 			_ribbon(_positions[path[step]], _positions[path[step + 1]], 0.4, height, color)
 			quads += 1
-		#Line from the bot to the first vertex it is heading to
+		#Line from whoever follows the route to the first vertex it heads to
 		if not path.is_empty():
-			_ribbon(bot.global_position, _positions[path[0]], 0.2, height, color)
+			_ribbon(route["from"], _positions[path[0]], 0.2, height, color)
 			quads += 1
 	if quads == 0:
 		#An empty surface is not allowed: draw a degenerate triangle
@@ -101,8 +100,8 @@ func _edge_key(a: StringName, b: StringName) -> String:
 
 #A flat strip between two points, thick enough to read from the game camera
 func _ribbon(from: Vector3, to: Vector3, width: float, height: float, color: Color) -> void:
-	var a := Vector3(from.x, height, from.z)
-	var b := Vector3(to.x, height, to.z)
+	var a := Vector3(from.x, from.y + height, from.z)
+	var b := Vector3(to.x, to.y + height, to.z)
 	var direction := b - a
 	if direction.length() < 0.01:
 		return

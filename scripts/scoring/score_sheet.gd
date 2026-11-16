@@ -43,12 +43,8 @@ const MEDAL_NAMES: Array[String] = ["Sin medalla", "Bronce", "Plata", "Oro", "Di
 @export var drop_gamma := 1.25
 
 @export_group("Trend war")
-@export var trend_rounds := 5
-@export var trend_round_points := 200
-#Share of a round that completing the trend gives whatever the time left
-@export var trend_base := 0.3
-#What the 1st, 2nd, 3rd and 4th to complete a trend get of it; alone it is always the first
-@export var trend_places: Array[float] = [1.0, 0.7, 0.5, 0.35]
+#The trends completed against the par of the round (what a good player completes): reaching the par gives all the points
+@export var trend_gamma := 1.0
 
 @export_group("Perfect selfie")
 #Followers of each thing in a photo
@@ -115,10 +111,9 @@ func drop_points(seconds: float) -> int:
 	return _whole(MAX_POINTS * pow(clampf(seconds / drop_seconds, 0.0, 1.0), drop_gamma))
 
 
-#One trend: "left" is the share of the time between the par and the limit that was still left (0 to 1), "place" starts at 1
-func trend_points(left: float, place: int) -> int:
-	var factor := trend_places[clampi(place - 1, 0, trend_places.size() - 1)]
-	return roundi(trend_round_points * (trend_base + (1.0 - trend_base) * clampf(left, 0.0, 1.0)) * factor)
+#The whole round: "count" trends completed (a viral one counts more) against the "par" of the round
+func trend_score(count: int, par: float) -> int:
+	return roundi(MAX_POINTS * pow(clampf(count / maxf(par, 1.0), 0.0, 1.0), trend_gamma))
 
 
 #Followers of one photo for somebody inside the frame; "crowd" counts everybody inside, bots too

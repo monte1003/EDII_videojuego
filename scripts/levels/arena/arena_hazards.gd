@@ -115,6 +115,6 @@ static func on_belt(belt: Dictionary, point: Vector3) -> bool:
 	return absf(point.y - lerpf(from.y, to.y, along / maxf(length, 0.01))) < BELT_FEET
 
 
-#The speed at which a belt drags whoever stands on it; zero while it is stopped
+#The speed at which a belt drags whoever stands on it (its own "speed" or the one of the map); zero while it is stopped
 static func belt_drift(layout: ArenaLayout, belt: Dictionary, stage: int, time: float) -> Vector3:
-	return belt_way(belt) * layout.belt_speed * layout.belt_flow(belt, stage, time)
+	return belt_way(belt) * float(belt.get("speed", layout.belt_speed)) * layout.belt_flow(belt, stage, time)

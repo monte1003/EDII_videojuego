@@ -1,8 +1,8 @@
 class_name Level01Hazards
 extends RefCounted
 
-#The hazards of level 1 with no nodes: where each spinner bar points, where each sweeping block and each rolling ball is at a given time,
-#and who they hit
+#The hazards of level 1 with no nodes: where each spinner bar points, where each sweeping block, each rolling ball and each comment is at a
+#given time, and who they hit. The axes, likes, wheels, giant balls and fans are in Level01Traps
 
 #A racer higher than this over the floor jumped over the bar
 const BAR_HEIGHT := 0.6
@@ -19,18 +19,9 @@ const BALL_REACH := 0.35
 const BALL_CLEAR := 0.8
 #How far from the edge of the island the ball turns around
 const BALL_MARGIN := 0.7
-#A trampoline throws whoever stands within PAD_REACH of its middle with the feet no higher than PAD_FEET; how fast up and out
-const PAD_REACH := 0.95
-const PAD_FEET := 0.4
-const PAD_LIFT := 8.8
-const PAD_PUSH := 5.0
-
-#A cannon throws whoever stands within LAUNCH_REACH of its pad with the feet no higher than LAUNCH_FEET
-const LAUNCH_REACH := 1.3
-const LAUNCH_FEET := 0.5
-
-static var _pads: Dictionary = {}
-
+#The pad of a deck sends back whoever stands within LIFT_REACH of it with the feet no higher than LIFT_FEET
+const LIFT_REACH := 1.3
+const LIFT_FEET := 0.5
 
 #Angle of the bar in the XZ plane (from +X toward +Z) seconds after the start of the round
 static func angle_at(spinner: Dictionary, time: float) -> float:
@@ -43,14 +34,18 @@ static func angle_at(spinner: Dictionary, time: float) -> float:
 	return float(spinner["phase"]) + turned
 
 
-#Distance from a point to the bar, a segment that crosses the centre of the island and reaches "arm" to both sides
+#Distance from a point to the bar, a segment that crosses the centre of the island and reaches "arm" to both sides; with two crossed bars,
+#to the closest one
 static func distance_to_bar(centre: Vector3, spinner: Dictionary, time: float, point: Vector3) -> float:
 	var arm: float = spinner["arm"]
-	var angle := angle_at(spinner, time)
-	var direction := Vector2(cos(angle), sin(angle))
 	var offset := Vector2(point.x - centre.x, point.z - centre.z)
-	var along := clampf(offset.dot(direction), -arm, arm)
-	return (offset - direction * along).length()
+	var nearest := INF
+	for bar in int(spinner.get("arms", 1)):
+		var angle := angle_at(spinner, time) + PI / 2.0 * bar
+		var direction := Vector2(cos(angle), sin(angle))
+		var along := clampf(offset.dot(direction), -arm, arm)
+		nearest = minf(nearest, (offset - direction * along).length())
+	return nearest
 
 
 #True when a racer standing at "point" (feet height "feet_y" over the floor) is touched by the bar
@@ -196,48 +191,12 @@ static func ball_time_to_hit(ball: Dictionary, time: float, point: Vector3, hori
 	return -1.0
 
 
-#True when a racer at "point" stands on the trampoline of "island"
-static func pad_hits(island: StringName, point: Vector3) -> bool:
-	if not _pads.has(island):
-		_pads[island] = Level01Layout.pad_position(island)
-	var spot: Vector3 = _pads[island]
-	if point.y - spot.y > PAD_FEET:
+#True when a racer at "point" stands on the pad of the deck of "lift"
+static func lift_hits(lift: Dictionary, point: Vector3) -> bool:
+	var spot: Vector3 = lift["pad"]
+	if point.y - spot.y > LIFT_FEET:
 		return false
-	return Vector2(point.x - spot.x, point.z - spot.z).length() <= PAD_REACH
-
-
-#What a trampoline does to whoever steps on it: up, and a little away from its middle
-static func pad_launch(island: StringName, point: Vector3) -> Vector3:
-	if not _pads.has(island):
-		_pads[island] = Level01Layout.pad_position(island)
-	var spot: Vector3 = _pads[island]
-	var away := Vector3(point.x - spot.x, 0.0, point.z - spot.z)
-	if away.length() < 0.1:
-		away = spot - (Level01Layout.POSITIONS[island] as Vector3)
-		away.y = 0.0
-	return away.normalized() * PAD_PUSH + Vector3(0.0, PAD_LIFT, 0.0)
-
-
-#True when a racer at "point" stands on the pad of a cannon
-static func launch_hits(launch: Dictionary, point: Vector3) -> bool:
-	var spot := Level01Layout.launch_pad(launch)
-	if point.y - spot.y > LAUNCH_FEET:
-		return false
-	return Vector2(point.x - spot.x, point.z - spot.z).length() <= LAUNCH_REACH
-
-
-#The velocity a cannon gives: along the arc that goes from its pad to the middle of the island it lands on in "time" seconds under "gravity"
-static func launch_velocity(launch: Dictionary, gravity: float) -> Vector3:
-	var from := Level01Layout.launch_pad(launch)
-	var to := Level01Layout.launch_landing(launch)
-	var time: float = launch["time"]
-	return Vector3((to.x - from.x) / time, (to.y - from.y) / time + 0.5 * gravity * time, (to.z - from.z) / time)
-
-
-#Where a racer thrown by the cannon is after "seconds" of flight
-static func launch_point(launch: Dictionary, seconds: float, gravity: float) -> Vector3:
-	var velocity := launch_velocity(launch, gravity)
-	return Level01Layout.launch_pad(launch) + velocity * seconds - Vector3(0.0, 0.5 * gravity * seconds * seconds, 0.0)
+	return Vector2(point.x - spot.x, point.z - spot.z).length() <= LIFT_REACH
 
 
 #The parts of a comment cycle, and how far along its own part it is (0 to 1), and the side of the bridge it starts on this time

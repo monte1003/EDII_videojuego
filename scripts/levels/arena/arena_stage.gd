@@ -1,13 +1,13 @@
 class_name ArenaStage
 extends Node3D
 
-#The game-show set around an arena map, standing on the same ground just past its fence: sky and light, a ring of candy pillars
-#joined by bunting with sweeping beams, grandstands with a crowd that cheers, balloons, clouds on the horizon, a rainbow and a
-#big wheel. None of it collides and all of it is always drawn
+#The game-show set around an arena map, floating like the map over a sea of clouds: sky and light, a ring of candy pillars that rise
+#from the clouds joined by bunting with sweeping beams, grandstands on their own islands with a crowd that cheers, balloons, clouds,
+#a rainbow and a big wheel. None of it collides and all of it is always drawn
 
 const PILLAR_COUNT := 10
 const PILLAR_SIZE := 1.8
-const PILLAR_BASE := 0.0
+const PILLAR_BASE := -28.0
 const STAND_WIDTH := 16.0
 const STAND_TIERS := 4
 const SEA_COLORS: Array[Color] = [Color("ffffff"), Color("f3ecff"), Color("fde8f1")]
@@ -19,17 +19,20 @@ var _beams: Array[Dictionary] = []
 var _cheer: Tween
 var _clock := 0.0
 var _radius := 40.0
+var _terrain: CandyTerrain
 
 
 #"radius" is how far the map reaches from its middle; the set stands just outside it
 func build(radius: float, seed_value: int, top_height: float) -> void:
 	_radius = radius
 	_rng.seed = seed_value
+	_terrain = CandyTerrain.new(self)
 	_build_sky(radius)
 	_build_clouds()
 	_build_pillars(top_height)
 	_build_stands()
 	_build_backdrop()
+	_terrain.commit()
 	add_child(PartyKit.sparkles(Vector3(radius, 10.0, radius), 70))
 
 
@@ -54,8 +57,8 @@ func _build_sky(radius: float) -> void:
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Color(0.3, 0.46, 0.98)
 	sky_material.sky_horizon_color = Color(1.0, 0.8, 0.88)
-	sky_material.ground_bottom_color = Color(0.5, 0.45, 0.93)
-	sky_material.ground_horizon_color = Color(1.0, 0.8, 0.88)
+	sky_material.ground_bottom_color = Color(0.4, 0.55, 1.0)
+	sky_material.ground_horizon_color = Color(0.86, 0.8, 1.0)
 	sky_material.sky_curve = 0.2
 	sky_material.ground_curve = 0.06
 	var sky := Sky.new()
@@ -92,10 +95,15 @@ func _build_sky(radius: float) -> void:
 	add_child(sun)
 
 
-#Clouds are far scenery only: a ring of big ones on the horizon, never over the map
+#A sea of clouds far under the map and a ring of big ones on the horizon, never over the map
 func _build_clouds() -> void:
 	var rim := CloudField.new()
 	rim.setup(Vector2(-_radius * 3.2, _radius * 3.2))
+	for index in 150:
+		var angle := _rng.randf() * TAU
+		var distance := sqrt(_rng.randf()) * _radius * 2.6
+		rim.add_cloud(Vector3(cos(angle) * distance, _rng.randf_range(-34.0, -22.0), sin(angle) * distance), _rng.randf_range(8.0, 14.0),
+			SEA_COLORS[index % SEA_COLORS.size()], _rng.randf_range(0.1, 0.35), _rng)
 	for index in 14:
 		var angle := TAU * index / 14.0 + _rng.randf_range(-0.15, 0.15)
 		var distance := _radius * _rng.randf_range(2.4, 3.0)
@@ -130,7 +138,8 @@ func _build_pillars(top_height: float) -> void:
 		add_child(PartyKit.bunting(from, to, 2.6, 16, 1.8, PartyKit.PALETTE))
 
 
-#Four grandstands on the diagonals facing the middle, with balloons tied at their ends; one crowd for all of them
+#Four grandstands on the diagonals facing the middle, each on its own floating island, with balloons tied at their ends; one crowd
+#for all of them
 func _build_stands() -> void:
 	_crowd = CrowdField.new()
 	add_child(_crowd)
@@ -139,9 +148,15 @@ func _build_stands() -> void:
 	var ring := _radius + 7.0
 	for index in 4:
 		var angle := TAU * index / 4.0 + PI / 4.0
-		var at := Vector3(cos(angle) * ring, 0.0, sin(angle) * ring)
+		var at := Vector3(cos(angle) * ring, -1.0, sin(angle) * ring)
 		var facing := Basis(Vector3.UP, atan2(-at.x, -at.z))
 		var color := PartyKit.PALETTE[(index * 2 + 1) % PartyKit.PALETTE.size()]
+		var base := CandyTerrain.rounded_box(Vector2.ZERO, Vector2(STAND_WIDTH + 5.0, 8.0), 3.0, 0.0, 5)
+		var island := PackedVector2Array()
+		for corner in base:
+			var turned := facing * Vector3(corner.x, 0.0, corner.y - 2.2)
+			island.append(Vector2(at.x + turned.x, at.z + turned.z))
+		_terrain.island(island, at.y, color.lightened(0.45), PartyKit.WHITE)
 		add_child(PartyKit.stand(_crowd, Transform3D(facing, at), STAND_WIDTH, STAND_TIERS, color, _rng))
 		for side: float in [-1.0, 1.0]:
 			var tie := at + facing * Vector3(side * (STAND_WIDTH / 2.0 + 1.0), 0.6, 0.0)
