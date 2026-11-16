@@ -108,5 +108,12 @@ func _physics_process(delta: float) -> void:
 				set_posing(id, true)
 			if float(_pending.get(id, 0.0)) <= 0.0:
 				_pending.erase(id)
-		if player.posing and (not can_pose(id) or player.jump_requested or moves(_held, id, player.move_input)):
+		if not player.posing:
+			continue
+		#The player clears its own input while it poses, so the keys are read from what it asked for. A jump that ends the pose is handed
+		#back, so the player jumps at once instead of having to press again
+		var jumped := player.asked_jump or player.jump_requested
+		if not can_pose(id) or jumped or moves(_held, id, player.asked_move):
 			set_posing(id, false)
+			if jumped:
+				player.jump_requested = true

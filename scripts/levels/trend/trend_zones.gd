@@ -18,6 +18,10 @@ const LIKE_COLOR := Color("ff5fa2")
 const LIKE_RADIUS := 0.75
 const LIKE_POOL := 10
 const ISLET_THICKNESS := 0.6
+#The platforms of the sea of memes are app tiles: an icon of the social networks on top and a candy-striped column down to the water
+const ISLET_ICONS: Array[Texture2D] = [preload("res://assets/social_icons/me_gusta.png"), preload("res://assets/social_icons/chat.png"),
+	preload("res://assets/social_icons/video.png"), preload("res://assets/social_icons/foto.png"),
+	preload("res://assets/social_icons/historia.png"), preload("res://assets/social_icons/directo.png")]
 #How tall the beam over a zone is and how wide it opens
 const BUBBLE_SHADER: Shader = preload("res://assets/shaders/bubble.gdshader")
 const FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
@@ -35,6 +39,7 @@ var obstacles: TrendObstacles
 var _islets: Array[AnimatableBody3D] = []
 var _islet_paint: Array[StandardMaterial3D] = []
 var _screens: Array[AnimatableBody3D] = []
+var _screen_shapes: Array[CollisionShape3D] = []
 var _screen_paint: Array[StandardMaterial3D] = []
 var _strip_paint: Array[StandardMaterial3D] = []
 var _likes: Array[Dictionary] = []
@@ -79,8 +84,12 @@ func update(time: float, active: int, next: int, notice: float) -> void:
 		_islet_paint[index].albedo_color = base.lerp(WARN_COLOR, 0.6 * absf(sin(time * 14.0))) if obstacles.is_shaking(index) else base
 	for index in _screens.size():
 		var group := int(layout.screens[index]["group"])
+		#The body goes all the way down when the screen stops blocking (the same height the rules use), so nothing invisible is left
+		#in the way; its collision is off while it is down and on again as soon as it starts to come up
 		var rise := obstacles.screen_rise(group, time)
-		var top := lerpf(-0.05, TrendLayout.SCREEN_HEIGHT, rise)
+		var solid := clampf((rise - TrendObstacles.SCREEN_BLOCKS) / (1.0 - TrendObstacles.SCREEN_BLOCKS), 0.0, 1.0)
+		_screen_shapes[index].disabled = solid <= 0.0
+		var top := lerpf(-0.05, TrendLayout.SCREEN_HEIGHT, solid)
 		var from: Vector3 = layout.screens[index]["from"]
 		var to: Vector3 = layout.screens[index]["to"]
 		var middle := (from + to) / 2.0
@@ -399,9 +408,65 @@ func _build_islands() -> void:
 		edge.position.y = 0.02
 		edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		body.add_child(edge)
+		_dress_islet(body, islet, _islets.size())
 		add_child(body)
 		_islets.append(body)
 		_islet_paint.append(paint)
+
+
+#What makes a platform look like an app tile, with no collision of its own: a white face with the icon of a social network (two on the
+#long ones) and a striped column that holds it from the water. It moves, turns and sinks with the platform
+func _dress_islet(body: Node3D, islet: Dictionary, index: int) -> void:
+	var size: Vector2 = islet["size"]
+	var color: Color = ISLET_COLORS[islet["kind"]]
+	var round_top: bool = islet["round"]
+	if round_top:
+		var face := CylinderMesh.new()
+		face.top_radius = size.x - 0.16
+		face.bottom_radius = size.x - 0.16
+		face.height = 0.03
+		face.radial_segments = 24
+		face.rings = 1
+		var disc := MeshInstance3D.new()
+		disc.mesh = face
+		disc.material_override = PartyKit.paint(PartyKit.WHITE, 0.0, 0.4)
+		disc.position.y = 0.015
+		disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		body.add_child(disc)
+	#The icons lie on the face: one in the middle, or two along the platforms that are much longer than wide
+	var spots: Array[float] = [0.0]
+	var side := size.x * 1.2 if round_top else minf(size.x, size.y) * 0.78
+	if not round_top and size.y > size.x * 2.0:
+		spots = [-size.y * 0.25, size.y * 0.25]
+		side = minf(size.x * 0.78, size.y * 0.5 * 0.85)
+	var lift := 0.036 if round_top else 0.078
+	for spot in spots.size():
+		var quad := QuadMesh.new()
+		quad.size = Vector2(side, side)
+		var picture := StandardMaterial3D.new()
+		picture.albedo_texture = ISLET_ICONS[(index + spot) % ISLET_ICONS.size()]
+		picture.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+		picture.roughness = 0.4
+		var icon := MeshInstance3D.new()
+		icon.mesh = quad
+		icon.material_override = picture
+		icon.rotation_degrees.x = -90.0
+		icon.position = Vector3(0.0, lift, spots[spot])
+		icon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		body.add_child(icon)
+	#The column goes from under the platform to the water, narrower than the platform so it reads as a pedestal
+	var reach := minf(size.x, size.y) * 0.5 if not round_top else size.x
+	var stem := CylinderMesh.new()
+	stem.top_radius = reach * 0.5
+	stem.bottom_radius = reach * 0.4
+	stem.height = TrendLayout.ISLE_TOP - ISLET_THICKNESS + 0.1
+	stem.radial_segments = 20
+	stem.rings = 1
+	var column := MeshInstance3D.new()
+	column.mesh = stem
+	column.material_override = PartyKit.candy(color, PartyKit.WHITE, 6.0, 0.0, 0.1)
+	column.position.y = -ISLET_THICKNESS - stem.height / 2.0 + 0.05
+	body.add_child(column)
 
 
 #The screens of the maze: a body each that rises out of the floor and sinks back, red while it is up, and a strip on the floor
@@ -431,6 +496,7 @@ func _build_maze() -> void:
 		body.add_child(view)
 		add_child(body)
 		_screens.append(body)
+		_screen_shapes.append(collider)
 		var strip := MeshInstance3D.new()
 		var line := BoxMesh.new()
 		line.size = Vector3(TrendLayout.SCREEN_THICKNESS, 0.04, length)

@@ -145,13 +145,11 @@ func _tick_zones(delta: float) -> void:
 		if obstacles.in_pond(at):
 			_splash(player)
 			continue
-		#A screen about to rise sends whoever stands on it aside, and one that rises puts it out at once, so nobody rides it up
+		#A screen that rises puts out whoever stands on it at once, so nobody rides it up. Before it rises nobody is pushed: the way is
+		#open until then, and a push as strong as the walk (5 m/s) held back whoever was crossing a screen that was already down
 		var nudge := obstacles.screen_nudge(at, clock)
 		if nudge != Vector3.ZERO:
 			player.global_position += nudge
-		var warning := obstacles.screen_warning(at, clock)
-		if warning != Vector3.ZERO:
-			player.apply_push(warning.normalized() * 5.0)
 		var like := obstacles.like_push(at, clock)
 		if like != Vector3.ZERO and hazards_enabled and player.can_be_dazed():
 			_soft_hit(id, like)

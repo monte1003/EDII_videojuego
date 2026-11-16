@@ -5,7 +5,14 @@ extends Node
 #other comes in, and a screen with the same track keeps it going. A track whose file is not in the game yet is just silence
 
 const FOLDER := "res://assets/audio/music/%s.ogg"
-const VOLUME := -9.0
+#Tracks that are not "<name>.ogg": the music of the menus and the one of the feed race are mp3, the one of the street has its own name
+const FILES := {
+	&"menu": "res://assets/audio/music/music game menu.mp3",
+	&"level_01": "res://assets/audio/music/music game partidas.mp3",
+	&"street_game": "res://assets/audio/music/music game la calle.ogg",
+}
+#A little under the sounds of the interface, so the music never covers them
+const VOLUME := -12.0
 const FADE := 0.8
 #Track of each screen; the podium plays its own victory theme
 const TRACKS := {
@@ -32,13 +39,16 @@ func play_for(screen: StringName) -> void:
 		out.tween_property(old, "volume_db", -40.0, FADE)
 		out.tween_callback(old.queue_free)
 	_player = null
-	var path := FOLDER % track
+	var path: String = FILES.get(track, FOLDER % track)
 	if track == &"" or not ResourceLoader.exists(path):
 		return
-	var stream := load(path) as AudioStreamOggVorbis
-	if stream == null:
+	var stream := load(path) as AudioStream
+	if stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = true
+	elif stream is AudioStreamMP3:
+		(stream as AudioStreamMP3).loop = true
+	else:
 		return
-	stream.loop = true
 	_player = AudioStreamPlayer.new()
 	_player.stream = stream
 	_player.volume_db = -40.0
