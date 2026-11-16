@@ -102,6 +102,92 @@ static func land(length := 0.16) -> AudioStreamWAV:
 
 
 #A player that plays one of these sounds; the node frees itself when it ends
+#A snare roll that grows: strokes of noise ever closer and louder, for the moment before a reveal
+static func roll(length := 2.0) -> AudioStreamWAV:
+	var key := "roll_%s" % length
+	if _cache.has(key):
+		return _cache[key]
+	var count := int(MIX_RATE * length)
+	var data := _buffer(count)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31
+	var next_stroke := 0
+	var since := 0
+	var bright := 0.0
+	for index in count:
+		var progress := float(index) / count
+		if index >= next_stroke:
+			since = 0
+			next_stroke = index + int(MIX_RATE / lerpf(14.0, 26.0, progress))
+		since += 1
+		var stroke := exp(-float(since) / (MIX_RATE * 0.018))
+		bright = lerpf(bright, rng.randf_range(-1.0, 1.0), 0.6)
+		var body := sin(TAU * 190.0 * since / MIX_RATE) * 0.3
+		_write(data, index, (bright + body) * stroke * lerpf(0.25, 0.85, progress * progress))
+	return _store(key, data)
+
+
+#Air that rushes past: noise that swells and fades, brighter in the middle
+static func whoosh(length := 0.6) -> AudioStreamWAV:
+	var key := "whoosh_%s" % length
+	if _cache.has(key):
+		return _cache[key]
+	var count := int(MIX_RATE * length)
+	var data := _buffer(count)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 41
+	var soft := 0.0
+	for index in count:
+		var progress := float(index) / count
+		var swell := sin(PI * progress)
+		soft = lerpf(soft, rng.randf_range(-1.0, 1.0), lerpf(0.05, 0.35, swell))
+		_write(data, index, soft * swell * swell * 0.9)
+	return _store(key, data)
+
+
+#A bell: a few partials that ring and fade, the higher ones faster
+static func chime(frequency: float, length := 1.4) -> AudioStreamWAV:
+	var key := "chime_%s_%s" % [frequency, length]
+	if _cache.has(key):
+		return _cache[key]
+	var count := int(MIX_RATE * length)
+	var data := _buffer(count)
+	var partials := [[1.0, 1.0, 1.0], [2.0, 0.5, 1.8], [2.76, 0.35, 2.6], [5.4, 0.18, 4.0]]
+	for index in count:
+		var time := float(index) / MIX_RATE
+		var attack := minf(index / (MIX_RATE * 0.003), 1.0)
+		var sample := 0.0
+		for partial: Array in partials:
+			sample += sin(TAU * frequency * float(partial[0]) * time) * float(partial[1]) * exp(-time * float(partial[2]) * 2.2 / length)
+		_write(data, index, sample * attack * 0.32)
+	return _store(key, data)
+
+
+#A crowd that cheers: many voices of noise that rise and fall unevenly, with claps on top
+static func cheer(length := 3.0) -> AudioStreamWAV:
+	var key := "cheer_%s" % length
+	if _cache.has(key):
+		return _cache[key]
+	var count := int(MIX_RATE * length)
+	var data := _buffer(count)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 53
+	var voice := 0.0
+	var low := 0.0
+	var clap := 0.0
+	for index in count:
+		var progress := float(index) / count
+		var swell := minf(progress * 6.0, 1.0) * pow(1.0 - progress, 0.7)
+		voice = lerpf(voice, rng.randf_range(-1.0, 1.0), 0.18)
+		low = lerpf(low, voice, 0.08)
+		var murmur := (voice - low) * (0.75 + 0.25 * sin(progress * 40.0 + sin(progress * 13.0) * 3.0))
+		if rng.randf() < 0.0016:
+			clap = 1.0
+		clap *= 0.993
+		_write(data, index, (murmur * 1.3 + rng.randf_range(-1.0, 1.0) * clap * 0.35) * swell * 0.8)
+	return _store(key, data)
+
+
 static func play(parent: Node, stream: AudioStream, volume_db := 0.0, pitch := 1.0) -> void:
 	var player := AudioStreamPlayer.new()
 	player.stream = stream

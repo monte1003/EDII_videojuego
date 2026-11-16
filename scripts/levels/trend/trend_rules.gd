@@ -1,31 +1,27 @@
 class_name TrendRules
 extends RefCounted
 
-#The rules of the trend war with no nodes and by player id: five trends, each a chain of kinds to fetch in order before its clock
-#runs out. Whoever completes it sooner gets more points; whoever does not complete it gets none. Every change is told with a signal
+#The rules of the trend war with no nodes and by player id: five rounds, one in each zone. Every player always follows one trend, a kind
+#drawn at random; touching a bubble of that kind completes it, counts one and draws the next. The viral bubble is the trend of everybody
+#and counts more. More trends, more points. Every change is told with a signal
 
-enum Phase { WAITING, REVEAL, RUN, REST, DONE }
+enum Phase { WAITING, REVEAL, RUN, DONE }
 
-signal trend_revealed(index: int, chain: Array[int], limit: float)
-signal run_started(index: int)
-signal item_collected(player_id: int, slot: int, kind: int)
-signal item_lost(player_id: int, slot: int, kind: int)
-signal trend_completed(player_id: int, place: int, points: int)
-signal round_ended(index: int)
+#The kind of the viral bubble, after the six kinds of the catalog
+const VIRAL := TrendCatalog.COUNT
+
+signal zone_announced(index: int, seconds: float)
+signal zone_started(index: int)
+signal trend_drawn(player_id: int, kind: int)
+signal trend_completed(player_id: int, kind: int, value: int, total: int)
 signal finished
 
 class PlayerState:
 	var id: int
-	#How many kinds of the chain it already has
-	var collected := 0
-	var done := false
-	var place := 0
-	var round_points := 0
-	var total := 0
+	#The kind it follows now, and how many trends it completed
+	var trend := -1
 	var completed := 0
-	var best := 0
-	#Seconds of the fastest possible way to this trend from where it stood when the clock started
-	var par := 0.0
+	var virals := 0
 
 	func _init(player_id: int) -> void:
 		id = player_id
@@ -35,13 +31,14 @@ var settings: TrendSettings
 var sheet: ScoreSheet
 var players: Dictionary = {}
 var phase := Phase.WAITING
+#The round being played (its index in the order of the zones) and the seconds left of it
 var round_index := -1
-var chain: Array[int] = []
-#Seconds left of the phase that is running
 var time_left := 0.0
+#Trends a good player completes in the whole round: the scene works it out from the zones and the players
+var par := 1.0
 
 var _rng := RandomNumberGenerator.new()
-var _finishers := 0
+var _announced := -1
 
 
 func _init(round_settings: TrendSettings, score_sheet: ScoreSheet, ids: Array[int], seed_value: int) -> void:
@@ -53,149 +50,103 @@ func _init(round_settings: TrendSettings, score_sheet: ScoreSheet, ids: Array[in
 
 
 func round_count() -> int:
-	return mini(settings.limits.size(), settings.lengths.size())
-
-
-func limit_of(index: int) -> float:
-	return settings.limits[clampi(index, 0, settings.limits.size() - 1)]
+	return TrendLayout.ZONE_COUNT
 
 
 func state_of(player_id: int) -> PlayerState:
 	return players.get(player_id)
 
 
-#The first trend is shown
+#The first zone is announced; every player gets its first trend
 func start() -> void:
-	if phase == Phase.WAITING:
-		_reveal(0)
+	if phase != Phase.WAITING:
+		return
+	phase = Phase.REVEAL
+	round_index = 0
+	time_left = settings.reveal_seconds
+	_announced = 0
+	zone_announced.emit(0, time_left)
+	for state: PlayerState in players.values():
+		_draw(state)
 
 
 func tick(delta: float) -> void:
 	if phase == Phase.WAITING or phase == Phase.DONE:
 		return
 	time_left -= delta
-	if time_left > 0.0:
-		return
 	match phase:
 		Phase.REVEAL:
-			phase = Phase.RUN
-			time_left = limit_of(round_index)
-			run_started.emit(round_index)
+			if time_left <= 0.0:
+				phase = Phase.RUN
+				time_left = settings.zone_seconds
+				zone_started.emit(round_index)
 		Phase.RUN:
-			_end_round()
-		Phase.REST:
-			if round_index + 1 >= round_count():
-				phase = Phase.DONE
-				finished.emit()
-			else:
-				_reveal(round_index + 1)
+			if round_index + 1 < round_count() and _announced <= round_index and time_left <= settings.next_notice:
+				_announced = round_index + 1
+				zone_announced.emit(round_index + 1, time_left)
+			if time_left <= 0.0:
+				if round_index + 1 >= round_count():
+					phase = Phase.DONE
+					time_left = 0.0
+					finished.emit()
+				else:
+					round_index += 1
+					time_left = settings.zone_seconds
+					zone_started.emit(round_index)
 
 
-#The scene says how long the fastest way is for each player once the clock starts
-func set_par(player_id: int, seconds: float) -> void:
-	var state := state_of(player_id)
-	if state != null:
-		state.par = seconds
-
-
-#The kind this player has to fetch now; -1 when it is done or no trend is running
+#The kind this player follows; -1 while no zone is being played
 func needed(player_id: int) -> int:
 	var state := state_of(player_id)
-	if phase != Phase.RUN or state == null or state.done or state.collected >= chain.size():
+	if phase != Phase.RUN or state == null:
 		return -1
-	return chain[state.collected]
+	return state.trend
 
 
-#A player touches a bubble of "kind": it only counts when it is the one it needs now
+#Whether a bubble of "kind" is a trend for this player now: its own kind, or the viral one
+func wants(player_id: int, kind: int) -> bool:
+	var need := needed(player_id)
+	return need >= 0 and (kind == need or kind == VIRAL)
+
+
+#A player touches a bubble of "kind": it only counts when it is its trend or the viral one; then it draws the next trend
 func collect(player_id: int, kind: int) -> bool:
-	if kind < 0 or needed(player_id) != kind:
+	if not wants(player_id, kind):
 		return false
 	var state := state_of(player_id)
-	state.collected += 1
-	item_collected.emit(player_id, state.collected - 1, kind)
-	if state.collected >= chain.size():
-		_complete(state)
+	var value := settings.viral_value if kind == VIRAL else 1
+	state.completed += value
+	if kind == VIRAL:
+		state.virals += 1
+	trend_completed.emit(player_id, kind, value, state.completed)
+	if kind != VIRAL:
+		_draw(state)
 	return true
 
 
-#A shove or a hater takes the last item of a player that has not completed the trend; returns its kind, or -1 when it had none
-func strike(player_id: int) -> int:
-	var state := state_of(player_id)
-	if phase != Phase.RUN or state == null or state.done or state.collected <= 0:
-		return -1
-	state.collected -= 1
-	var kind := chain[state.collected]
-	item_lost.emit(player_id, state.collected, kind)
-	return kind
-
-
-#Share of the time between the par and the limit that is still left for a player: 1 at the par or sooner, 0 at the limit
-func left_share(player_id: int) -> float:
-	var state := state_of(player_id)
-	var limit := limit_of(round_index)
-	if state == null or limit - state.par <= 0.01:
+#How far the round of the zone is, from 0 when it starts to 1 when it ends
+func zone_share() -> float:
+	if phase != Phase.RUN:
 		return 0.0
-	return clampf(time_left / (limit - state.par), 0.0, 1.0)
+	return clampf(1.0 - time_left / settings.zone_seconds, 0.0, 1.0)
 
 
-func total_of(player_id: int) -> int:
+func points_of(player_id: int) -> int:
 	var state := state_of(player_id)
-	return state.total if state != null else 0
+	return sheet.trend_score(state.completed if state != null else 0, par)
 
 
 func totals() -> Dictionary:
 	var result: Dictionary = {}
 	for id: int in players:
-		result[id] = (players[id] as PlayerState).total
+		result[id] = points_of(id)
 	return result
 
 
-#A chain of kinds for a trend: no kind twice in a row, and from "repeat_from" on the first one comes back once
-static func make_chain(length: int, repeats: bool, rng: RandomNumberGenerator) -> Array[int]:
-	var made: Array[int] = []
-	var pool: Array[int] = []
-	for kind in TrendCatalog.COUNT:
-		pool.append(kind)
-	while made.size() < length:
-		var pick := pool[rng.randi() % pool.size()]
-		pool.erase(pick)
-		made.append(pick)
-	if repeats and length >= 3:
-		made[2 + rng.randi() % (length - 2)] = made[0]
-	return made
-
-
-func _reveal(index: int) -> void:
-	round_index = index
-	phase = Phase.REVEAL
-	time_left = settings.reveal_seconds
-	chain = make_chain(settings.lengths[index], index >= settings.repeat_from, _rng)
-	_finishers = 0
-	for state: PlayerState in players.values():
-		state.collected = 0
-		state.done = false
-		state.place = 0
-		state.round_points = 0
-		state.par = 0.0
-	trend_revealed.emit(index, chain, limit_of(index))
-
-
-func _complete(state: PlayerState) -> void:
-	_finishers += 1
-	state.done = true
-	state.place = _finishers
-	state.round_points = sheet.trend_points(left_share(state.id), state.place if players.size() > 1 else 1)
-	state.total += state.round_points
-	state.completed += 1
-	state.best = maxi(state.best, state.round_points)
-	trend_completed.emit(state.id, state.place, state.round_points)
-	if _finishers >= players.size():
-		_end_round()
-
-
-func _end_round() -> void:
-	if phase != Phase.RUN:
-		return
-	phase = Phase.REST
-	time_left = settings.rest_seconds
-	round_ended.emit(round_index)
+#A new trend: any kind but the one it just completed
+func _draw(state: PlayerState) -> void:
+	var kind := _rng.randi() % TrendCatalog.COUNT
+	if kind == state.trend:
+		kind = (kind + 1 + _rng.randi() % (TrendCatalog.COUNT - 1)) % TrendCatalog.COUNT
+	state.trend = kind
+	trend_drawn.emit(state.id, kind)

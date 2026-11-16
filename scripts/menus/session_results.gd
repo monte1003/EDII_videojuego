@@ -16,7 +16,7 @@ var _total_label: Label
 var _total_badge: MedalBadge
 var _record_label: Label
 var _total := 0
-var _local_id := GameState.PLAYER_ONE
+var _local_id := GameSession.local_id
 
 
 func _ready() -> void:

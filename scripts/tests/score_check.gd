@@ -49,8 +49,8 @@ func _check_curves() -> void:
 	_expect(_grows(hits) and hits.back() == 1000 and hits[0] == SHEET.street_survive, "calle: cada golpe resta y nunca baja de %d" % SHEET.street_survive)
 	var drop := _series(func(step: int) -> int: return SHEET.drop_points(float(step)), 81)
 	_expect(_grows(drop) and _bounded(drop) and drop.back() == 1000 and _max_jump(drop) <= 18, "SocialDrop: crece con los segundos, sin saltos (%d)" % _max_jump(drop))
-	var trend := _series(func(step: int) -> int: return SHEET.trend_points(step / 100.0, 1), 101)
-	_expect(_grows(trend) and trend[0] == 60 and trend.back() == 200, "tendencia: de 60 a 200 según el tiempo que sobra")
+	var trend := _series(func(step: int) -> int: return SHEET.trend_score(step, 30.0), 31)
+	_expect(_grows(trend) and trend[0] == 0 and trend.back() == 1000 and _max_jump(trend) <= 34, "tendencias: de 0 a 1000 hasta el par, sin saltos")
 	var selfie := _series(func(step: int) -> int: return SHEET.selfie_points(step * 10), 160)
 	_expect(_grows(selfie) and _bounded(selfie) and _max_jump(selfie) <= 12, "selfie: crece con los seguidores, sin saltos (%d)" % _max_jump(selfie))
 	_expect(SHEET.race_points(true, 10.0, 9, 1.0) == 1000 and SHEET.street_points(999.0, -3) == 1000 and SHEET.drop_points(500.0) == 1000,
@@ -64,19 +64,19 @@ func _check_references() -> void:
 	var table := {
 		"novato": [
 			SHEET.race_points(false, 150.0, 0, 0.6), SHEET.street_points(24.0, 5), SHEET.drop_points(22.0),
-			_trend([0.5, 0.3, -1.0, -1.0, -1.0]), SHEET.selfie_points(_selfie(4, 1, 0, 0, 1)),
+			_trend(0.3), SHEET.selfie_points(_selfie(4, 1, 0, 0, 1)),
 		],
 		"competente": [
 			SHEET.race_points(true, 118.0, 2, 1.0), SHEET.street_points(60.0, 6), SHEET.drop_points(52.0),
-			_trend([0.7, 0.6, 0.5, 0.4, -1.0]), SHEET.selfie_points(_selfie(7, 4, 3, 2, 1)),
+			_trend(0.6), SHEET.selfie_points(_selfie(7, 4, 3, 2, 1)),
 		],
 		"experto": [
 			SHEET.race_points(true, 98.0, 3, 1.0), SHEET.street_points(60.0, 3), SHEET.drop_points(68.0),
-			_trend([0.8, 0.7, 0.65, 0.6, 0.55]), SHEET.selfie_points(_selfie(8, 6, 6, 5, 1)),
+			_trend(0.82), SHEET.selfie_points(_selfie(8, 6, 6, 5, 1)),
 		],
 		"casi perfecto": [
 			SHEET.race_points(true, 74.0, 3, 1.0), SHEET.street_points(60.0, 1), SHEET.drop_points(80.0),
-			_trend([0.95, 0.9, 0.9, 0.85, 0.85]), SHEET.selfie_points(_selfie(8, 8, 8, 8, 1)),
+			_trend(0.95), SHEET.selfie_points(_selfie(8, 8, 8, 8, 1)),
 		],
 	}
 	var wanted := {"novato": ScoreSheet.Medal.BRONZE, "competente": ScoreSheet.Medal.SILVER, "experto": ScoreSheet.Medal.GOLD,
@@ -93,7 +93,7 @@ func _check_references() -> void:
 #Somebody who never touches a key gets at most Bronze anywhere
 func _check_idle() -> void:
 	var idle := [SHEET.race_points(false, 150.0, 0, 0.0), SHEET.street_points(8.0, 2), SHEET.drop_points(12.0),
-		_trend([-1.0, -1.0, -1.0, -1.0, -1.0]), SHEET.selfie_points(0)]
+		_trend(0.0), SHEET.selfie_points(0)]
 	var worst := 0
 	for value: int in idle:
 		worst = maxi(worst, value)
@@ -101,11 +101,8 @@ func _check_idle() -> void:
 
 
 func _check_trend_and_selfie() -> void:
-	_expect(SHEET.trend_points(1.0, 1) * SHEET.trend_rounds == 1000, "cinco tendencias perfectas suman 1000")
-	_expect(SHEET.trend_points(0.6, 2) < SHEET.trend_points(0.6, 1) and SHEET.trend_points(0.6, 4) < SHEET.trend_points(0.6, 3),
-		"cada puesto vale menos que el anterior")
-	_expect(SHEET.trend_points(0.6, 9) == SHEET.trend_points(0.6, 4), "un puesto fuera de la tabla vale como el último")
-	_expect(SHEET.medal_for(_trend([0.6, 0.5, -1.0, -1.0, -1.0])) == ScoreSheet.Medal.BRONZE, "dos tendencias de cinco: Bronce (%d)" % _trend([0.6, 0.5, -1.0, -1.0, -1.0]))
+	_expect(SHEET.trend_score(30, 30.0) == 1000 and SHEET.trend_score(45, 30.0) == 1000, "llegar al par da 1000 y pasarlo no da más")
+	_expect(SHEET.medal_for(_trend(0.4)) == ScoreSheet.Medal.BRONZE, "con el 40 %% del par: Bronce (%d)" % _trend(0.4))
 	_expect(SHEET.selfie_followers(false, false, 1) == 45 and SHEET.selfie_followers(true, true, 1) == 195, "sola en la foto: 45, y 195 con centro y pose")
 	_expect(SHEET.selfie_followers(true, true, 2) == 130 and SHEET.selfie_followers(true, true, 3) == 104 and SHEET.selfie_followers(true, true, 7) == 91,
 		"la exclusividad baja con dos, tres y cuatro o más")
@@ -140,12 +137,9 @@ func _check_book() -> void:
 	DirAccess.remove_absolute(absolute)
 
 
-func _trend(left: Array) -> int:
-	var total := 0
-	for value: float in left:
-		if value >= 0.0:
-			total += SHEET.trend_points(value, 1)
-	return total
+#Trend war points of a player that completes that share of the par of a round of 30 trends
+func _trend(share: float) -> int:
+	return SHEET.trend_score(roundi(share * 30.0), 30.0)
 
 
 #Followers of a round: photos inside the frame, in the centre, posing and both at once, with "crowd" in every photo

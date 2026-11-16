@@ -1,6 +1,6 @@
 extends Node
 
-#A game of ROUND_COUNT rounds; every change of state goes through these methods and is announced with a signal
+#A game of ROUND_COUNT rounds, one per minigame in a random order; every change of state goes through these methods and is announced with a signal
 
 enum Phase { IDLE, LOBBY, WARMUP, INTRO, PLAYING, ROUND_RESULTS, FINISHED }
 
@@ -9,7 +9,7 @@ signal round_selected(index: int, info: MinigameInfo)
 signal round_finished(result: RoundResult)
 signal session_finished(results: Array[RoundResult])
 
-const ROUND_COUNT := 4
+const ROUND_COUNT := 5
 #For a lobby opened on its own, without going through the character select
 const DEFAULT_CHARACTER: CharacterData = preload("res://resources/characters/fire.tres")
 
@@ -27,11 +27,41 @@ var score_book := ScoreBook.new()
 #Whether the total of the game that just ended beat the best one kept
 var session_record := false
 
+#The game on the local network: a room this computer opened or joined (offline it plays alone)
+var net := NetRoom.new()
+#The player of this computer: player 1 alone; in a room, the id the server gave it
+var local_id := GameState.PLAYER_ONE
+#The seed of each round, the same on every computer of a room (empty alone, where each round draws its own), and the one being played
+var seeds: Array[int] = []
+var round_seed := 0
+
 var _rng := RandomNumberGenerator.new()
+#In a room, the result of this computer while the server gathers the points of everybody
+var _waiting_result: RoundResult
+
+
+func _ready() -> void:
+	net.name = "Net"
+	add_child(net)
+	net.left.connect(_on_room_lost)
+
+
+#The server went away in the middle of a game: back to the main menu (the lobby says it by itself)
+func _on_room_lost(_reason: String) -> void:
+	if phase != Phase.LOBBY and phase != Phase.IDLE:
+		abandon()
+
+
+func is_networked() -> bool:
+	return net.is_active()
 
 
 #Fills the lobby with the players that picked a character; safe to call again
 func prepare_lobby() -> void:
+	if is_networked():
+		sync_lobby(net.room)
+		_set_phase(Phase.LOBBY)
+		return
 	lobby.clear()
 	for player_id in [GameState.PLAYER_ONE]:
 		var character := GameState.get_character(player_id)
@@ -65,17 +95,48 @@ func is_last_round() -> bool:
 
 #The lobby starts the session when everybody is ready: the warm-up comes first
 func start_session() -> void:
-	if not lobby.all_ready():
+	if not lobby.all_ready() or (is_networked() and not net.is_host()):
 		return
 	_rng.randomize()
 	plan = RoundPlanner.plan(MinigameCatalog.ready_entries(), ROUND_COUNT, _rng)
 	if plan.is_empty():
+		return
+	seeds.clear()
+	if is_networked():
+		#In a room there is no warm-up: the server sends the order and the seeds and every computer starts the first round
+		for index in plan.size():
+			seeds.append(_rng.randi_range(1, 2147483646))
+		net.start_game(plan, seeds)
+		begin_networked(plan, seeds)
 		return
 	results.clear()
 	round_index = -1
 	practice = false
 	_set_phase(Phase.WARMUP)
 	ScreenFlow.open(&"warmup")
+
+
+#The order of the rounds and their seeds came from the server (or this computer is the server)
+func begin_networked(order: Array[StringName], round_seeds: Array[int]) -> void:
+	plan = order.duplicate()
+	seeds = round_seeds.duplicate()
+	results.clear()
+	round_index = -1
+	practice = false
+	_waiting_result = null
+	_select_next_round()
+
+
+#The lobby of a room shows everybody in it, as the server says
+func sync_lobby(members: Array[Dictionary]) -> void:
+	lobby.slots.clear()
+	for member in members:
+		var character_path := "res://resources/characters/%s.tres" % str(member.get("character", "fire"))
+		var character: CharacterData = load(character_path) if ResourceLoader.exists(character_path) else DEFAULT_CHARACTER
+		var slot := PlayerSlot.new(int(member.get("id", 0)), str(member.get("name", "JUGADOR")), character)
+		slot.ready = bool(member.get("ready", false))
+		lobby.slots.append(slot)
+	lobby.changed.emit()
 
 
 func start_practice(id: StringName) -> void:
@@ -108,16 +169,45 @@ func report_result(result: RoundResult) -> bool:
 		return false
 	if result.score == null:
 		result.score = RoundScore.make(score_sheet, 0, "")
+	if is_networked() and not practice:
+		_waiting_result = result
+		net.report_points(round_index, result.points_of(local_id))
+		return true
+	_store_result(result)
+	return true
+
+
+#The server sent the points of everybody for a round: the result of this computer takes them and the results show
+func apply_round_points(index: int, points: Dictionary) -> void:
+	if _waiting_result == null or index != round_index or phase != Phase.PLAYING:
+		return
+	var result := _waiting_result
+	_waiting_result = null
+	result.points_by_player = points
+	_store_result(result)
+
+
+func _store_result(result: RoundResult) -> void:
 	result.score.record = score_book.submit_round(result.minigame_id, result.score.points)
 	results.append(result)
 	_set_phase(Phase.ROUND_RESULTS)
 	round_finished.emit(result)
 	ScreenFlow.open(&"round_results")
-	return true
 
 
 #From the round results: the next round, or the end of the session
 func advance() -> void:
+	if phase != Phase.ROUND_RESULTS:
+		return
+	if is_networked() and not practice:
+		#In a room only the server moves everybody on
+		if not net.is_host():
+			return
+		net.advance_all()
+	advance_now()
+
+
+func advance_now() -> void:
 	if phase != Phase.ROUND_RESULTS:
 		return
 	if practice:
@@ -127,10 +217,10 @@ func advance() -> void:
 		_set_phase(Phase.LOBBY)
 		ScreenFlow.open(&"lobby")
 	elif is_last_round():
-		session_record = score_book.submit_session(total_of(GameState.PLAYER_ONE))
+		session_record = score_book.submit_session(total_of(local_id))
 		_set_phase(Phase.FINISHED)
 		session_finished.emit(results)
-		ScreenFlow.open(&"session_results")
+		ScreenFlow.open(&"podium")
 	else:
 		_select_next_round()
 
@@ -168,6 +258,11 @@ func session_medal(player_id: int) -> ScoreSheet.Medal:
 	return score_sheet.medal_for(roundi(float(total_of(player_id)) / results.size()))
 
 
+#The tree of scores of everybody who played, for the podium
+func ranking() -> AVLTree:
+	return _ranking()
+
+
 func _ranking() -> AVLTree:
 	var tree := AVLTree.new()
 	for slot in participants():
@@ -184,11 +279,13 @@ func restart_round() -> void:
 #New game from the end screen: back to the lobby with the same character
 func play_again() -> void:
 	reset()
+	net.reopen()
 	prepare_lobby()
 	ScreenFlow.open(&"lobby")
 
 
 func abandon() -> void:
+	net.close()
 	reset()
 	ScreenFlow.go_to_root()
 
@@ -205,6 +302,7 @@ func reset() -> void:
 
 func _select_next_round() -> void:
 	round_index += 1
+	round_seed = seeds[round_index] if round_index < seeds.size() else 0
 	_set_phase(Phase.INTRO)
 	round_selected.emit(round_index, current_info())
 	ScreenFlow.open(&"round_intro")

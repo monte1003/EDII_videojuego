@@ -1,10 +1,13 @@
 class_name SelfieDrone
 extends Node3D
 
-#The camera drone: it flies from photo to photo over the islands, hovers, leans into its way and shrinks for a blink when it shoots.
-#A beam of light hangs under it down to the floor, and the frame it draws there is a flat piece with its own shader
+#The camera drone: it flies from set to set over the studio, hovers, leans into its way and shrinks for a blink when it shoots.
+#A beam of light hangs under it down to the floor, and the frame it draws there is a flat piece with its own shader, with a low wall
+#of light along its edges that shows it from afar. The beam and the frame only guide the players: the photo leaves them out
 
 const FRAME_SHADER: Shader = preload("res://assets/shaders/photo_frame.gdshader")
+const CURTAIN_SHADER: Shader = preload("res://assets/shaders/frame_curtain.gdshader")
+const CURTAIN_HEIGHT := 1.1
 const MODEL_HEIGHT := 1.9
 const BEAM_COLOR := Color("fff1b8")
 const FRAME_LIFT := 0.05
@@ -14,6 +17,7 @@ var _body: Node3D
 var _beam: MeshInstance3D
 var _frame: MeshInstance3D
 var _frame_material: ShaderMaterial
+var _curtain_material: ShaderMaterial
 var _flash: MeshInstance3D
 var _path: Array[Vector3] = []
 var _lengths: Array[float] = []
@@ -38,6 +42,7 @@ func build(at: Vector3, center_share: float) -> void:
 	_beam = PartyKit.beam(BEAM_COLOR, SelfieLayout.DRONE_HEIGHT, 2.6, 0.5)
 	_beam.rotation.x = PI
 	_beam.position.y = -SelfieLayout.DRONE_HEIGHT / 2.0
+	_beam.layers = SelfieCamera.layer_bit(SelfieCamera.FRAME_LAYER)
 	add_child(_beam)
 	var glow := SphereMesh.new()
 	glow.radius = 1.5
@@ -52,6 +57,7 @@ func build(at: Vector3, center_share: float) -> void:
 	_flash.mesh = glow
 	_flash.material_override = white
 	_flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_flash.layers = SelfieCamera.layer_bit(SelfieCamera.FRAME_LAYER)
 	_flash.hide()
 	add_child(_flash)
 
@@ -66,8 +72,45 @@ func build(at: Vector3, center_share: float) -> void:
 	_frame.material_override = _frame_material
 	_frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_frame.top_level = true
+	_frame.layers = SelfieCamera.layer_bit(SelfieCamera.FRAME_LAYER)
 	_frame.hide()
 	add_child(_frame)
+	_curtain_material = ShaderMaterial.new()
+	_curtain_material.shader = CURTAIN_SHADER
+	_curtain_material.render_priority = 1
+	var curtain := MeshInstance3D.new()
+	curtain.mesh = _curtain_mesh()
+	curtain.material_override = _curtain_material
+	curtain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	curtain.layers = SelfieCamera.layer_bit(SelfieCamera.FRAME_LAYER)
+	_frame.add_child(curtain)
+
+
+#The four sides of a square of one meter, standing up from the floor: the frame scales it to its size
+func _curtain_mesh() -> ArrayMesh:
+	var corners: Array[Vector3] = [Vector3(-0.5, 0.0, -0.5), Vector3(0.5, 0.0, -0.5), Vector3(0.5, 0.0, 0.5), Vector3(-0.5, 0.0, 0.5)]
+	var points := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var up := Vector3(0.0, CURTAIN_HEIGHT, 0.0)
+	for index in 4:
+		var from := corners[index]
+		var to := corners[(index + 1) % 4]
+		var start := index / 4.0
+		var end := (index + 1) / 4.0
+		var outward := ((from + to) / 2.0).normalized()
+		points.append_array([from, to, to + up, from, to + up, from + up])
+		for corner in 6:
+			normals.append(outward)
+		uvs.append_array([Vector2(start, 0.0), Vector2(end, 0.0), Vector2(end, 1.0), Vector2(start, 0.0), Vector2(end, 1.0), Vector2(start, 1.0)])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = points
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
 
 
 #Flies along "points" (the first one is where it is) in "seconds"
@@ -91,7 +134,9 @@ func show_frame(center: Vector3, side: float, lock: float) -> void:
 	_frame.global_position = center + Vector3(0.0, FRAME_LIFT, 0.0)
 	_frame.global_basis = Basis.from_scale(Vector3(side, 1.0, side))
 	_frame_material.set_shader_parameter("side", side)
-	_frame_material.set_shader_parameter("blink", pow(absf(sin(lock * PI * 3.0)), 0.6) if lock > 0.0 else 0.0)
+	var blink := pow(absf(sin(lock * PI * 3.0)), 0.6) if lock > 0.0 else 0.0
+	_frame_material.set_shader_parameter("blink", blink)
+	_curtain_material.set_shader_parameter("blink", blink)
 	_aim = center
 
 

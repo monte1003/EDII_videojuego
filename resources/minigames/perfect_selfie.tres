@@ -12,5 +12,5 @@ scene_path = "res://scenes/levels/perfect_selfie.tscn"
 accent = Color(0.992, 0.337, 0.498, 1)
 ready = true
 card_art = ExtResource("2_art")
-brief = "Entra al marco antes del disparo"
+brief = "Entra al marco"
 keys = PackedStringArray("move|mover", "interact|posar", "shove|empujar")

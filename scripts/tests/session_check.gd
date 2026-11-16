@@ -2,7 +2,7 @@ extends SceneTree
 
 #Checks the decision tree of rounds, the planner and the lobby; run: godot --headless --path . --script res://scripts/tests/session_check.gd
 
-const ROUNDS := 4
+const ROUNDS := 5
 
 var _failures := 0
 
@@ -33,8 +33,8 @@ func _pool(count: int) -> Array[StringName]:
 
 func _check_tree_sizes() -> void:
 	var six := DecisionTree.build(_pool(6), ROUNDS)
-	_expect(six.leaf_count() == 6 * 5 * 4 * 3, "6 minijuegos y 4 rondas: 360 recorridos (%d)" % six.leaf_count())
-	_expect(six.node_count() == 1 + 6 + 30 + 120 + 360, "6 minijuegos: 517 nodos (%d)" % six.node_count())
+	_expect(six.leaf_count() == 6 * 5 * 4 * 3 * 2, "6 minijuegos y 5 rondas: 720 recorridos (%d)" % six.leaf_count())
+	_expect(six.node_count() == 1 + 6 + 30 + 120 + 360 + 720, "6 minijuegos: 1237 nodos (%d)" % six.node_count())
 	var two := DecisionTree.build(_pool(2), ROUNDS)
 	_expect(two.leaf_count() == 2, "2 minijuegos: solo 2 recorridos, alternando (%d)" % two.leaf_count())
 	var one := DecisionTree.build(_pool(1), ROUNDS)
@@ -100,6 +100,17 @@ func _check_catalog() -> void:
 		for id in RoundPlanner.plan(ready, ROUNDS, rng):
 			seen[id] = true
 	_expect(seen.size() == 5, "en 300 partidas sorteadas salen los cinco minijuegos")
+	var complete := true
+	var orders: Dictionary = {}
+	for attempt in 300:
+		var plan := RoundPlanner.plan(ready, ROUNDS, rng)
+		var kinds: Dictionary = {}
+		for id in plan:
+			kinds[id] = true
+		complete = complete and plan.size() == 5 and kinds.size() == 5
+		orders[str(plan)] = true
+	_expect(complete, "cada partida tiene las cinco rondas con los cinco minijuegos, ninguno repetido")
+	_expect(orders.size() > 50, "el orden cambia de una partida a otra (%d órdenes distintos en 300)" % orders.size())
 	var tree := DecisionTree.build(_pool(5), ROUNDS)
 	_expect(tree.leaf_count() == 5 * 4 * 3 * 2, "con cinco minijuegos el árbol de decisión tiene 120 partidas posibles (%d)" % tree.leaf_count())
 

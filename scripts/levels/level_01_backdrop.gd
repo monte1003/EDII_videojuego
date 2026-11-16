@@ -4,6 +4,8 @@ extends Node3D
 #Giant hearts, chat bubbles, bells, phones, islands and clouds around the course: they give the level depth and its theme and never collide.
 #Each one keeps clear of the big wheels and of every other piece, and sleeps when no camera is near
 
+#How soon the far props take their simpler shapes (1 is what the engine does by itself)
+const SCENERY_LOD := 0.35
 #What floats around: model, how many, its size range (the measure that is fitted) and whether it is tall or long
 const KINDS: Array[Dictionary] = [
 	{"id": &"heart", "count": 10, "size": Vector2(4.5, 8.0), "tall": true},
@@ -49,6 +51,9 @@ func build() -> void:
 				item = PropKit.make_tall(kind["id"], size, Color.WHITE, false)
 			else:
 				item = PropKit.make_long(kind["id"], size, Color.WHITE, false)
+			#Far scenery takes its simpler shapes sooner: the same pieces, never hidden, with fewer triangles while they are small on screen
+			for piece in item.find_children("*", "MeshInstance3D", true, false):
+				(piece as MeshInstance3D).lod_bias = SCENERY_LOD
 			_taken.append(Vector4(at.x, at.y, at.z, reach))
 			_add(item, at, atan2(-signf(at.x), 0.8), rng)
 	var sea := CloudField.new()

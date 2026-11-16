@@ -30,7 +30,7 @@ func _ready() -> void:
 
 #Going back makes no sense here: Enter goes on
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("menu_confirm"):
+	if event.is_action_pressed("menu_confirm") and (not GameSession.is_networked() or GameSession.net.is_host() or GameSession.practice):
 		get_viewport().set_input_as_handled()
 		_confirm()
 
@@ -145,6 +145,8 @@ func _with_article(medal: int) -> String:
 func _next_text() -> String:
 	if GameSession.practice:
 		return "VOLVER A LA SALA"
+	if GameSession.is_networked() and not GameSession.net.is_host():
+		return "ESPERANDO AL ANFITRIÓN"
 	return "VER RESULTADOS" if GameSession.is_last_round() else "SIGUIENTE RONDA"
 
 

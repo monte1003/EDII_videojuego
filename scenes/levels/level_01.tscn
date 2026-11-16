@@ -9,11 +9,6 @@
 [ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="13_help"]
 [ext_resource type="Resource" path="res://resources/levels/level_01.tres" id="15_settings"]
 [ext_resource type="Script" path="res://scripts/levels/level_input.gd" id="14_input"]
-[ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="8_appearance"]
-[ext_resource type="Resource" path="res://resources/bots/troll.tres" id="9_troll"]
-[ext_resource type="Resource" path="res://resources/bots/hoax.tres" id="10_hoax"]
-[ext_resource type="Resource" path="res://resources/bots/mirror.tres" id="11_mirror"]
-[ext_resource type="Resource" path="res://resources/bots/spam.tres" id="12_spam"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.14, 0.4, 1, 1)
@@ -51,7 +46,6 @@ adjustment_saturation = 1.15
 script = ExtResource("1_script")
 default_character = ExtResource("2_fire")
 settings = ExtResource("15_settings")
-bot_appearances = Array[ExtResource("8_appearance")]([ExtResource("9_troll"), ExtResource("12_spam"), ExtResource("10_hoax"), ExtResource("11_mirror")])
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_world")

@@ -6,16 +6,14 @@ const STEP := 0.1
 
 var _failures := 0
 var _outcomes: Array[int] = []
-var _blocks: Array[bool] = []
 
 
 func _initialize() -> void:
 	_check_time()
-	_check_abilities()
 	_check_falls()
 	_check_hits_and_protection()
 	_check_goal()
-	_check_checkpoint_and_detection()
+	_check_checkpoint()
 	_check_race()
 	print("level_rules_check: %s" % ("OK" if _failures == 0 else "%d FALLOS" % _failures))
 	quit(1 if _failures > 0 else 0)
@@ -29,10 +27,8 @@ func _expect(condition: bool, label: String) -> void:
 
 func _rules(player_ids: Array[int]) -> Level01Rules:
 	_outcomes.clear()
-	_blocks.clear()
 	var rules := Level01Rules.new(Level01Settings.new(), player_ids, &"S")
 	rules.outcome_decided.connect(func(outcome: int) -> void: _outcomes.append(outcome))
-	rules.block_changed.connect(func(active: bool) -> void: _blocks.append(active))
 	return rules
 
 
@@ -54,21 +50,6 @@ func _check_time() -> void:
 	_expect(rules.elapsed == elapsed, "con la ronda decidida el tiempo ya no avanza")
 
 
-func _check_abilities() -> void:
-	var rules := _rules([1, 2])
-	_expect(rules.use_ability(1, Level01Rules.Ability.BLOCK) == Level01Rules.Use.OK, "Bloquear se puede usar al empezar")
-	_expect(rules.use_ability(1, Level01Rules.Ability.BLOCK) == Level01Rules.Use.COOLDOWN, "Bloquear se está recargando justo después")
-	_expect(rules.use_ability(2, Level01Rules.Ability.BLOCK) == Level01Rules.Use.OK, "cada jugador tiene su propia recarga")
-	_run(rules, 0.5)
-	_expect(rules.block_active() and _blocks == [true], "el puente se cierra mientras alguien tiene Bloquear activo")
-	_run(rules, rules.settings.block_duration)
-	_expect(not rules.block_active() and _blocks == [true, false], "al terminar Bloquear el puente se abre una vez")
-	_expect(rules.cooldown_left(1, Level01Rules.Ability.BLOCK) > 0.0, "sigue la recarga después de que termine el efecto")
-	_run(rules, rules.settings.block_cooldown)
-	_expect(rules.use_ability(1, Level01Rules.Ability.BLOCK) == Level01Rules.Use.OK, "pasada la recarga se vuelve a poder")
-	_expect(rules.use_ability(99, Level01Rules.Ability.BLOCK) == Level01Rules.Use.COOLDOWN, "un jugador desconocido no usa nada")
-
-
 func _check_falls() -> void:
 	var rules := _rules([1])
 	_expect(rules.fall(1) and rules.state_of(1).attempts_left == 2, "una caída cuesta un intento y se sigue")
@@ -87,11 +68,9 @@ func _check_hits_and_protection() -> void:
 	_expect(not rules.register_hit(1), "justo después no vuelve a dar")
 	_run(rules, rules.settings.hit_immunity + 0.2)
 	_expect(rules.register_hit(1), "pasada la inmunidad vuelve a dar")
-	var shelter := _rules([1])
-	shelter.use_ability(1, Level01Rules.Ability.REFUGE)
-	_expect(shelter.is_protected(1) and not shelter.register_hit(1), "dentro del refugio no te empujan")
-	shelter.leave_refuge(1)
-	_expect(not shelter.is_protected(1), "salir del refugio termina la protección")
+	var back := _rules([1])
+	back.fall(1)
+	_expect(back.is_protected(1) and not back.register_hit(1), "recién vuelto de una caída nada lo golpea")
 
 
 func _check_goal() -> void:
@@ -105,22 +84,14 @@ func _check_goal() -> void:
 	_expect(pair.outcome == Level01Rules.Outcome.WON, "con los dos en la meta se gana")
 
 
-func _check_checkpoint_and_detection() -> void:
+func _check_checkpoint() -> void:
 	var rules := _rules([1])
 	_expect(rules.reach_checkpoint(1, &"H") and not rules.reach_checkpoint(1, &"H"), "el checkpoint cuenta solo la primera vez")
 	_expect(rules.state_of(1).checkpoint == &"H", "el checkpoint se guarda")
-	_expect(rules.detection_radius(1) == rules.settings.detection_radius, "sin silencio los bots ven de lejos")
-	rules.use_ability(1, Level01Rules.Ability.SILENCE)
-	_expect(rules.detection_radius(1) == rules.settings.silenced_detection_radius, "con silencio ven de cerca")
-	_run(rules, rules.settings.silence_duration + 0.5)
-	_expect(rules.detection_radius(1) == rules.settings.detection_radius, "el silencio se acaba")
-	_expect(Level01Settings.new().bot_count_for(1) == 4 and Level01Settings.new().bot_count_for(4) == 4,
-		"hay cuatro bots con cualquier cantidad de jugadores")
 
 
 func _race(player_ids: Array[int]) -> Level01Rules:
 	_outcomes.clear()
-	_blocks.clear()
 	var rules := Level01Rules.new(Level01Settings.new(), player_ids, &"S")
 	rules.outcome_decided.connect(func(outcome: int) -> void: _outcomes.append(outcome))
 	return rules
@@ -179,4 +150,4 @@ func _check_race() -> void:
 	_expect(pair.outcome == Level01Rules.Outcome.WON, "cuando los dos jugadores llegaron la ronda termina")
 	var arrived := _race([1, 2])
 	arrived.reach_goal(1)
-	_expect(arrived.use_ability(1, Level01Rules.Ability.SILENCE) == Level01Rules.Use.COOLDOWN, "quien ya llegó no usa estaciones")
+	_expect(not arrived.fall(1) and arrived.state_of(1).attempts_left == arrived.settings.attempts, "quien ya llegó no pierde intentos")

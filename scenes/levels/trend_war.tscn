@@ -8,15 +8,10 @@
 [ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="6_help"]
 [ext_resource type="Script" path="res://scripts/levels/level_input.gd" id="7_input"]
 [ext_resource type="Resource" path="res://resources/levels/trend_war.tres" id="8_settings"]
-[ext_resource type="Resource" path="res://resources/bots/troll.tres" id="9_troll"]
-[ext_resource type="Resource" path="res://resources/bots/spam.tres" id="10_spam"]
-[ext_resource type="Resource" path="res://resources/bots/hoax.tres" id="11_hoax"]
-[ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="12_appearance"]
 
 [node name="TrendWar" type="Node3D"]
 script = ExtResource("1_script")
 settings = ExtResource("8_settings")
-bot_looks = Array[ExtResource("12_appearance")]([ExtResource("9_troll"), ExtResource("10_spam"), ExtResource("11_hoax")])
 default_character = ExtResource("2_fire")
 
 [node name="World" type="Node3D" parent="."]

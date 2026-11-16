@@ -9,6 +9,17 @@ signal hit_taken(hit: Hit)
 signal landed(at: Vector3, hard: bool)
 #Two players ran into each other and bounced apart; "strength" goes from 0 to 1
 signal bumped(other: Player, strength: float)
+#The dive: it leaves toward "direction", touches the ground at "at" and ends when the player is back on its feet
+signal dive_started(direction: Vector3)
+signal dive_landed(at: Vector3)
+signal dive_ended
+#A daze starts or ends
+signal dazed_changed(dazed: bool)
+#The pull of the ground changed: "pull_sign" is 1 (down) or -1 (up) and "pull_scale" how strong it is
+signal gravity_changed(pull_sign: float, pull_scale: float)
+
+#The parts of a dive: in the air, sliding on the belly, lying still and getting up
+enum Dive { NONE, FLIGHT, SLIDE, DOWN, RISE }
 
 #What a blow does to the player
 class Hit:
@@ -19,6 +30,8 @@ class Hit:
 	var flips := false
 	#How hard it feels, from 0 to 1: the hop, the shake of the camera and the effects
 	var strength := 0.0
+	#A daze never flips: the player staggers back on its feet, cannot act for "stun" seconds and sees stars
+	var dazes := false
 
 @export var move_speed := 5.0
 @export var jump_velocity := 4.5
@@ -45,12 +58,42 @@ const BUMP_HOP := 1.6
 const DUST_EVERY := 0.26
 #A pose: how far the body leans from side to side and how much taller it stands
 const POSE_LEAN := 0.2
+#How fast a puppet of another computer catches up with the place it was told
+const REMOTE_FOLLOW := 14.0
 const POSE_STRETCH := 0.07
 #A cannon shot: how much of its own speed the player can steer with in the air, the seconds before landing can end it, and how much of the
 #speed of the flight it keeps as a skid when it lands
 const FLIGHT_CONTROL := 0.3
 const FLIGHT_GRACE := 0.2
 const FLIGHT_SKID := 0.3
+#The dive, a second press of the jump in the air: it flies faster than a run (a share of the speed of the player) along a low arc
+#(its speed up is kept between these two), slides on landing and leaves the player lying before it gets up. A press counts
+#once the player has been this long in the air, and one that comes a little early is remembered for a moment
+const DIVE_SPEED_RATIO := 1.24
+const DIVE_LIFT_MIN := 1.0
+const DIVE_LIFT_MAX := 2.0
+const DIVE_ARM_TIME := 0.12
+const DIVE_MEMORY := 0.15
+const DIVE_SLIDE_TIME := 0.35
+const DIVE_DOWN_TIME := 0.5
+const DIVE_RISE_TIME := GET_UP_TIME
+#The farthest a jump and a dive reach on flat ground, with room to spare: no gap meant to stop a player may be narrower
+const DIVE_MAX_REACH := 8.5
+const DIVE_FOV_KICK := 4.0
+const SLIDE_DUST_EVERY := 0.08
+#Seconds of the clip of getting up, which is played faster to fit the rise
+const RISE_CLIP_TIME := 0.45
+#A daze: the little hop it gives, how far the body leans back, where the stars turn and the grace after it in which nothing dazes again
+const DAZE_HOP := 1.3
+const DAZE_LEAN := 0.42
+const DAZE_HALO_HEIGHT := 0.72
+const DAZE_HALO_SPIN := 7.0
+const DAZE_GUARD := 0.25
+#A turned or weaker gravity: the body turns over in this time, its vertical speed stays under this, and a fall back to the
+#normal gravity is held under this speed until it lands
+const GRAVITY_TURN_TIME := 0.25
+const FLOAT_MAX_SPEED := 7.0
+const SAFE_FALL_SPEED := 7.0
 
 var player_id := 0
 var move_input := Vector2.ZERO
@@ -61,8 +104,19 @@ var push_velocity := Vector3.ZERO
 var external_velocity := Vector3.ZERO
 #Set by the round every frame: true while the player overlaps what hit it
 var touching := false
-#Striking a pose: the player stands still and cannot jump while the round keeps it on
-var posing := false
+#Striking a pose: the player stands still and cannot jump while the round keeps it on; "pose_style" says which pose or dance
+var posing := false: set = _set_posing
+var pose_style := 0
+#Each round says whether its players can dive
+var dive_enabled := false
+#While something carries the body (the bubble of a deck), it does not move on its own: whoever carries it sets where it is
+var carried := false
+#A player of another computer: it follows the states that come from there instead of its own physics and ignores the blows of this one
+var remote := false
+var dive_phase := Dive.NONE
+#The pull of the ground: 1 down or -1 up, and how strong it is. Only set_gravity_state changes them
+var gravity_sign := 1.0
+var gravity_scale := 1.0
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _model: CharacterModel
@@ -91,6 +145,26 @@ var _flight_age := 0.0
 var _tumble_axis := Vector3.RIGHT
 var _tumble_angle := 0.0: set = _set_tumble_angle
 var _tumble_tween: Tween
+#The dive: its speed along the ground, how fast the slide brakes, the seconds left of its part, whether this jump already
+#dived, the seconds in the air and how long a press of the jump is still remembered
+var _dive_velocity := Vector3.ZERO
+var _dive_brake := 0.0
+var _dive_left := 0.0
+var _dive_used := false
+var _air_time := 0.0
+var _dive_wanted_left := 0.0
+var _pose_playing := false
+var _remote_at := Vector3.ZERO
+var _remote_yaw := 0.0
+var _remote_moving := false
+var _remote_airborne := false
+var _dazed := false
+var _halo: Node3D
+#How far the body is turned over by a gravity that pulls up, from 0 to PI, and a fall back to normal that is still held soft
+var _turn := 0.0: set = _set_turn
+var _turn_tween: Tween
+var _camera_height := 0.0
+var _safe_fall := false
 
 @onready var _model_pivot: Node3D = $ModelPivot
 @onready var _camera_rig: PlayerCamera = $CameraRig
@@ -106,6 +180,7 @@ func _ready() -> void:
 	_tumble = Node3D.new()
 	_tumble.position = Vector3(0.0, TUMBLE_CENTER, 0.0)
 	_body.add_child(_tumble)
+	_camera_height = _camera_rig.position.y
 
 
 func set_character(character: CharacterData) -> void:
@@ -119,6 +194,14 @@ func set_character(character: CharacterData) -> void:
 #Where the model looks, on the ground
 func look_direction() -> Vector3:
 	return Basis(Vector3.UP, _model_pivot.rotation.y) * Vector3.BACK
+
+
+#Turns the camera and the model to look along "direction" on the ground, as when a round places the player
+func face(direction: Vector3) -> void:
+	if Vector2(direction.x, direction.z).length() < 0.01:
+		return
+	_camera_rig.rotation.y = atan2(-direction.x, -direction.z)
+	_model_pivot.rotation.y = _camera_rig.rotation.y + PI
 
 
 func view_camera() -> Camera3D:
@@ -141,8 +224,95 @@ func is_down() -> bool:
 	return _stun_left > 0.0
 
 
+func is_dazed() -> bool:
+	return _dazed
+
+
+#Not dazed and past the grace that follows a daze
+func can_be_dazed() -> bool:
+	return not _dazed and not _invulnerable
+
+
+#The one place where the pull of the ground changes. With "pull_sign" -1 the player falls up and stands on what is over it; the body
+#turns over smoothly, and when it comes back to 1 it turns back and lands softly
+func set_gravity_state(pull_sign: float, pull_scale: float) -> void:
+	var new_sign := -1.0 if pull_sign < 0.0 else 1.0
+	var new_scale := clampf(pull_scale, 0.05, 1.0)
+	if new_sign == gravity_sign and new_scale == gravity_scale:
+		return
+	var was_normal := is_gravity_normal()
+	var turned := new_sign != gravity_sign
+	gravity_sign = new_sign
+	gravity_scale = new_scale
+	up_direction = Vector3.UP * gravity_sign
+	_peak_fall = 0.0
+	_safe_fall = not was_normal and is_gravity_normal() and not is_on_floor()
+	if turned:
+		_cancel_dive()
+		if _turn_tween != null and _turn_tween.is_valid():
+			_turn_tween.kill()
+		_turn_tween = create_tween()
+		_turn_tween.tween_property(self, "_turn", PI if gravity_sign < 0.0 else 0.0, GRAVITY_TURN_TIME) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	gravity_changed.emit(gravity_sign, gravity_scale)
+
+
+func is_gravity_normal() -> bool:
+	return gravity_sign > 0.0 and gravity_scale >= 1.0
+
+
+#From the leap of a dive until the player is back on its feet
+func is_diving() -> bool:
+	return dive_phase != Dive.NONE
+
+
+#The arms go out: what a shove looks like on whoever gives it
+func play_shove() -> void:
+	if _model != null and not is_diving():
+		_model.play_move(CharacterModel.SHOVE, false, 0.04)
+
+
 #A plain shove: the horizontal part fades out and the vertical part is a small hop
+#Turns this player into the puppet of a player of another computer
+func make_remote() -> void:
+	remote = true
+	set_input_enabled(false)
+	_remote_at = global_position
+
+
+#The last state its computer sent: where it is, where it looks, whether it moves, flies or poses
+func set_remote_state(at: Vector3, yaw: float, moving: bool, airborne: bool, pose_on: bool, style: int) -> void:
+	_remote_at = at
+	_remote_yaw = yaw
+	_remote_moving = moving
+	_remote_airborne = airborne
+	if pose_on != posing or (pose_on and style != pose_style):
+		pose_style = style
+		posing = false
+		posing = pose_on
+
+
+#What this computer sends of its own player
+func remote_state() -> Dictionary:
+	var at := global_position
+	return {"p": [snappedf(at.x, 0.01), snappedf(at.y, 0.01), snappedf(at.z, 0.01)], "r": snappedf(_model_pivot.rotation.y, 0.01),
+		"m": Vector2(velocity.x, velocity.z).length() > 0.4, "a": not is_on_floor(), "po": posing, "ps": pose_style}
+
+
+#A puppet glides to the last place it was told (a jump of more than 4 m is a teleport) and turns and moves its model the same way
+func _follow_remote(delta: float) -> void:
+	if global_position.distance_to(_remote_at) > 4.0:
+		global_position = _remote_at
+	else:
+		global_position = global_position.lerp(_remote_at, 1.0 - exp(-REMOTE_FOLLOW * delta))
+	_model_pivot.rotation.y = lerp_angle(_model_pivot.rotation.y, _remote_yaw, 1.0 - exp(-REMOTE_FOLLOW * delta))
+	if _model != null and not posing:
+		_model.set_state(_remote_moving, _remote_airborne)
+
+
 func apply_push(impulse: Vector3) -> void:
+	if remote:
+		return
 	push_velocity = Vector3(impulse.x, 0.0, impulse.z)
 	velocity.y = maxf(velocity.y, impulse.y)
 	if impulse.y > 3.0:
@@ -151,6 +321,7 @@ func apply_push(impulse: Vector3) -> void:
 
 #A cannon shot: the player flies along an arc that only it can bend a little, and lands wherever the arc ends
 func launch(impulse: Vector3) -> void:
+	_cancel_dive()
 	_flight = Vector3(impulse.x, 0.0, impulse.z)
 	_flying = true
 	_flight_age = 0.0
@@ -183,7 +354,15 @@ func squash(amount: float) -> void:
 
 #A blow: it throws the player, then it flips or staggers and gets up
 func take_hit(hit: Hit) -> void:
+	if remote:
+		return
+	if hit.dazes:
+		_daze(hit)
+		return
 	_end_flight(false)
+	_cancel_dive()
+	if not hit.flips and _model != null and not posing:
+		_model.play_move(CharacterModel.STAGGER, false, 0.05)
 	push_velocity = hit.push
 	velocity.y = maxf(velocity.y, 1.6 + 2.2 * hit.strength)
 	_hit_flight = true
@@ -197,9 +376,56 @@ func take_hit(hit: Hit) -> void:
 	hit_taken.emit(hit)
 
 
+#A daze: the player is thrown back on its feet, staggers with stars over its head and gets its hands back after "stun" seconds;
+#a short grace follows in which nothing dazes it again. While dazed or in that grace a new daze does nothing
+func _daze(hit: Hit) -> void:
+	if not can_be_dazed():
+		return
+	_end_flight(false)
+	_cancel_dive()
+	if _model != null and not posing:
+		_model.play_move(CharacterModel.STAGGER, false, 0.05)
+	push_velocity = hit.push
+	if gravity_sign > 0.0:
+		velocity.y = maxf(velocity.y, DAZE_HOP)
+	else:
+		velocity.y = minf(velocity.y, -DAZE_HOP)
+	_stun_left = hit.stun
+	_dazed = true
+	_invulnerable = true
+	_invulnerable_left = hit.stun + DAZE_GUARD
+	_apply_input()
+	_play_stagger(hit)
+	_show_halo(true)
+	_camera_rig.shake(0.25 + 0.4 * hit.strength)
+	hit_taken.emit(hit)
+	dazed_changed.emit(true)
+
+
+func _end_daze() -> void:
+	if not _dazed:
+		return
+	_dazed = false
+	_show_halo(false)
+	dazed_changed.emit(false)
+
+
+func _show_halo(on: bool) -> void:
+	if on and _halo == null:
+		_halo = ImpactFx.daze_halo()
+		_tumble.add_child(_halo)
+		_halo.position = Vector3(0.0, DAZE_HALO_HEIGHT, 0.0)
+	if _halo != null:
+		_halo.visible = on
+
+
 #Stops every kind of motion, used when the player is put back somewhere
 func clear_motion() -> void:
 	_end_flight(false)
+	_cancel_dive()
+	set_gravity_state(1.0, 1.0)
+	_dive_used = false
+	_dive_wanted_left = 0.0
 	velocity = Vector3.ZERO
 	push_velocity = Vector3.ZERO
 	move_input = Vector2.ZERO
@@ -212,6 +438,7 @@ func reset_hit_state() -> void:
 	_stun_left = 0.0
 	_invulnerable = false
 	_hit_flight = false
+	_end_daze()
 	_reset_tumble()
 	if _model_pivot != null:
 		_model_pivot.visible = true
@@ -224,17 +451,31 @@ func set_input_enabled(enabled: bool) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if remote:
+		_follow_remote(delta)
+		return
+	if carried:
+		velocity = Vector3.ZERO
+		if _model:
+			_model.set_state(false, true)
+		_animate_body(delta)
+		return
 	_tick_stun(delta)
-	if posing:
+	if posing or _dazed:
 		move_input = Vector2.ZERO
 		jump_requested = false
 	if not is_on_floor():
-		velocity.y -= _gravity * delta
+		velocity.y -= _gravity * gravity_scale * gravity_sign * delta
+	_tick_dive(delta)
 
-	if jump_requested and is_on_floor():
-		velocity.y = jump_velocity
+	if jump_requested and is_on_floor() and dive_phase == Dive.NONE:
+		velocity.y = jump_velocity * gravity_sign
 		_squash_speed += 5.0
 	jump_requested = false
+	if not is_gravity_normal():
+		velocity.y = clampf(velocity.y, -FLOAT_MAX_SPEED, FLOAT_MAX_SPEED)
+	elif _safe_fall:
+		velocity.y = maxf(velocity.y, -SAFE_FALL_SPEED)
 
 	if _flying:
 		_flight_age += delta
@@ -243,12 +484,15 @@ func _physics_process(delta: float) -> void:
 
 	#Movement follows the camera direction
 	var direction := _camera_rig.get_yaw_basis() * Vector3(move_input.x, 0.0, move_input.y)
+	if dive_phase != Dive.NONE:
+		#A dive is a commitment: nothing steers it
+		direction = Vector3.ZERO
 	var control := FLIGHT_CONTROL if _flying else 1.0
-	velocity.x = direction.x * move_speed * control + push_velocity.x + external_velocity.x + _flight.x
-	velocity.z = direction.z * move_speed * control + push_velocity.z + external_velocity.z + _flight.z
+	velocity.x = direction.x * move_speed * control + push_velocity.x + external_velocity.x + _flight.x + _dive_velocity.x
+	velocity.z = direction.z * move_speed * control + push_velocity.z + external_velocity.z + _flight.z + _dive_velocity.z
 	_intended = Vector3(velocity.x, 0.0, velocity.z)
 	if not is_on_floor():
-		_peak_fall = maxf(_peak_fall, -velocity.y)
+		_peak_fall = maxf(_peak_fall, -velocity.y * gravity_sign)
 	#Each part of the push fades on its own, so a blow along the street stops sooner sideways than forward
 	push_velocity.x = move_toward(push_velocity.x, 0.0, push_decay * delta)
 	push_velocity.z = move_toward(push_velocity.z, 0.0, push_decay * delta)
@@ -266,6 +510,94 @@ func _physics_process(delta: float) -> void:
 	_tick_grace(delta)
 	_animate_body(delta)
 	_kick_dust(delta)
+	if _dazed and _halo != null:
+		_halo.rotate_y(DAZE_HALO_SPIN * delta)
+
+
+#A press of the jump in the air dives, once per jump; then the dive goes through its parts by itself
+func _tick_dive(delta: float) -> void:
+	_air_time = 0.0 if is_on_floor() else _air_time + delta
+	_dive_wanted_left = maxf(_dive_wanted_left - delta, 0.0)
+	match dive_phase:
+		Dive.NONE:
+			if is_on_floor():
+				_dive_used = false
+				_dive_wanted_left = 0.0
+				return
+			if jump_requested:
+				_dive_wanted_left = DIVE_MEMORY
+			if _dive_wanted_left > 0.0 and _can_dive():
+				_start_dive()
+		Dive.FLIGHT:
+			if is_on_floor():
+				_land_dive()
+		Dive.SLIDE:
+			_dive_left -= delta
+			_dive_velocity = _dive_velocity.move_toward(Vector3.ZERO, _dive_brake * delta)
+			if _dive_left <= 0.0:
+				dive_phase = Dive.DOWN
+				_dive_left = DIVE_DOWN_TIME
+				_dive_velocity = Vector3.ZERO
+				SynthSound.play(get_parent(), SynthSound.land(), -11.0, 0.85)
+		Dive.DOWN:
+			_dive_left -= delta
+			if _dive_left <= 0.0:
+				dive_phase = Dive.RISE
+				_dive_left = DIVE_RISE_TIME
+				if _model != null:
+					_model.play_move(CharacterModel.RISE, false, 0.05, RISE_CLIP_TIME / DIVE_RISE_TIME)
+		Dive.RISE:
+			_dive_left -= delta
+			if _dive_left <= 0.0:
+				_cancel_dive()
+
+
+func _can_dive() -> bool:
+	return dive_enabled and gravity_sign > 0.0 and not _dive_used and _air_time >= DIVE_ARM_TIME and _stun_left <= 0.0 and not _flying \
+		and not _hit_flight and not posing and not _celebrating
+
+
+#The leap: toward where the player steers, or where it looks when it steers nowhere
+func _start_dive() -> void:
+	var heading := _camera_rig.get_yaw_basis() * Vector3(move_input.x, 0.0, move_input.y)
+	if heading.length() < 0.1:
+		heading = look_direction()
+	heading = heading.normalized()
+	dive_phase = Dive.FLIGHT
+	_dive_used = true
+	_dive_wanted_left = 0.0
+	_dive_velocity = heading * move_speed * DIVE_SPEED_RATIO
+	velocity.y = clampf(velocity.y, DIVE_LIFT_MIN, DIVE_LIFT_MAX)
+	_model_pivot.rotation.y = atan2(heading.x, heading.z)
+	_squash_speed += 6.0
+	if _model != null:
+		_model.play_move(CharacterModel.DIVE, true, 0.06)
+	_camera_rig.kick(DIVE_FOV_KICK, 0.4)
+	SynthSound.play(get_parent(), SynthSound.tone(520.0, 0.2, 700.0, 0.35), -11.0, randf_range(0.95, 1.08))
+	dive_started.emit(heading)
+
+
+#The belly touches the ground: the speed of the dive brakes to nothing along the slide
+func _land_dive() -> void:
+	dive_phase = Dive.SLIDE
+	_dive_left = DIVE_SLIDE_TIME
+	_dive_brake = _dive_velocity.length() / DIVE_SLIDE_TIME
+	if _model != null:
+		_model.play_move(CharacterModel.SLIDE, true, 0.06)
+	shake_camera(0.14)
+	SynthSound.play(get_parent(), SynthSound.thump(0.18), -11.0, 1.25)
+	dive_landed.emit(global_position)
+
+
+#Ends the dive wherever it is: back to plain running, with no pose of the dive left on the model
+func _cancel_dive() -> void:
+	if dive_phase == Dive.NONE:
+		return
+	dive_phase = Dive.NONE
+	_dive_velocity = Vector3.ZERO
+	if _model != null and not _pose_playing:
+		_model.stop_move()
+	dive_ended.emit()
 
 
 #The shot is over: when the player lands it keeps a little of the speed as a skid
@@ -286,6 +618,7 @@ func _tick_stun(delta: float) -> void:
 	_stun_left -= delta
 	if _stun_left <= 0.0:
 		_apply_input()
+		_end_daze()
 
 
 func _track_landing() -> void:
@@ -296,6 +629,7 @@ func _track_landing() -> void:
 		_peak_fall = 0.0
 		landed.emit(global_position, _hit_flight)
 		_hit_flight = false
+		_safe_fall = false
 	_was_airborne = not grounded
 
 
@@ -362,16 +696,26 @@ func _animate_body(delta: float) -> void:
 		var aim := Vector2(clampf(local.z * 0.028, -LEAN_LIMIT, LEAN_LIMIT), clampf(-local.x * 0.03, -LEAN_LIMIT, LEAN_LIMIT))
 		if not is_on_floor():
 			aim *= 0.5
-		if posing:
-			#A pose: the hip out to one side and the body swaying a little, proud of itself
+		if dive_phase != Dive.NONE or _pose_playing:
+			#The dive and the poses bring their own lean
+			aim = Vector2.ZERO
+		elif posing:
+			#A pose without an animation: the hip out to one side and the body swaying a little, proud of itself
 			aim = Vector2(-0.1, POSE_LEAN * sin(Time.get_ticks_msec() * 0.004))
 		_lean = _lean.lerp(aim, 1.0 - exp(-LEAN_FOLLOW * delta))
 	var breath := sin(Time.get_ticks_msec() * 0.0022) * 0.012 if _intended.length() < 0.5 and not calm else 0.0
-	if posing and not calm:
+	if posing and not calm and not _pose_playing:
 		breath = POSE_STRETCH + 0.03 * sin(Time.get_ticks_msec() * 0.008)
 	var stretch := _squash + breath
-	_body.basis = Basis(Vector3.UP, _spin) * Basis(Vector3.RIGHT, _lean.x) * Basis(Vector3.BACK, _lean.y) \
+	var soft := Basis(Vector3.UP, _spin) * Basis(Vector3.RIGHT, _lean.x) * Basis(Vector3.BACK, _lean.y) \
 		* Basis.from_scale(Vector3(1.0 - 0.5 * stretch, 1.0 + stretch, 1.0 - 0.5 * stretch))
+	if _turn == 0.0:
+		_body.basis = soft
+	else:
+		#Turned over around its middle, so the feet go where the head was
+		var over := Basis(Vector3.BACK, _turn)
+		var middle := Vector3(0.0, TUMBLE_CENTER, 0.0)
+		_body.transform = Transform3D(over, middle - over * middle) * Transform3D(soft, Vector3.ZERO)
 
 
 #A little puff under the feet now and then while it runs
@@ -379,7 +723,7 @@ func _kick_dust(delta: float) -> void:
 	_dust_left -= delta
 	if _dust_left > 0.0 or not is_on_floor() or _hit_flight or _intended.length() < move_speed * 0.7:
 		return
-	_dust_left = DUST_EVERY
+	_dust_left = SLIDE_DUST_EVERY if dive_phase == Dive.SLIDE else DUST_EVERY
 	ImpactFx.dust(get_parent(), global_position + Vector3(0.0, 0.04, 0.0), ImpactFx.DUST_COLOR, 3)
 
 
@@ -388,16 +732,37 @@ func _end_celebration() -> void:
 	_celebrating = false
 
 
+#The pose or the dance starts with the pose and ends with it; a character without them only sways
+func _set_posing(value: bool) -> void:
+	if posing == value:
+		return
+	posing = value
+	if _model == null:
+		return
+	if value:
+		var count := _model.pose_count()
+		_pose_playing = count > 0 and _model.play_move(CharacterModel.POSES[posmod(pose_style, count)], true, 0.2)
+	elif _pose_playing:
+		_pose_playing = false
+		_model.stop_move()
+
+
+#The stagger of a daze: the body leans back from the blow, wobbles and straightens while the daze lasts
+func _play_stagger(hit: Hit) -> void:
+	if _tumble_tween != null and _tumble_tween.is_valid():
+		_tumble_tween.kill()
+	_aim_tumble(hit)
+	_tumble_tween = create_tween()
+	_tumble_tween.tween_property(self, "_tumble_angle", DAZE_LEAN, 0.12).set_ease(Tween.EASE_OUT)
+	_tumble_tween.tween_property(self, "_tumble_angle", 0.0, maxf(hit.stun - 0.12, 0.2)) \
+		.set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+
+
 #A flip is a somersault toward where the blow sends the player, a lie on the ground and a get-up; a stagger is a quick lean
 func _play_tumble(hit: Hit, air: float) -> void:
 	if _tumble_tween != null and _tumble_tween.is_valid():
 		_tumble_tween.kill()
-	var knock := Vector3(hit.push.x, 0.0, hit.push.z).normalized()
-	var local := Basis(Vector3.UP, _model_pivot.rotation.y).inverse() * knock
-	_tumble_axis = Vector3(local.z, 0.0, -local.x)
-	if _tumble_axis.length() < 0.01:
-		_tumble_axis = Vector3.RIGHT
-	_tumble_axis = _tumble_axis.normalized()
+	_aim_tumble(hit)
 	_tumble_tween = create_tween()
 	if not hit.flips:
 		_tumble_tween.tween_property(self, "_tumble_angle", 0.5, 0.1).set_ease(Tween.EASE_OUT)
@@ -413,6 +778,16 @@ func _play_tumble(hit: Hit, air: float) -> void:
 	_tumble_tween.tween_callback(_reset_tumble)
 
 
+#The body tips toward where the blow sends it
+func _aim_tumble(hit: Hit) -> void:
+	var knock := Vector3(hit.push.x, 0.0, hit.push.z).normalized()
+	var local := Basis(Vector3.UP, _model_pivot.rotation.y).inverse() * knock
+	_tumble_axis = Vector3(local.z, 0.0, -local.x)
+	if _tumble_axis.length() < 0.01:
+		_tumble_axis = Vector3.RIGHT
+	_tumble_axis = _tumble_axis.normalized()
+
+
 func _reset_tumble() -> void:
 	if _tumble_tween != null and _tumble_tween.is_valid():
 		_tumble_tween.kill()
@@ -425,3 +800,10 @@ func _set_tumble_angle(value: float) -> void:
 	_tumble_angle = value
 	if _tumble != null:
 		_tumble.basis = Basis(_tumble_axis, value)
+
+
+#The body turns over with the gravity and the camera stays at the same height over the middle of the body
+func _set_turn(value: float) -> void:
+	_turn = value
+	if _camera_rig != null:
+		_camera_rig.position.y = lerpf(_camera_height, 2.0 * TUMBLE_CENTER - _camera_height, _turn / PI)

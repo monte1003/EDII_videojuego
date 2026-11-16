@@ -1,18 +1,30 @@
 class_name SelfieHud
 extends RoundHud
 
-#The selfie screen: which photo it is, very small, and your followers. After each shot a little instant photo shows who came out
+#The selfie screen: which photo it is, very small, and the followers of its player. The rest shows only when it matters: the badge
+#that says where the next photo is, the live picture of the drone in a corner while a photo is coming, the message that tells the
+#camera is moving and to which set, the photo that takes its place at the shot and shrinks into the corner, the chips of the two
+#actions (pose and shove) and the roll of photos at the end
 
-const PHOTO_SIZE := Vector2(132, 150)
-const FACE := 34.0
+const CAMERA_HOLD := 2.4
+const CAMERA_IN := 0.24
+const CAMERA_OUT := 0.4
+const MONITOR_MARGIN := 26.0
+const SHOVE_KEY_WORD := "empujar"
+
+var monitor: SelfieMonitor
+var marker: SelfieMarker
+var card: SelfieCard
+var roll: SelfieRoll
+var shove_chip: ActionChip
 
 var _photo_label: Label
 var _followers_label: Label
 var _gain_label: Label
-var _print: Control
-var _print_faces: HBoxContainer
-var _print_caption: Label
-var _print_tween: Tween
+var _camera_box: VBoxContainer
+var _camera_hint: Label
+var _camera_tween: Tween
+var _chips: Control
 var _shown := 0
 
 
@@ -35,7 +47,20 @@ func _ready() -> void:
 	_gain_label = _text("", UiKit.BUTTON_FONT, 20, Palette.GOLD)
 	_gain_label.modulate.a = 0.0
 	row.add_child(_gain_label)
-	_build_print()
+	_build_camera_message()
+	marker = SelfieMarker.new()
+	add_child(marker)
+	_build_monitor()
+	_chips = Control.new()
+	_chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chips.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_chips)
+	shove_chip = ActionChip.new(InputHints.key_label(&"shove"), SHOVE_KEY_WORD)
+	_chips.add_child(shove_chip)
+	card = SelfieCard.new()
+	add_child(card)
+	roll = SelfieRoll.new()
+	add_child(roll)
 
 
 func set_photo(number: int, total: int) -> void:
@@ -57,82 +82,73 @@ func set_followers(total: int, gained: int) -> void:
 	fade.tween_property(_gain_label, "modulate:a", 0.0, 0.4)
 
 
-#The instant photo: the faces of the players that came out, a dark dot for each bot, and whether you are in it
-func show_print(faces: Array[Texture2D], bots: int, caption: String, seconds: float) -> void:
-	for child in _print_faces.get_children():
-		child.queue_free()
-	for texture in faces:
-		var face := TextureRect.new()
-		face.texture = texture
-		face.custom_minimum_size = Vector2.ONE * FACE
-		face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_print_faces.add_child(face)
-	for index in bots:
-		var dot := Panel.new()
-		dot.custom_minimum_size = Vector2.ONE * FACE * 0.7
-		dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		dot.add_theme_stylebox_override("panel", UiKit.box(Palette.INK, int(FACE)))
-		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_print_faces.add_child(dot)
-	_print_caption.text = caption
-	if _print_tween != null and _print_tween.is_valid():
-		_print_tween.kill()
-	_print.show()
-	_print.modulate.a = 1.0
-	_print.scale = Vector2.ONE * 0.4
-	_print.rotation = -0.3
-	_print_tween = create_tween()
-	_print_tween.tween_property(_print, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_print_tween.parallel().tween_property(_print, "rotation", -0.09, 0.25)
-	_print_tween.tween_interval(maxf(seconds - 0.6, 0.2))
-	_print_tween.tween_property(_print, "modulate:a", 0.0, 0.3)
-	_print_tween.tween_callback(_print.hide)
+#The drone sets off for the next place: two short lines at the top say the camera moves and to which set
+func announce_camera(set_name: String) -> void:
+	_camera_hint.text = "ve a %s" % set_name
+	monitor.set_title(set_name)
+	if _camera_tween != null and _camera_tween.is_valid():
+		_camera_tween.kill()
+	_camera_box.show()
+	_camera_box.modulate.a = 0.0
+	_camera_box.pivot_offset = _camera_box.size / 2.0
+	_camera_box.scale = Vector2.ONE * 1.2
+	_camera_tween = create_tween()
+	_camera_tween.set_parallel(true)
+	_camera_tween.tween_property(_camera_box, "modulate:a", 1.0, CAMERA_IN).set_ease(Tween.EASE_OUT)
+	_camera_tween.tween_property(_camera_box, "scale", Vector2.ONE, CAMERA_IN).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_camera_tween.chain().tween_interval(CAMERA_HOLD)
+	_camera_tween.chain().tween_property(_camera_box, "modulate:a", 0.0, CAMERA_OUT)
+	_camera_tween.chain().tween_callback(_camera_box.hide)
+
+
+#The photo comes out where the live picture was, with what it gave
+func show_photo(photo: Texture2D, followers: int, inside: bool, posed: bool) -> void:
+	card.play(photo, monitor.get_global_rect().position + Vector2(monitor.size.x - SelfieCard.CARD.x, 0.0), followers, inside, posed)
+
+
+#The end of the round: the small copy leaves and the roll of every photo comes in
+func show_roll(photos: Array[Texture2D], numbers: Array[int]) -> void:
+	card.clear()
+	monitor.set_live(false)
+	roll.show_roll(photos, numbers)
+
+
+#The chip of the shove: over the rival in reach or near the player, with its recharge
+func set_shove_chip(shown: bool, charge: float, at: Vector2) -> void:
+	shove_chip.set_charge(charge)
+	shove_chip.set_shown(shown)
+	if shown:
+		shove_chip.place(at)
+
+
+func press_shove() -> void:
+	shove_chip.press()
 
 
 func _show_followers(value: float) -> void:
 	_followers_label.text = str(roundi(value))
 
 
-#A white print with a dark picture, in the top right corner, away from the middle of the screen
-func _build_print() -> void:
-	_print = Control.new()
-	_print.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_print.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_print.offset_left = -PHOTO_SIZE.x - 34.0
-	_print.offset_right = -34.0
-	_print.offset_top = 30.0
-	_print.offset_bottom = 30.0 + PHOTO_SIZE.y
-	_print.pivot_offset = PHOTO_SIZE / 2.0
-	_print.hide()
-	add_child(_print)
-	var paper := Panel.new()
-	paper.size = PHOTO_SIZE
-	paper.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var paper_style := UiKit.box(Palette.PAPER, 8)
-	paper_style.shadow_size = 8
-	paper_style.shadow_color = Color(Palette.NIGHT, 0.35)
-	paper.add_theme_stylebox_override("panel", paper_style)
-	_print.add_child(paper)
-	var picture := Panel.new()
-	picture.position = Vector2(10, 10)
-	picture.size = Vector2(PHOTO_SIZE.x - 20.0, PHOTO_SIZE.y - 52.0)
-	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	picture.add_theme_stylebox_override("panel", UiKit.box(Color("3a3160"), 4))
-	_print.add_child(picture)
-	var middle := CenterContainer.new()
-	middle.position = picture.position
-	middle.size = picture.size
-	middle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_print.add_child(middle)
-	_print_faces = HBoxContainer.new()
-	_print_faces.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_print_faces.add_theme_constant_override("separation", 4)
-	middle.add_child(_print_faces)
-	_print_caption = UiKit.label("", UiKit.BUTTON_FONT, 13, Palette.INK)
-	_print_caption.position = Vector2(0.0, PHOTO_SIZE.y - 36.0)
-	_print_caption.size = Vector2(PHOTO_SIZE.x, 28.0)
-	_print_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_print_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_print.add_child(_print_caption)
+func _build_camera_message() -> void:
+	_camera_box = VBoxContainer.new()
+	_camera_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_camera_box.add_theme_constant_override("separation", 2)
+	_camera_box.hide()
+	var title := _text("CÁMARA EN MOVIMIENTO", UiKit.BUTTON_FONT, 20, Palette.PAPER)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_camera_box.add_child(title)
+	_camera_hint = _text("", UiKit.BODY_FONT, 22, Palette.GOLD)
+	_camera_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_camera_box.add_child(_camera_hint)
+	_top.add_child(_camera_box)
+	_top.move_child(_camera_box, 2)
+
+
+func _build_monitor() -> void:
+	monitor = SelfieMonitor.new()
+	add_child(monitor)
+	monitor.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	monitor.offset_left = -SelfieMonitor.SHOWN.x - MONITOR_MARGIN
+	monitor.offset_right = -MONITOR_MARGIN
+	monitor.offset_top = MONITOR_MARGIN
+	monitor.offset_bottom = MONITOR_MARGIN + SelfieMonitor.SHOWN.y

@@ -151,12 +151,12 @@ func _round_text() -> String:
 
 func _round_subtitle() -> String:
 	if GameSession.practice:
-		return "Una ronda suelta, sin partida"
+		return "Ronda suelta"
 	if GameSession.round_index == 0:
-		return "¡Que empiece la partida!"
+		return "Empieza la partida"
 	if GameSession.is_last_round():
-		return "La última: ya casi terminas"
-	return "Sigue el feed"
+		return "Última ronda"
+	return "Siguiente ronda"
 
 
 func _build_progress() -> Control:

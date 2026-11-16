@@ -14,3 +14,15 @@ func _ready() -> void:
 		var tagline := UiKit.body(info.tagline, 19)
 		tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		content.add_child(tagline)
+	#The ceremony of the end of the game with the players of the demo
+	for count in [4, 1]:
+		var podium := UiKit.text_button("PODIO · %d %s" % [count, "JUGADORES" if count > 1 else "JUGADOR"], Palette.GOLD, 30)
+		podium.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		podium.pressed.connect(_open_podium.bind(count))
+		content.add_child(podium)
+
+
+func _open_podium(count: int) -> void:
+	GameSession.reset()
+	PodiumCeremony.demo_players = count
+	ScreenFlow.open(&"podium")

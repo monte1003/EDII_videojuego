@@ -22,9 +22,10 @@ static func cells(points: Array[Vector3], size := CELL) -> Dictionary:
 	return found
 
 
-#Adds a copy of "mesh" placed by "place" and painted with "color" (the material reads the colour of each vertex); "uv_scale" stretches its UV
-func add(name: StringName, material: Material, shadow: bool, mesh: Mesh, place: Transform3D, color: Color, uv_scale := Vector2.ONE) -> void:
-	var key := "%d|%s" % [floori(place.origin.z / CELL), name]
+#Adds a copy of "mesh" placed by "place" and painted with "color" (the material reads the colour of each vertex); "uv_scale" stretches its UV.
+#A mesh already drawn in place tells the z of its middle in "cell_z", so it joins the stretch where it really is
+func add(name: StringName, material: Material, shadow: bool, mesh: Mesh, place: Transform3D, color: Color, uv_scale := Vector2.ONE, cell_z := NAN) -> void:
+	var key := "%d|%s" % [floori((place.origin.z if is_nan(cell_z) else cell_z) / CELL), name]
 	if not _parts.has(key):
 		var tool := SurfaceTool.new()
 		tool.begin(Mesh.PRIMITIVE_TRIANGLES)

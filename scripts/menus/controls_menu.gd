@@ -3,11 +3,12 @@ extends MenuPage
 const ROWS := [
 	["Caminar", "WASD"],
 	["Saltar", "ESPACIO"],
+	["Barrer (en el aire)", "ESPACIO ×2"],
 	["Mover la cámara", "MOUSE"],
 ]
 #Keys that only work inside the levels; they follow the Input Map
 const ACTION_ROWS := [
-	["Usar o posar", &"interact"],
+	["Usar o posar (alterna)", &"interact"],
 	["Empujar", &"shove"],
 	["Estoy listo", &"ready"],
 	["Ayuda", &"help"],

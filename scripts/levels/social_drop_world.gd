@@ -27,11 +27,12 @@ const STRIP_CELL := 256
 const FLIP_STAGGER := 0.1
 #The cards come back up in the same wave
 const RISE_STAGGER := 0.22
-#The platforms: rounded corners, a soft bevel along the top edge and the glowing frame that fills the flat top
-const SLAB_CORNER := 0.5
-const SLAB_BEVEL := 0.1
-const CARD_SHARE := 0.92
-const FRAME_SHARE := 0.955
+#The platforms: rounded corners, a soft bevel along the top edge and the glowing frame that fills the flat top; the card and the frame
+#round their corners like the flat top
+const SLAB_CORNER := 1.0
+const SLAB_BEVEL := 0.2
+const CARD_SHARE := 0.88
+const FRAME_SHARE := 0.91
 const FRAME_SHADER := preload("res://assets/ui/shaders/tile_frame.gdshader")
 const CARD_REST := 0.02
 #How far a tile falls before it hides; it comes back from half of it
@@ -461,9 +462,11 @@ func _build_tiles() -> void:
 			tile.top.set_shader_parameter("cells", float(_icons.size() + 1))
 			tile.top.set_shader_parameter("hidden_color", HIDDEN_COLORS[(row + column) % 2])
 			tile.top.set_shader_parameter("sparkle", 1.0)
+			tile.top.set_shader_parameter("corner", _corner_share(TILE_SIZE * CARD_SHARE))
 			#A glowing frame under the card shows around it
 			tile.frame = ShaderMaterial.new()
 			tile.frame.shader = FRAME_SHADER
+			tile.frame.set_shader_parameter("corner", _corner_share(TILE_SIZE * FRAME_SHARE))
 			var frame := MeshInstance3D.new()
 			frame.mesh = frame_mesh
 			frame.material_override = tile.frame
@@ -493,6 +496,12 @@ func _make_strip(icons: Array[Texture2D]) -> ImageTexture:
 		strip.blit_rect(picture, Rect2i(0, 0, STRIP_CELL, STRIP_CELL), Vector2i(0, index * STRIP_CELL))
 	strip.generate_mipmaps()
 	return ImageTexture.create_from_image(strip)
+
+
+#The share of a square "size" meters wide that its round corner takes, so it follows the corner of the flat top of a platform
+func _corner_share(size: float) -> float:
+	var flat_half := TILE_SIZE / 2.0 - SLAB_BEVEL
+	return maxf(SLAB_CORNER - SLAB_BEVEL - (flat_half - size / 2.0), 0.05) / size
 
 
 #A slab with rounded corners and a soft bevel along its top edge, in one mesh with smooth normals: the platforms have no hard edges

@@ -129,7 +129,7 @@ func _ready() -> void:
 	super()
 	if ScreenFlow.tree.has(SCREEN_ID):
 		ScreenFlow.mark_current(SCREEN_ID)
-	_rng.randomize()
+	seed_rng(_rng)
 	var half_width := lane_count * lane_width / 2.0
 	_world.build(half_width, sidewalk_width, lane_count, spawn_x - 10.0, despawn_x + 10.0, end_x)
 	_build_lanes(half_width)
@@ -144,7 +144,7 @@ func _ready() -> void:
 	_hud.set_time(time_limit)
 	var move_keys := " ".join([InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
 		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
-	_hud.show_mission("Aguanta %d s: la cinta te lleva al FIN" % int(time_limit), [move_keys, InputHints.key_label(&"jump")])
+	_hud.show_mission("%d s contra la cinta" % int(time_limit), [move_keys, InputHints.key_label(&"jump")])
 
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_phase_timer = countdown_seconds
@@ -167,6 +167,9 @@ func _build_lanes(half_width: float) -> void:
 
 func _spawn_runner(half_width: float) -> void:
 	var slot := participants[0]
+	for candidate in participants:
+		if candidate.player_id == GameSession.local_id:
+			slot = candidate
 	_runner = RUNNER_SCENE.instantiate() as StreetRunner
 	_runner.player_id = slot.player_id
 	var edge := half_width + sidewalk_width - _runner.radius
@@ -178,10 +181,11 @@ func _spawn_runner(half_width: float) -> void:
 	_runner.position = Vector3(start_x, 0.0, 0.0)
 	_runner.set_character(slot.character)
 	_runner.set_input_enabled(false)
+	add_poser(_runner, true)
 
 
 func _physics_process(delta: float) -> void:
-	if paused:
+	if paused or filming:
 		return
 	_clock += delta
 	match phase:
@@ -210,14 +214,12 @@ func _update_running(delta: float) -> void:
 	_run_belt()
 	if elapsed >= time_limit:
 		_hud.set_time(0.0)
-		_finish(true, "¡Aguantaste!",
-			"%d segundos sin dejarte arrastrar por la corriente. Mirar antes de moverte también es cuidarte." % int(time_limit))
+		_finish(true, "En pie", "")
 		return
 
 	_check_hits()
 	if _runner.position.x >= end_x:
-		_finish(false, "Te arrastró la corriente",
-			"Aguantaste %d s. Cada choque te hace retroceder: anticipa el camino e inténtalo de nuevo." % floori(elapsed))
+		_finish(false, "Arrastrado", "")
 		return
 
 	#The edge of the screen glows when the end line is close
@@ -226,7 +228,7 @@ func _update_running(delta: float) -> void:
 	#Tells the player every third of the round that the flow got faster
 	if _next_speed_notice < 3 and elapsed >= time_limit * _next_speed_notice / 3.0:
 		_next_speed_notice += 1
-		_hud.warn("¡Más rápido!")
+		_hud.warn("Más rápido")
 
 	_hud_timer += delta
 	if _hud_timer >= 0.1:
@@ -250,6 +252,24 @@ func _speed_scale() -> float:
 	return lerpf(start_speed_scale, end_speed_scale, clampf(elapsed / time_limit, 0.0, 1.0))
 
 
+#The opening film of the street stays down between its buildings: a low flight up the street toward the runner and a crane from the
+#sidewalk, so the edges of the map never show
+func _film_shots() -> Array[RoundFilm.Shot]:
+	var at := _runner.global_position
+	var shots: Array[RoundFilm.Shot] = []
+	shots.append(RoundFilm.Shot.new(at + Vector3(34.0, 2.6, -2.0), at + Vector3(0.0, 1.2, 0.0), at + Vector3(14.0, 3.4, 1.5), at + Vector3(-6.0, 1.0, 0.0), 3.6))
+	shots.append(RoundFilm.Shot.new(at + Vector3(5.0, 1.3, sidewalk_width + 2.5), at + Vector3(-4.0, 2.2, 0.0), at + Vector3(3.5, 3.6, 2.0), at + Vector3(0.0, 1.0, 0.0), 2.6))
+	return shots
+
+
+func _pose_allowed(_player_id: int) -> bool:
+	return not paused and phase != Phase.ENDED
+
+
+func _pose_shown() -> bool:
+	return not paused and phase != Phase.ENDED
+
+
 func _finish(victory: bool, title: String, message: String) -> void:
 	if phase == Phase.ENDED:
 		return
@@ -260,7 +280,7 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	_pause_menu.set_process_unhandled_input(false)
 	_hud.set_danger(0.0)
 	if not victory:
-		_hud.show_banner("TE ARRASTRÓ LA CINTA", "Aguantaste %d s" % floori(elapsed), Palette.GOLD)
+		_hud.show_banner("FIN", "%d s" % floori(elapsed), Palette.GOLD)
 		get_tree().create_timer(1.5).timeout.connect(_end_round.bind(victory, title, message))
 		return
 
@@ -282,7 +302,7 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	tween.tween_property(camera, "global_transform", target, win_zoom_time)
 	tween.tween_property(camera, "fov", win_fov, win_zoom_time)
 	tween.chain().tween_callback(_runner.jump)
-	tween.tween_callback(_hud.show_banner.bind("¡AGUANTASTE!", "%d s contra la cinta" % int(time_limit)))
+	tween.tween_callback(_hud.show_banner.bind("%d S" % int(time_limit), "%d %s" % [hits_taken, "golpe" if hits_taken == 1 else "golpes"]))
 	tween.chain().tween_interval(1.2)
 	tween.chain().tween_callback(_end_round.bind(victory, title, message))
 
@@ -301,7 +321,7 @@ func _clear_view(camera_position: Vector3) -> void:
 
 #Inside a session the results screen takes over; on its own the HUD shows the end panel
 func _end_round(victory: bool, title: String, message: String) -> void:
-	var lines: Array[Array] = [["Aguantaste", "%d s" % floori(elapsed)], ["Objetivo", "%d s" % int(time_limit)]]
+	var lines: Array[Array] = [["Segundos", "%d s" % floori(elapsed)], ["Objetivo", "%d s" % int(time_limit)]]
 	var result := RoundResult.make(SCREEN_ID, victory, title, message, lines)
 	var score := _score(victory)
 	if not finish_round(result.with_score(score, {_runner.player_id: score.points})):
@@ -315,8 +335,8 @@ func _score(victory: bool) -> RoundScore:
 	var seconds := sheet.street_seconds if victory else minf(elapsed / time_limit, 0.999) * sheet.street_seconds
 	var points := sheet.street_points(seconds, hits_taken)
 	if not victory:
-		return RoundScore.make(sheet, points, "Aguantaste %d de %d s" % [floori(elapsed), int(time_limit)])
-	return RoundScore.make(sheet, points, "Aguantaste con %d %s" % [hits_taken, "golpe" if hits_taken == 1 else "golpes"], [
+		return RoundScore.make(sheet, points, "%d de %d s" % [floori(elapsed), int(time_limit)])
+	return RoundScore.make(sheet, points, "%d %s" % [hits_taken, "golpe" if hits_taken == 1 else "golpes"], [
 		["Aguantar", "+%d" % sheet.street_survive], ["Sin golpes", "+%d" % (points - sheet.street_survive)]])
 
 
@@ -443,7 +463,7 @@ func _try_spawn_tank(lane: Lane) -> bool:
 		tank.base_speed = car_speed
 		tank.knockback = tank_knockback
 		_place(tank, (lane.z + partner.z) / 2.0, 0.0)
-		_hud.warn("¡TANQUE!")
+		_hud.warn("Tanque")
 		return true
 	return false
 

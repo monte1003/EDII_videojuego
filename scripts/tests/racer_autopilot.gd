@@ -4,9 +4,18 @@ extends Node
 #Chance that the racer stops to scroll its phone when it reaches an island, and for how long
 const DISTRACTION_CHANCE := 0.3
 const DISTRACTION_TIME := Vector2(0.8, 2.0)
+#The clumsy racer (a person that is not good at the game): it stops more often and longer, and misses this share of the jumps
+const CLUMSY_DISTRACTION_CHANCE := 0.6
+const CLUMSY_DISTRACTION_TIME := Vector2(1.5, 3.5)
+const CLUMSY_MISS := 0.35
 
-#Test helper that plays a racer of level 1 in place of a keyboard: it walks the shortest route to the goal like a player would, jumps the spinners, the sweeping blocks and the rolling balls and
-#sometimes stops to scroll its phone. The game never uses it; it only sets the actions of its Player, like the keyboard does for a person.
+#Test helper that plays a racer of level 1 in place of a keyboard: it walks the shortest route to the goal like a player would, jumps the spinners, the sweeping blocks, the
+#rolling balls and the scroll wheels, waits between the axes and the likes, changes lane before a giant ball, walks against the wind and sometimes stops to scroll its
+#phone. The game never uses it; it only sets the actions of its Player, like the keyboard does for a person.
+
+#How far ahead in time it looks before stepping into what cannot be jumped, and the turns it tries to get out of the way
+const LOOK_AHEAD := 0.7
+const DODGES: Array[float] = [0.0, 0.9, -0.9, 1.57, -1.57]
 
 var graph: WeightedGraph
 var locator: PlayerLocator
@@ -22,6 +31,8 @@ var danger_edge: Array[StringName] = []
 var distractible := true
 #The islands to go through, in order, instead of the cheapest route (to time one way of the course); empty plays the cheapest route
 var forced_route: Array[StringName] = []
+#Plays like a person that is not good at the game
+var clumsy := false
 
 var _player: Player
 var _vertex: StringName = Level01Layout.START
@@ -34,9 +45,12 @@ var _seen_version := -1
 var _last_plan := -100.0
 var _time := 0.0
 var _distracted_left := 0.0
-#The island a cannon shot is flying to, and for how long it has been in the air
-var _flying_to: StringName = &""
-var _flight_time := 0.0
+#Rolled again on every island: while it is under the share of misses, the jumps of the next stretch are not made
+var _miss_roll := 1.0
+#The pad of the deck the racer fell onto: it walks to it and a bubble carries it back to the start of the bridge
+var _deck: Dictionary = {}
+#The course with every fragile bridge up: like a person, it plans as if a bridge the feed took down will come back, and waits for it
+var _open := Level01Layout.build_graph()
 
 
 func _init() -> void:
@@ -52,7 +66,7 @@ func setup(player: Player, skill: float) -> void:
 #After a fall the racer starts again from the checkpoint
 func reset_to(vertex: StringName) -> void:
 	_vertex = vertex
-	_flying_to = &""
+	_deck = {}
 	_committed = false
 	_route.clear()
 	_dirty = true
@@ -70,8 +84,9 @@ func _physics_process(delta: float) -> void:
 	if not enabled:
 		_set_move(Vector3.ZERO)
 		return
-	if _flying_to != &"":
-		_fly(delta)
+	_check_fall()
+	if not _deck.is_empty():
+		_walk_deck()
 		return
 	if _distracted_left > 0.0:
 		_distracted_left -= delta
@@ -82,11 +97,40 @@ func _physics_process(delta: float) -> void:
 		_dirty = true
 	if _dirty or graph.version != _seen_version:
 		_plan()
-	var wanted := _walk()
+	var wanted := _against_wind(_dodge(_walk()))
 	_set_move(wanted)
 	_jump_spinners()
 	_jump_blocks()
 	_jump_balls()
+	_jump_comments()
+	_jump_rollers()
+
+
+#A racer that dropped well under the island or bridge it was on, onto a deck: it goes to the pad of the bubble that caught it
+func _check_fall() -> void:
+	if not _deck.is_empty() or _player.carried or not _player.is_on_floor():
+		return
+	var at := _player.global_position
+	if at.y >= (Level01Layout.POSITIONS[current_vertex()] as Vector3).y - 2.5:
+		return
+	_deck = Level01Layout.deck_catching(Level01Layout.all_decks(), at)
+	if not _deck.is_empty():
+		_committed = false
+
+
+#On the deck it goes to the pad; once the bubble has carried it back it goes on from the platform at the start of the bridge
+func _walk_deck() -> void:
+	var pad: Vector3 = _deck["pad"]
+	if _player.carried:
+		_set_move(Vector3.ZERO)
+		return
+	if _player.global_position.y > pad.y + 3.0:
+		_vertex = _deck["to"]
+		_deck = {}
+		_route.clear()
+		_dirty = true
+		return
+	_set_move(_toward(pad) if not _reached(pad) else Vector3.ZERO)
 
 
 func _plan() -> void:
@@ -101,7 +145,7 @@ func _plan() -> void:
 		for index in range(at + 1, forced_route.size()):
 			_route.append(forced_route[index])
 		return
-	var result := graph.shortest_path(current_vertex(), Level01Layout.GOAL)
+	var result := _open.shortest_path(current_vertex(), Level01Layout.GOAL)
 	if result.found:
 		for index in range(1, result.path.size()):
 			_route.append(result.path[index])
@@ -117,15 +161,11 @@ func _walk() -> Vector3:
 		var centre: Vector3 = Level01Layout.POSITIONS[_vertex]
 		return _toward(centre) if not _reached(centre) else Vector3.ZERO
 	var next: StringName = _route[0]
-	var launch := Level01Layout.launch_of(_vertex, next)
-	if not launch.is_empty():
-		return _walk_to_cannon(launch, next)
 	var gate := _gate_point(_vertex, next) + _lane(_vertex, next)
 	if not _reached(gate):
 		return _toward(gate)
-	#At the gate the bridge must be open and not about to fall
+	#At the gate the bridge must be open and not about to fall: a fragile one that is down comes back, so it waits for it
 	if not graph.is_edge_enabled(_vertex, next):
-		_dirty = true
 		return Vector3.ZERO
 	if _is_danger(_vertex, next):
 		return Vector3.ZERO
@@ -136,38 +176,21 @@ func _walk() -> Vector3:
 	return _toward(_leg_point)
 
 
-#The racer walks to the pad of the cannon; when the cannon throws it, it waits in the air for the island it lands on
-func _walk_to_cannon(launch: Dictionary, next: StringName) -> Vector3:
-	if _player.is_flying():
-		_flying_to = next
-		_flight_time = 0.0
-		_route.pop_front()
-		return Vector3.ZERO
-	var pad := Level01Layout.launch_pad(launch)
-	return _toward(pad) if not _reached(pad) else Vector3.ZERO
-
-
-#In the air it only steers toward the middle of the island it is going to; on landing it goes on from there
-func _fly(delta: float) -> void:
-	_flight_time += delta
-	if not locator.on_bridge and locator.vertex == _flying_to and _player.is_on_floor():
-		_vertex = _flying_to
-		_flying_to = &""
-		_committed = false
-		_dirty = true
-		return
-	if _flight_time > 6.0:
-		_flying_to = &""
-		_dirty = true
-		return
-	_set_move(_toward(Level01Layout.POSITIONS[_flying_to]))
-
-
 func _arrive() -> void:
 	_vertex = _leg_vertex
 	_committed = false
-	if distractible and _vertex != Level01Layout.GOAL and rng.randf() < DISTRACTION_CHANCE:
-		_distracted_left = rng.randf_range(DISTRACTION_TIME.x, DISTRACTION_TIME.y)
+	_miss_roll = rng.randf() if clumsy else 1.0
+	var chance := CLUMSY_DISTRACTION_CHANCE if clumsy else DISTRACTION_CHANCE
+	var time := CLUMSY_DISTRACTION_TIME if clumsy else DISTRACTION_TIME
+	#A good racer never stops on a plate that drops or where things roll; a clumsy one may
+	var busy := Level01Layout.TILE_PLATES.has(_vertex) or Level01Layout.run_at(Level01Layout.POSITIONS[_vertex]) >= 0
+	if distractible and _vertex != Level01Layout.GOAL and (clumsy or not busy) and rng.randf() < chance:
+		_distracted_left = rng.randf_range(time.x, time.y)
+
+
+#Whether the racer makes the jump it decided on: a clumsy one misses some
+func _jumps() -> bool:
+	return _miss_roll >= CLUMSY_MISS
 
 
 func _is_danger(a: StringName, b: StringName) -> bool:
@@ -176,7 +199,7 @@ func _is_danger(a: StringName, b: StringName) -> bool:
 
 #The bar of the island it stands on: it jumps when the bar is about to reach it
 func _jump_spinners() -> void:
-	if _committed or not Level01Layout.SPINNERS.has(_vertex) or not _player.is_on_floor() or not clock.is_valid():
+	if not _jumps() or _committed or not Level01Layout.SPINNERS.has(_vertex) or not _player.is_on_floor() or not clock.is_valid():
 		return
 	var centre: Vector3 = Level01Layout.POSITIONS[_vertex]
 	var wait := Level01Hazards.time_to_hit(centre, Level01Layout.SPINNERS[_vertex], clock.call(), _player.global_position, 0.5)
@@ -186,7 +209,7 @@ func _jump_spinners() -> void:
 
 #The block that sweeps the bridge it is crossing: it jumps when the block is about to reach it
 func _jump_blocks() -> void:
-	if not _committed or not _player.is_on_floor() or not clock.is_valid():
+	if not _jumps() or not _committed or not _player.is_on_floor() or not clock.is_valid():
 		return
 	var pusher := Level01Layout.pusher_of(_vertex, _leg_vertex)
 	if pusher.is_empty():
@@ -196,9 +219,23 @@ func _jump_blocks() -> void:
 		_player.jump_requested = true
 
 
+#The comment of the bridge it is crossing: it jumps when its push is about to start and the bubble is close
+func _jump_comments() -> void:
+	if not _jumps() or not _committed or not _player.is_on_floor() or not clock.is_valid():
+		return
+	var comment := Level01Layout.comment_of(_vertex, _leg_vertex)
+	if comment.is_empty():
+		return
+	var wait := Level01Hazards.comment_wait(comment, clock.call())
+	var bubble := Level01Hazards.comment_center(comment, clock.call())
+	var near := Vector2(_player.global_position.x - bubble.x, _player.global_position.z - bubble.z).length() < 3.2
+	if near and wait >= 0.08 and wait <= 0.3:
+		_player.jump_requested = true
+
+
 #The balls that roll across the island it stands on: it jumps when one is about to reach it
 func _jump_balls() -> void:
-	if _committed or not _player.is_on_floor() or not clock.is_valid():
+	if not _jumps() or _committed or not _player.is_on_floor() or not clock.is_valid():
 		return
 	for ball: Dictionary in Level01Layout.BALLS:
 		if ball["island"] != _vertex:
@@ -206,6 +243,76 @@ func _jump_balls() -> void:
 		var wait := Level01Hazards.ball_time_to_hit(ball, clock.call(), _player.global_position, 0.6)
 		if wait >= 0.2 and wait <= 0.36:
 			_player.jump_requested = true
+
+
+#Before stepping into what cannot be jumped (an axe, a like, a giant ball) it checks the way for the next moment; when it is not clear it
+#tries a turn to the side, waits where it is if that is safe, or steps back
+func _dodge(wanted: Vector3) -> Vector3:
+	if not clock.is_valid() or wanted == Vector3.ZERO or not _player.is_on_floor():
+		return wanted
+	var now: float = clock.call()
+	var at := _player.global_position
+	for turn in DODGES:
+		var way := wanted.rotated(Vector3.UP, turn)
+		if _clear(at, way, now):
+			return way
+	if _clear(at, Vector3.ZERO, now):
+		return Vector3.ZERO
+	return -wanted
+
+
+func _clear(at: Vector3, way: Vector3, now: float) -> bool:
+	if not _inside(at + way * _player.move_speed * LOOK_AHEAD):
+		return false
+	var ahead := 0.0
+	while ahead <= LOOK_AHEAD:
+		if Level01Traps.blocking_hit(at + way * _player.move_speed * ahead, now + ahead) != Level01Traps.Kind.NONE:
+			return false
+		ahead += 0.05
+	return true
+
+
+#Whether a point is well inside the way: a step to the side never takes the racer near an edge
+func _inside(point: Vector3) -> bool:
+	var index := Level01Layout.run_at(point)
+	if index >= 0:
+		var line := Level01Layout.run_line(Level01Layout.RUNS[index])
+		return absf((point - (line["from"] as Vector3)).dot(line["across"] as Vector3)) <= Level01Layout.PLATE / 2.0 - 1.0
+	if _committed:
+		var frame := Level01Traps.bridge_frame([_vertex, _leg_vertex])
+		return absf((point - (frame["from"] as Vector3)).dot(frame["across"] as Vector3)) <= float(frame["width"]) / 2.0 - 1.0
+	return true
+
+
+#On a bridge with a fan that blows it leans into the wind
+func _against_wind(wanted: Vector3) -> Vector3:
+	if not clock.is_valid() or not locator.on_bridge:
+		return wanted
+	var fan := Level01Layout.fan_of(locator.bridge_a, locator.bridge_b)
+	if fan.is_empty():
+		return wanted
+	var wind := Level01Traps.fan_drift(fan, clock.call(), _player.global_position)
+	if wind == Vector3.ZERO:
+		return wanted
+	return (wanted - wind.normalized() * 0.85).normalized()
+
+
+#The scroll wheels of the run it stands on: it jumps when one is about to reach it
+func _jump_rollers() -> void:
+	if not _jumps() or not _player.is_on_floor() or not clock.is_valid():
+		return
+	var index := Level01Layout.run_at(_player.global_position, 1.0)
+	if index < 0 or Level01Layout.RUNS[index]["kind"] != Level01Layout.ROLLER:
+		return
+	var now: float = clock.call()
+	var way := Vector3(_player.velocity.x, 0.0, _player.velocity.z)
+	var ahead := 0.0
+	while ahead <= 0.4:
+		if Level01Traps.run_hits(Level01Layout.RUNS[index], index, now + ahead, _player.global_position + way * ahead):
+			if ahead >= 0.1:
+				_player.jump_requested = true
+			return
+		ahead += 0.05
 
 
 func _gate_point(from: StringName, to: StringName) -> Vector3:
@@ -232,6 +339,7 @@ func _toward(point: Vector3) -> Vector3:
 	return flat.normalized()
 
 
-#The camera of the racer never turns, so the move input is the direction on the ground
+#The move input goes in the space of the camera of the racer, which starts looking at its bridge
 func _set_move(direction: Vector3) -> void:
-	_player.move_input = Vector2(direction.x, direction.z)
+	var local := (_player.get_node("CameraRig") as PlayerCamera).get_yaw_basis().inverse() * direction
+	_player.move_input = Vector2(local.x, local.z)

@@ -1,139 +1,219 @@
 class_name TrendBoard
 extends RefCounted
 
-#Which bubble is where, with no nodes: the kind at each point of the map, the ones on their way back after being fetched and the
-#items that fly loose after a shove. The scene only draws what is here
+#The bubbles of the trend war, with no nodes. One zone is open at a time and every bubble is born on a point that zone lists, never anywhere
+#else. A ring on the floor tells where a bubble is about to be born; it lives until somebody takes it or until it gets old, and then it is
+#born again somewhere else. As the round of the zone goes on there are more bubbles; the trend of every player always has one somewhere, and
+#once per zone the viral bubble comes. The same seed and the same players give the same game
 
-#Kind at each point; -1 when the point is empty
-var kinds: Array[int] = []
-#Loose items: {"kind", "position", "velocity", "left", "owner", "owner_rest", "floor"}
-var loose: Array[Dictionary] = []
+signal bubble_announced(id: int)
+signal bubble_spawned(id: int)
+signal bubble_gone(id: int, taken: bool)
+
+#Of the free points, a new bubble picks one of this many of the best
+const CHOICES := 3
+
+
+class Bubble:
+	var id: int
+	var slot: int
+	var kind: int
+	var phase := 0.0
+	var age := 0.0
+	#Seconds until it is born; while above 0 only its ring shows
+	var pending := 0.0
+
+
+#Every bubble announced or alive, by its id
+var bubbles: Dictionary = {}
+#Seconds this board has run
+var clock := 0.0
+#The zone that is open (-1 for none)
+var zone := -1
 
 var _layout: TrendLayout
 var _settings: TrendSettings
-#Kinds waiting to come back: {"kind", "left", "from"}
-var _pending: Array[Dictionary] = []
-var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+var _rng := RandomNumberGenerator.new()
+var _next_id := 1
+var _on_slot: Dictionary = {}
+var _slot_rest: Dictionary = {}
+#The share of the round of the zone at which the viral bubble comes, and whether it came
+var _viral_at := 1.0
+var _viral_done := false
 
 
-func _init(layout: TrendLayout, settings: TrendSettings) -> void:
+func _init(layout: TrendLayout, settings: TrendSettings, seed_value: int) -> void:
 	_layout = layout
 	_settings = settings
-	kinds.resize(layout.points.size())
-	kinds.fill(-1)
+	_rng.seed = seed_value
 
 
-#The same number of bubbles of every kind, shuffled over the points; a few points stay empty
-func deal(rng: RandomNumberGenerator) -> void:
-	var order: Array[int] = []
-	for index in kinds.size():
-		order.append(index)
-	_shuffle(order, rng)
-	kinds.fill(-1)
-	_pending.clear()
-	loose.clear()
-	var placed := 0
-	for kind in TrendCatalog.COUNT:
-		for copy in _settings.copies_per_kind:
-			if placed < order.size():
-				kinds[order[placed]] = kind
-				placed += 1
+#Opens a zone: the bubbles of the last one go and the first ones of this one are announced
+func open_zone(new_zone: int, players: Dictionary, wanted: Dictionary) -> void:
+	close()
+	zone = new_zone
+	_viral_at = _rng.randf_range(_settings.viral_window.x, _settings.viral_window.y)
+	_viral_done = false
+	tick(0.0, 0.0, players, wanted)
 
 
-#The points that hold each kind right now: {kind: [point indices]}
-func by_kind() -> Dictionary:
-	var found: Dictionary = {}
-	for index in kinds.size():
-		if kinds[index] < 0:
+#Every bubble goes
+func close() -> void:
+	for id: int in bubbles.keys():
+		_remove(id, false)
+	_slot_rest.clear()
+	zone = -1
+
+
+#How many bubbles the zone holds at that share of its round, with that many players
+func target_count(share: float, player_count: int) -> int:
+	var base := lerpf(float(_settings.bubbles_start), float(_settings.bubbles_end), clampf(share, 0.0, 1.0))
+	return mini(roundi(base) + _settings.bubbles_per_player * maxi(player_count - 1, 0), maxi(_layout.zone_slots(maxi(zone, 0)).size() - 1, 1))
+
+
+#Moves time on. "share" is how far the round of the zone is, "players" {player id: position} and "wanted" {player id: kind it follows}.
+#The rings become bubbles, the old bubbles move, every trend that is followed gets a bubble when it has none, the viral one comes at its
+#moment and the rest of the room is filled with kinds at random, half of them the kinds that are followed
+func tick(delta: float, share: float, players: Dictionary, wanted: Dictionary) -> void:
+	clock += delta
+	for slot: int in _slot_rest.keys():
+		_slot_rest[slot] = float(_slot_rest[slot]) - delta
+		if float(_slot_rest[slot]) <= 0.0:
+			_slot_rest.erase(slot)
+	if zone < 0:
+		return
+	for id: int in bubbles.keys():
+		var bubble: Bubble = bubbles[id]
+		if bubble.pending > 0.0:
+			bubble.pending -= delta
+			if bubble.pending <= 0.0:
+				bubble.pending = 0.0
+				bubble_spawned.emit(id)
 			continue
-		if not found.has(kinds[index]):
-			found[kinds[index]] = [] as Array[int]
-		(found[kinds[index]] as Array[int]).append(index)
-	return found
+		bubble.age += delta
+		if bubble.age >= _settings.bubble_life and bubble.kind != TrendRules.VIRAL:
+			_remove(id, false)
+	for id: int in wanted:
+		var kind := int(wanted[id])
+		if kind >= 0 and count_of(kind) == 0:
+			_spawn(kind, players, players.get(id, Vector3.ZERO))
+	if not _viral_done and share >= _viral_at:
+		_viral_done = true
+		_spawn(TrendRules.VIRAL, players, Vector3.ZERO)
+	var target := target_count(share, players.size())
+	var followed: Array[int] = []
+	for id: int in wanted:
+		if int(wanted[id]) >= 0:
+			followed.append(int(wanted[id]))
+	while bubbles.size() < target:
+		var kind := _rng.randi() % TrendCatalog.COUNT
+		if not followed.is_empty() and _rng.randf() < 0.5:
+			kind = followed[_rng.randi() % followed.size()]
+		if _spawn(kind, players, Vector3.ZERO) == null:
+			break
 
 
-func position_of(point: int) -> Vector3:
-	return _layout.points[point]["position"]
+func kind_of(id: int) -> int:
+	return (bubbles[id] as Bubble).kind if bubbles.has(id) else -1
 
 
-#Takes the bubble of a point: the point is left empty and its kind comes back later on another one
-func take(point: int) -> int:
-	var kind := kinds[point]
-	if kind < 0:
+#Whether the bubble is born (not only its ring)
+func is_live(id: int) -> bool:
+	return bubbles.has(id) and (bubbles[id] as Bubble).pending <= 0.0
+
+
+#How many bubbles of a kind are announced or alive
+func count_of(kind: int) -> int:
+	var count := 0
+	for bubble: Bubble in bubbles.values():
+		if bubble.kind == kind:
+			count += 1
+	return count
+
+
+func slot_of(id: int) -> int:
+	return (bubbles[id] as Bubble).slot
+
+
+#How far its ring is from being a bubble: 0 when it is announced, 1 when it is born
+func birth_share(id: int) -> float:
+	return 1.0 - (bubbles[id] as Bubble).pending / maxf(_settings.spawn_notice, 0.01)
+
+
+#How close to moving away an old bubble is, 0 young and 1 about to go
+func age_share(id: int) -> float:
+	return clampf((bubbles[id] as Bubble).age / _settings.bubble_life, 0.0, 1.0)
+
+
+#Where a bubble floats: over its point, bobbing a little
+func position_of(id: int) -> Vector3:
+	var bubble: Bubble = bubbles[id]
+	var at: Vector3 = _layout.slots[bubble.slot]["position"]
+	return at + Vector3(0.0, sin(clock * 1.6 + bubble.phase) * 0.12, 0.0)
+
+
+#Takes a bubble: it is gone at once; another one will be born on another point. Returns its kind, or -1 when it was not there or not born
+func take(id: int) -> int:
+	if not is_live(id):
 		return -1
-	kinds[point] = -1
-	_pending.append({"kind": kind, "left": _settings.respawn_seconds, "from": point})
+	var kind := (bubbles[id] as Bubble).kind
+	_remove(id, true)
 	return kind
 
 
-#Moves time on; returns the points where a bubble just came back
-func tick(delta: float, rng: RandomNumberGenerator) -> Array[int]:
-	var back: Array[int] = []
-	for index in range(_pending.size() - 1, -1, -1):
-		var entry := _pending[index]
-		entry["left"] = float(entry["left"]) - delta
-		if float(entry["left"]) > 0.0:
+func _remove(id: int, taken: bool) -> void:
+	var bubble: Bubble = bubbles[id]
+	bubbles.erase(id)
+	_on_slot.erase(bubble.slot)
+	_slot_rest[bubble.slot] = _settings.point_rest
+	bubble_gone.emit(id, taken)
+
+
+#A new bubble of "kind" announced on a free point of the zone. For somebody's trend ("for_player" its position) the point is one of the
+#closest to it that is not on top of it; otherwise it is about as far from every player. Never on a point that rests or next to a player
+func _spawn(kind: int, players: Dictionary, for_player: Vector3) -> Bubble:
+	var slot := _pick_slot(players, for_player)
+	if slot < 0:
+		return null
+	var bubble := Bubble.new()
+	bubble.id = _next_id
+	_next_id += 1
+	bubble.slot = slot
+	bubble.kind = kind
+	bubble.phase = _rng.randf() * TAU
+	bubble.pending = _settings.spawn_notice
+	bubbles[bubble.id] = bubble
+	_on_slot[slot] = bubble.id
+	bubble_announced.emit(bubble.id)
+	return bubble
+
+
+func _pick_slot(players: Dictionary, for_player: Vector3) -> int:
+	var scored: Array[Array] = []
+	var crowded: Array[Array] = []
+	for slot in _layout.zone_slots(zone):
+		if _on_slot.has(slot) or _slot_rest.has(slot):
 			continue
-		var point := _free_point(int(entry["from"]), rng)
-		if point < 0:
-			continue
-		kinds[point] = int(entry["kind"])
-		back.append(point)
-		_pending.remove_at(index)
-	for index in range(loose.size() - 1, -1, -1):
-		var item := loose[index]
-		item["left"] = float(item["left"]) - delta
-		item["owner_rest"] = maxf(float(item["owner_rest"]) - delta, 0.0)
-		if float(item["left"]) <= 0.0:
-			loose.remove_at(index)
-			continue
-		#It flies in an arc and stays floating a little over the floor it came from
-		var velocity: Vector3 = item["velocity"]
-		var position: Vector3 = item["position"]
-		velocity.y -= _gravity * delta
-		position += velocity * delta
-		if position.y <= float(item["floor"]):
-			position.y = float(item["floor"])
-			velocity = Vector3.ZERO
-		item["velocity"] = velocity
-		item["position"] = position
-	return back
-
-
-#An item knocked out of a player: it flies away from the blow and can be picked up for a while
-func drop(kind: int, from: Vector3, direction: Vector3, owner: int) -> void:
-	var away := Vector3(direction.x, 0.0, direction.z)
-	if away.length() < 0.1:
-		away = Vector3.FORWARD
-	loose.append({"kind": kind, "position": from + Vector3(0.0, 1.0, 0.0), "velocity": away.normalized() * 3.2 + Vector3(0.0, 5.0, 0.0),
-		"left": _settings.loose_seconds, "owner": owner, "owner_rest": _settings.loose_owner_rest, "floor": from.y + TrendLayout.BUBBLE_HEIGHT})
-
-
-#Whether "player_id" may pick up a loose item now: its owner has to wait a moment
-func can_pick(item: Dictionary, player_id: int) -> bool:
-	return int(item["owner"]) != player_id or float(item["owner_rest"]) <= 0.0
-
-
-func take_loose(index: int) -> int:
-	var kind := int(loose[index]["kind"])
-	loose.remove_at(index)
-	return kind
-
-
-#A random empty point, never the one the bubble was just taken from unless it is the only one
-func _free_point(avoid: int, rng: RandomNumberGenerator) -> int:
-	var free: Array[int] = []
-	for index in kinds.size():
-		if kinds[index] < 0 and index != avoid:
-			free.append(index)
-	if free.is_empty():
-		return avoid if kinds[avoid] < 0 else -1
-	return free[rng.randi() % free.size()]
-
-
-func _shuffle(values: Array[int], rng: RandomNumberGenerator) -> void:
-	for index in range(values.size() - 1, 0, -1):
-		var other := rng.randi() % (index + 1)
-		var kept := values[index]
-		values[index] = values[other]
-		values[other] = kept
+		var at: Vector3 = _layout.slots[slot]["position"]
+		var closest := INF
+		var farthest := 0.0
+		for id: int in players:
+			var meters := at.distance_to(players[id])
+			closest = minf(closest, meters)
+			farthest = maxf(farthest, meters)
+		#A random part keeps the points changing
+		var score := _rng.randf() * 3.0
+		if for_player != Vector3.ZERO:
+			score += for_player.distance_to(at)
+		elif players.size() > 1:
+			score += farthest - closest
+		if closest < _settings.spawn_clear:
+			crowded.append([score, slot])
+		else:
+			scored.append([score, slot])
+	if scored.is_empty():
+		scored = crowded
+	if scored.is_empty():
+		return -1
+	scored.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]))
+	return scored[_rng.randi() % mini(CHOICES, scored.size())][1]

@@ -1,15 +1,19 @@
 class_name Level01Debug
 extends Node
 
-#Tools for the class: F3 draws the graph and the routes, F4 shows Dijkstra reacting when a bridge closes
+#Tools for the class: F3 draws the graph and the cheapest route from the player to the goal, F4 closes a bridge of that route for a few
+#seconds so Dijkstra can be seen choosing another one
+
+const ROUTE_COLOR := Color("ffd23f")
+const DEMO_SECONDS := 8.0
 
 var _level: Level01
 var _view: GraphDebugView
 var _hud: LevelHud
 var _timer := 0.0
-var _demo_bot: ChaserBot
-var _demo_time := 0.0
-var _demo_blocked := false
+#The bridge the demo closed and the seconds it stays closed
+var _closed: Array[StringName] = []
+var _demo_left := 0.0
 
 
 func setup(level: Level01, view: GraphDebugView, hud: LevelHud) -> void:
@@ -26,7 +30,7 @@ func toggle_view() -> void:
 
 
 func toggle_demo() -> void:
-	if _demo_bot == null:
+	if _closed.is_empty():
 		_start_demo()
 	else:
 		end_demo()
@@ -34,17 +38,22 @@ func toggle_demo() -> void:
 
 func tick(delta: float) -> void:
 	_update_view(delta)
-	_update_demo(delta)
+	if not _closed.is_empty():
+		_demo_left -= delta
+		if _demo_left <= 0.0:
+			end_demo()
 
 
 func end_demo() -> void:
-	if _demo_bot == null:
+	if _closed.is_empty():
 		return
-	_demo_bot.queue_free()
-	_demo_bot = null
-	if _demo_blocked and not _level.rules.block_active():
-		_level.set_bridge_closed(false)
-	_demo_blocked = false
+	_level.set_bridge_closed(_closed[0], _closed[1], false)
+	_closed.clear()
+
+
+#The cheapest route from where the player is to the goal, as Dijkstra sees it now
+func _route() -> WeightedGraph.PathResult:
+	return _level.graph.shortest_path(_level.local_locator().vertex, Level01Layout.GOAL)
 
 
 func _update_view(delta: float) -> void:
@@ -54,15 +63,15 @@ func _update_view(delta: float) -> void:
 	if _timer < 0.1:
 		return
 	_timer = 0.0
-	var shown: Array[ChaserBot] = []
-	shown.assign(_level.bots)
-	if _demo_bot != null:
-		shown.append(_demo_bot)
-	_view.redraw(shown)
-	_hud.set_debug_text(_text(shown))
+	var routes: Array[Dictionary] = []
+	var found := _route()
+	if found.found:
+		routes.append({"path": found.path, "color": ROUTE_COLOR, "from": _level.local_player().global_position})
+	_view.redraw(routes)
+	_hud.set_debug_text(_text(found))
 
 
-func _text(shown: Array[ChaserBot]) -> String:
+func _text(found: WeightedGraph.PathResult) -> String:
 	var graph := _level.graph
 	var locator := _level.local_locator()
 	var lines := PackedStringArray()
@@ -71,50 +80,33 @@ func _text(shown: Array[ChaserBot]) -> String:
 	for edge in graph.undirected_edges():
 		if not edge["enabled"]:
 			blocked.append("%s-%s" % [edge["a"], edge["b"]])
-	lines.append("Bloqueados: %s" % (", ".join(blocked) if not blocked.is_empty() else "ninguno"))
+	lines.append("Cerrados: %s" % (", ".join(blocked) if not blocked.is_empty() else "ninguno"))
 	lines.append("Tú: %s" % (("puente %s-%s" % [locator.bridge_a, locator.bridge_b]) if locator.on_bridge else String(locator.vertex)))
-	for bot in shown:
-		var info := bot.debug_info()
-		var name_markup := "[color=#%s][b]%s[/b][/color]" % [(info["color"] as Color).to_html(false), info["name"]]
-		if not info["found"] and info["target"] != &"":
-			lines.append("%s: [color=#c0262d]SIN CAMINO[/color] hacia %s" % [name_markup, info["target"]])
-			lines.append("   %s" % info["message"])
-		elif info["target"] == &"":
-			lines.append("%s: sin destino (%s)" % [name_markup, info["state"]])
-		else:
-			var path: Array = info["route"]
-			lines.append("%s: %s → %s · costo %s · %s" % [
-				name_markup, info["from"], info["target"], String.num(info["cost"], 0), " › ".join(PackedStringArray(path))])
+	if found.found:
+		lines.append("[color=#c08a00][b]Ruta más barata[/b][/color] · costo %s" % String.num(found.cost, 1))
+		lines.append(" › ".join(PackedStringArray(found.path)))
+	else:
+		lines.append("[color=#c0262d]SIN CAMINO[/color] a la meta")
 	return "\n".join(lines)
 
 
-#A bot goes from B to L, then F-J closes and the route cost goes from 8.5 to 9.5
+#Closes the first bridge of the route that can be closed with another way left, so the route changes in front of the class
 func _start_demo() -> void:
-	if not _level.rules.is_running() or _level.bot_appearances.is_empty():
+	if not _level.rules.is_running():
+		return
+	var found := _route()
+	if not found.found:
 		return
 	_view.visible = true
 	_hud.set_debug_visible(true)
-	_demo_bot = _level.make_bot(_level.bot_appearances[0], &"B")
-	_demo_bot.push_enabled = false
-	_demo_bot.manual_target = true
-	_demo_bot.hold_movement = true
-	_demo_bot.activate(&"L")
-	_demo_time = 0.0
-	_demo_blocked = false
-	_hud.toast("Demostración: de B a L por el camino de menor costo")
-
-
-func _update_demo(delta: float) -> void:
-	if _demo_bot == null:
-		return
-	_demo_time += delta
-	if _demo_time >= 3.0 and not _demo_blocked:
-		_demo_blocked = true
-		_level.set_bridge_closed(true)
-		_hud.toast("Se bloquea %s-%s: Dijkstra elige otro camino" % [Level01Layout.BLOCK_EDGE[0], Level01Layout.BLOCK_EDGE[1]])
-	if _demo_time >= 5.0:
-		_demo_bot.hold_movement = false
-	if _demo_blocked and _demo_time >= 3.0 + _level.settings.block_duration:
-		_level.set_bridge_closed(false)
-	if _demo_bot.current_vertex == &"L" and not _demo_bot.is_crossing():
-		end_demo()
+	for step in range(found.path.size() - 1):
+		var a: StringName = found.path[step]
+		var b: StringName = found.path[step + 1]
+		_level.set_bridge_closed(a, b, true)
+		if _level.graph.shortest_path(_level.local_locator().vertex, Level01Layout.GOAL).found:
+			_closed = [a, b]
+			_demo_left = DEMO_SECONDS
+			_hud.toast("Se cierra %s-%s: Dijkstra busca otro camino" % [a, b])
+			return
+		_level.set_bridge_closed(a, b, false)
+	_hud.toast("Ningún puente de la ruta se puede cerrar sin dejarte sin camino")

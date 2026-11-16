@@ -184,6 +184,30 @@ func shortest_path(from: StringName, to: StringName, forbidden: Array = [], pena
 	return result
 
 
+#Dijkstra from one vertex to all the others at once: {vertex: cost of its cheapest route}. The ones it cannot reach are left out
+func costs_from(from: StringName, forbidden: Array = []) -> Dictionary:
+	var dist: Dictionary = {}
+	if not _adjacency.has(from):
+		return dist
+	dist[from] = 0.0
+	var settled: Dictionary = {}
+	var queue := MinHeap.new()
+	queue.push(from, 0.0)
+	while not queue.is_empty():
+		var current: StringName = queue.pop()
+		if settled.has(current):
+			continue
+		settled[current] = true
+		for edge: Edge in _adjacency[current]:
+			if not edge.enabled or forbidden.has(edge.to) or settled.has(edge.to):
+				continue
+			var candidate: float = dist[current] + edge.weight
+			if candidate < dist.get(edge.to, INF):
+				dist[edge.to] = candidate
+				queue.push(edge.to, candidate)
+	return dist
+
+
 func _set_arc(a: StringName, b: StringName, weight: float) -> void:
 	var edge := get_edge(a, b)
 	if edge == null:
