@@ -78,8 +78,9 @@ func _check_links() -> void:
 	var heard: Array[Dictionary] = []
 	limit = Time.get_ticks_msec() + WAIT_MS
 	while Time.get_ticks_msec() < limit:
+		#Each thread also says "ping" once a second (as soon as it starts, if the game took over a second to open): that is the heartbeat
 		for link in accepted:
-			heard.append_array(link.take())
+			heard.append_array(link.take().filter(func(message: Dictionary) -> bool: return message["t"] != "ping"))
 		if heard.size() >= 6:
 			break
 		await process_frame

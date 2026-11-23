@@ -53,6 +53,7 @@ func _ready() -> void:
 	_pose_dock.source = pose_state
 	add_child(_pose_dock)
 	add_child(iris)
+	Rumble.follow_round(self)
 	_open_film.call_deferred()
 
 
@@ -104,6 +105,11 @@ func spawn_players(parent: Node3D, points: Array[Vector3]) -> Array[Player]:
 		add_poser(player, local)
 		spawned.append(player)
 	return spawned
+
+
+#The player this screen controls, once the round has spawned it
+func screen_player() -> Player:
+	return _pose_player
 
 
 #The player of this screen among the spawned ones: the one with the local id, or the first one alone

@@ -270,7 +270,7 @@ func _begin_countdown() -> void:
 	var move_keys := " ".join([InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
 		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
 	_hud.show_mission("Llega a la meta", [
-		"%s|mover" % move_keys, "%s|saltar" % InputHints.key_label(&"jump"), "%s|ayuda" % InputHints.key_label(&"help")], 5.0)
+		"move=%s|mover" % move_keys, "jump=%s|saltar" % InputHints.key_label(&"jump"), "help=%s|ayuda" % InputHints.key_label(&"help")], 5.0)
 
 
 func _begin_round() -> void:

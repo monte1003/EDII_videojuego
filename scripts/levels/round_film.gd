@@ -132,7 +132,7 @@ func _build_overlay(title: String, tagline: String, step: String) -> void:
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 10)
-	row.add_child(UiKit.key_chip("ENTER", 13))
+	row.add_child(UiKit.action_chip(&"menu_confirm", 13, "ENTER"))
 	row.add_child(_outlined("SALTAR", UiKit.BUTTON_FONT, 13, Palette.PAPER))
 	row.anchor_left = 1.0
 	row.anchor_right = 1.0

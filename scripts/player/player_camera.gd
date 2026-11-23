@@ -2,6 +2,7 @@ class_name PlayerCamera
 extends Node3D
 
 @export var mouse_sensitivity := 0.003
+@export var stick_speed := Vector2(2.6, 1.7)
 @export_range(-89.0, 0.0) var min_pitch_degrees := -55.0
 @export_range(0.0, 89.0) var max_pitch_degrees := 25.0
 #The shake fades out in 1 / shake_decay seconds; offsets are in meters and the roll in radians
@@ -40,8 +41,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	var motion := event as InputEventMouseMotion
 	if motion == null or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
-	rotation.y -= motion.relative.x * mouse_sensitivity
-	var pitch := _pitch_pivot.rotation.x - motion.relative.y * mouse_sensitivity
+	_turn(motion.relative.x * mouse_sensitivity, motion.relative.y * mouse_sensitivity)
+
+
+#The right stick turns it like the mouse, in radians per second at full tilt, only while the round holds the mouse
+func _physics_process(delta: float) -> void:
+	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return
+	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
+	if look != Vector2.ZERO:
+		_turn(look.x * stick_speed.x * delta, look.y * stick_speed.y * delta)
+
+
+func _turn(yaw: float, pitch_step: float) -> void:
+	rotation.y -= yaw
+	var pitch := _pitch_pivot.rotation.x - pitch_step
 	_pitch_pivot.rotation.x = clampf(pitch, deg_to_rad(min_pitch_degrees), deg_to_rad(max_pitch_degrees))
 
 

@@ -146,7 +146,7 @@ func _ready() -> void:
 	_hud.set_time(time_limit)
 	var move_keys := " ".join([InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
 		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
-	_hud.show_mission("%d s contra la cinta" % int(time_limit), [move_keys, InputHints.key_label(&"jump")])
+	_hud.show_mission("%d s contra la cinta" % int(time_limit), ["move=" + move_keys, "jump=" + InputHints.key_label(&"jump")])
 
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_phase_timer = countdown_seconds

@@ -35,7 +35,7 @@ func _init() -> void:
 	_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_row.add_theme_constant_override("separation", 10)
 	_holder.add_child(_row)
-	_key = UiKit.key_chip(InputHints.key_label(&"interact"), 17)
+	_key = UiKit.action_chip(&"interact", 17)
 	_row.add_child(_key)
 	_word = UiKit.label("POSAR", UiKit.BUTTON_FONT, 15, Palette.PAPER)
 	_word.add_theme_color_override("font_outline_color", Color(Palette.NIGHT, 0.88))

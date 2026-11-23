@@ -4,7 +4,6 @@ extends Screen
 #and the standings when more than one played
 
 const BUTTON_WIDTH := 300.0
-const ENTER_ICON := preload("res://assets/ui/icons/key_enter.svg")
 const ROW_WIDTH := 520.0
 const ROW_STEP := 0.22
 const COUNT_TIME := 0.9
@@ -81,7 +80,8 @@ func _build() -> void:
 	gap.custom_minimum_size = Vector2(0, 8)
 	_column.add_child(gap)
 	_button = UiKit.game_button("JUGAR DE NUEVO", true, BUTTON_WIDTH, true)
-	_button.icon = ENTER_ICON
+	_button.icon = InputHints.confirm_icon()
+	InputDevice.changed.connect(_on_device_changed)
 	_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_button.pressed.connect(_confirm)
 	_column.add_child(_button)
@@ -202,3 +202,8 @@ func _land_medal() -> void:
 	land.tween_property(_total_badge, "scale", Vector2.ONE, 0.32).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	if GameSession.session_record and _total > 0:
 		land.tween_property(_record_label, "modulate:a", 1.0, 0.2)
+
+
+#The key on the main button follows the device in use: Enter or the cross of the pad
+func _on_device_changed(_kind: int) -> void:
+	_button.set_icon(InputHints.confirm_icon())

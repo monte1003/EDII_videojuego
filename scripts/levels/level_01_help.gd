@@ -76,7 +76,7 @@ Mirar: %s
 Pausa: %s · Esta ayuda: %s
 
 Cada camino tiene su nombre en un arco a la entrada. Al pasar por las dos plazas (%s) se guarda tu progreso. A la izquierda ves tu puesto." % [
-				keys, InputHints.key_markup(&"jump"), key.call("MOUSE"), InputHints.key_markup(&"pause"), InputHints.key_markup(&"help"),
+				keys, InputHints.key_markup(&"jump"), InputHints.look_markup(), InputHints.key_markup(&"pause"), InputHints.key_markup(&"help"),
 				key.call("CHECKPOINT")],
 		},
 	]

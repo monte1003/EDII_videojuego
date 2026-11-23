@@ -33,7 +33,8 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("menu_confirm") and not _name_field.has_focus() and not _net_panel.is_picking():
+	#With "Listo" selected the button itself answers the key: answering here too would mark it on the press and unmark it on the release
+	if event.is_action_pressed("menu_confirm") and not _name_field.has_focus() and not _net_panel.is_picking() and not _ready_button.has_focus():
 		get_viewport().set_input_as_handled()
 		_toggle_ready()
 	elif (event.is_action_pressed("move_left") or event.is_action_pressed("move_right")) and not _name_field.has_focus() and not _net_panel.is_picking():
@@ -203,12 +204,12 @@ func _build_name_row() -> VBoxContainer:
 	var picker := HBoxContainer.new()
 	picker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	picker.add_theme_constant_override("separation", 10)
-	picker.add_child(UiKit.key_chip(InputHints.key_label(&"move_left"), 14))
+	picker.add_child(UiKit.action_chip(&"move_left", 14))
 	_character_label = UiKit.label("", UiKit.BOLD_FONT, 22, Palette.INK)
 	_character_label.custom_minimum_size = Vector2(120, 0)
 	_character_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	picker.add_child(_character_label)
-	picker.add_child(UiKit.key_chip(InputHints.key_label(&"move_right"), 14))
+	picker.add_child(UiKit.action_chip(&"move_right", 14))
 	box.add_child(picker)
 	_net_panel = NetPanel.new()
 	box.add_child(_net_panel)

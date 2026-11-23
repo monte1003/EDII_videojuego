@@ -4,6 +4,9 @@ extends RoundScene
 #What the two arena rounds share: the players on the map, the countdown, the shoves, the blows of what moves, the trampolines,
 #cannons and belts, the bots that get in the way and how the round ends. Each round adds its own rules on top
 
+#A player threw a shove; "landed" when it reached somebody
+signal shove_thrown(player_id: int, landed: bool)
+
 enum Phase { COUNTDOWN, RUNNING, ENDED }
 
 const BOT_SCENE := preload("res://scenes/bots/chaser_bot.tscn")
@@ -182,6 +185,7 @@ func request_shove(player_id: int) -> bool:
 		landed = true
 	_shove_effects(player, facing, target, landed)
 	_on_shove_thrown(player_id, landed)
+	shove_thrown.emit(player_id, landed)
 	return true
 
 

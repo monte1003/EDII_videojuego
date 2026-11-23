@@ -98,7 +98,7 @@ func _ready() -> void:
 	_spawn_trolls()
 	_selfie_hud.set_photo(1, rules.photo_count())
 	hud.show_mission("Entra al marco", [
-		"%s|mover" % InputHints.move_label(), "%s|posar" % InputHints.key_label(&"interact"), "%s|empujar" % InputHints.key_label(&"shove")], 4.5)
+		"move=%s|mover" % InputHints.move_label(), "interact=%s|posar" % InputHints.key_label(&"interact"), "shove=%s|empujar" % InputHints.key_label(&"shove")], 4.5)
 
 
 #The studio brings its own sky, light and audience: there is no contest set around it

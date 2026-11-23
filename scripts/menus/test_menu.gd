@@ -31,6 +31,11 @@ func _ready() -> void:
 		podium.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		podium.pressed.connect(_open_podium.bind(count))
 		content.add_child(podium)
+	#Each vibration of the pad, to try it with a real DualSense
+	var rumble := UiKit.text_button("VIBRACIÓN DEL MANDO", Palette.TEAL, 30)
+	rumble.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	rumble.pressed.connect(ScreenFlow.open.bind(&"rumble_lab"))
+	content.add_child(rumble)
 	_fit_layout.call_deferred()
 
 

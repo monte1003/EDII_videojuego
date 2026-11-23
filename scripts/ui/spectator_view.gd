@@ -100,8 +100,8 @@ func _build_overlay() -> void:
 	var keys := HBoxContainer.new()
 	keys.alignment = BoxContainer.ALIGNMENT_CENTER
 	keys.add_theme_constant_override("separation", 8)
-	keys.add_child(UiKit.key_chip(InputHints.key_label(&"move_left"), 14))
-	keys.add_child(UiKit.key_chip(InputHints.key_label(&"move_right"), 14))
+	keys.add_child(UiKit.action_chip(&"move_left", 14))
+	keys.add_child(UiKit.action_chip(&"move_right", 14))
 	var word := _outlined("CAMBIAR", UiKit.BUTTON_FONT, 13, Palette.PAPER)
 	word.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	keys.add_child(word)

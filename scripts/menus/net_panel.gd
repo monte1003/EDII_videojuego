@@ -13,6 +13,7 @@ var _picker: CanvasLayer
 var _list: VBoxContainer
 var _address: LineEdit
 var _note: Label
+var _cancel_link: TextButton
 
 
 #The character this computer picked, as the room names it
@@ -83,7 +84,11 @@ func _show_picker() -> void:
 	_note.text = "Buscando salas en la red..."
 	GameSession.net.browse()
 	_fill_rooms()
-	_address.grab_focus()
+	if InputHints.uses_pad():
+		_cancel_link.grab_focus()
+		_fill_rooms()
+	else:
+		_address.grab_focus()
 
 
 func _hide_picker() -> void:
@@ -106,6 +111,10 @@ func _connect_to(address: String) -> void:
 func _fill_rooms() -> void:
 	if _list == null or not _picker.visible:
 		return
+	#The list is made again every time a room speaks: with the pad the selection stays on the same room
+	var focused := get_viewport().gui_get_focus_owner()
+	var kept := str(focused.get_meta("address", "")) if focused != null and focused.get_parent() == _list else ""
+	var follow := InputHints.uses_pad() and (kept != "" or focused == _cancel_link or focused == null)
 	for child in _list.get_children():
 		child.queue_free()
 	var rooms := GameSession.net.rooms
@@ -118,7 +127,11 @@ func _fill_rooms() -> void:
 		var entry := UiKit.text_button(text if open else text + "  (llena o en juego)", Palette.TEAL if open else Palette.INK_SOFT, 20)
 		entry.disabled = not open
 		entry.pressed.connect(_connect_to.bind(address))
+		entry.set_meta("address", address)
 		_list.add_child(entry)
+		if follow and open and (kept == "" or kept == address):
+			entry.grab_focus()
+			follow = false
 
 
 func _build_picker() -> void:
@@ -169,7 +182,7 @@ func _build_picker() -> void:
 	actions.add_theme_constant_override("separation", 24)
 	column.add_child(actions)
 	_link(actions, "Conectar", Palette.TEAL, func() -> void: _connect_to(_address.text))
-	_link(actions, "Cancelar", Palette.INK_SOFT, _hide_picker)
+	_cancel_link = _link(actions, "Cancelar", Palette.INK_SOFT, _hide_picker)
 
 
 func _link(parent: Control, text: String, color: Color, action: Callable) -> TextButton:

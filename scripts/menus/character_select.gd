@@ -5,6 +5,8 @@ const COLUMNS := 2
 
 @export var characters: Array[CharacterData] = []
 @export var rotate_sensitivity := 0.01
+#Radians per second at full tilt of the right stick
+@export var stick_turn := 3.0
 
 var _tiles: Array[CharacterTile] = []
 var _selected_index := -1
@@ -32,6 +34,8 @@ func _ready() -> void:
 	_play_button.pressed.connect(_play)
 	_back_button.pressed.connect(ScreenFlow.back)
 	_select(0)
+	_show_keys()
+	InputDevice.changed.connect(_on_device_changed)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -77,6 +81,23 @@ func _select(index: int) -> void:
 	_preview_model = character.model_scene.instantiate() as Node3D
 	_model_pivot.add_child(_preview_model)
 	_model_pivot.rotation.y = 0.0
+
+
+#The keys drawn on the two buttons follow the device in use: Enter and E, or the cross and the circle of the pad
+func _show_keys() -> void:
+	(_play_button as GameButton).set_icon(InputHints.confirm_icon())
+	(_back_button as GameButton).set_icon(InputHints.back_icon())
+
+
+func _on_device_changed(_kind: int) -> void:
+	_show_keys()
+
+
+#The right stick turns the character like dragging it with the mouse
+func _process(delta: float) -> void:
+	var turn := Input.get_axis("look_left", "look_right")
+	if turn != 0.0:
+		_model_pivot.rotate_y(turn * stick_turn * delta)
 
 
 func _on_preview_gui_input(event: InputEvent) -> void:

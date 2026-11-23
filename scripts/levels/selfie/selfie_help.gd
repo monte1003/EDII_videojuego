@@ -5,7 +5,6 @@ extends RefCounted
 
 
 static func pages(settings: SelfieSettings, sheet: ScoreSheet) -> Array[Dictionary]:
-	var key := InputHints.markup
 	return [
 		{
 			"title": "Misión",
@@ -35,7 +34,7 @@ Pedestales: flecha, salto más alto; rayo, más velocidad; escudo, para un golpe
 
 Mover: %s · Saltar: %s · Mirar: %s
 Pausa: %s · Ayuda: %s" % [
-				InputHints.key_markup(&"jump"), InputHints.move_markup(), InputHints.key_markup(&"jump"), key.call("MOUSE"),
+				InputHints.key_markup(&"jump"), InputHints.move_markup(), InputHints.key_markup(&"jump"), InputHints.look_markup(),
 				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
 		},
 	]

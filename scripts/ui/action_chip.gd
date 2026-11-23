@@ -26,7 +26,7 @@ var _tween: Tween
 var _caption_tween: Tween
 
 
-func _init(key_text: String, word: String) -> void:
+func _init(action: StringName, word: String) -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = false
 	modulate.a = 0.0
@@ -34,7 +34,7 @@ func _init(key_text: String, word: String) -> void:
 	_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_row.add_theme_constant_override("separation", 8)
 	add_child(_row)
-	_key = UiKit.key_chip(key_text, 18)
+	_key = UiKit.action_chip(action, 18)
 	_row.add_child(_key)
 	_word = _text(word, UiKit.BUTTON_FONT, 15, Palette.PAPER)
 	_row.add_child(_word)

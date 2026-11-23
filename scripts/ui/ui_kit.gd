@@ -81,6 +81,13 @@ static func text_button(text: String, accent := Palette.CORAL, size := 22) -> Te
 static func key_chip(key_name: String, size := 20) -> PanelContainer:
 	var chip := PanelContainer.new()
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.add_theme_stylebox_override("panel", key_cap())
+	chip.add_child(label(key_name, HEADING_FONT, size, Palette.INK))
+	return chip
+
+
+#The light cap with a lilac rim under every key and pad button
+static func key_cap() -> StyleBoxFlat:
 	var style := box(Color(Palette.PAPER, 0.92), 10)
 	style.set_border_width_all(2)
 	style.border_color = Palette.LILAC
@@ -89,6 +96,17 @@ static func key_chip(key_name: String, size := 20) -> PanelContainer:
 	style.content_margin_right = 10
 	style.content_margin_top = 2
 	style.content_margin_bottom = 2
-	chip.add_theme_stylebox_override("panel", style)
-	chip.add_child(label(key_name, HEADING_FONT, size, Palette.INK))
-	return chip
+	return style
+
+
+#The cap of an action: its key on the keyboard, its button on the pad, changing by itself with the device in use
+static func action_chip(action: StringName, size := 20, keys_text := "") -> HintChip:
+	return HintChip.new(action, size, keys_text)
+
+
+#The key part of a hint line: "jump=ESPACIO" is an action with what its key reads, so it follows the device; a bare text is just a key
+static func entry_chip(entry: String, size := 20) -> PanelContainer:
+	var cut := entry.find("=")
+	if cut < 0:
+		return key_chip(entry, size)
+	return action_chip(StringName(entry.left(cut)), size, entry.substr(cut + 1))
