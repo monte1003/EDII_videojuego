@@ -198,6 +198,17 @@ func _kept_result(index: int, points: Dictionary) -> RoundResult:
 	return result.with_score(RoundScore.make(score_sheet, int(points.get(local_id, 0)), ""), points)
 
 
+#The fair screen watches a round of a room without playing it: the order, the seeds and the round it builds, with nobody of the room as
+#its player and no change of phase, so it never reports points
+func follow_round(order: Array[StringName], round_seeds: Array[int], index: int) -> void:
+	plan = order.duplicate()
+	seeds = round_seeds.duplicate()
+	round_index = index
+	round_seed = seeds[index] if index >= 0 and index < seeds.size() else 0
+	practice = false
+	local_id = 0
+
+
 #Everybody of a room goes to the warm-up together
 func enter_warmup() -> void:
 	results.clear()

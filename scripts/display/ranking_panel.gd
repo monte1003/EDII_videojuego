@@ -3,13 +3,11 @@ extends PanelContainer
 
 #The ranking of the day on the fair screen, drawn like the screens of the game: the sky with its icons, a coral line over a title in ink,
 #the first three on cards of their own with the seal of their crown (diamond, gold and silver, as on the podium) and the rest in a list
-#like the positions of the final count. Until the real ranking exists (Phase 4) it shows SAMPLE, and says so on screen
+#like the positions of the final count. It shows the ranking of the fair (FairRanking); at the end of a game the rows come in one after the
+#other and the new ones of that game light up in coral while their points count up
 
 const TOP := 3
 const ROWS := 10
-#Example rows, only for the look of the panel: Phase 4 deletes this list and show_sample
-const SAMPLE: Array[Array] = [["VALENTINA", 4210], ["SANTI", 3985], ["MAJO", 3720], ["EL PROFE", 3410], ["CAMILA R.", 3122],
-	["JUANPA", 2890], ["SOFÍA", 2655], ["NICO", 2410], ["ANDRÉS", 2190], ["LUCÍA", 1875]]
 #The crown of each of the first three places, its name and the colour of its card's edge
 const CROWNS: Array[ScoreSheet.Medal] = [ScoreSheet.Medal.DIAMOND, ScoreSheet.Medal.GOLD, ScoreSheet.Medal.SILVER]
 const CROWN_NAMES: Array[String] = ["CORONA DE DIAMANTE", "CORONA DE ORO", "CORONA DE PLATA"]
@@ -18,6 +16,9 @@ const EDGES: Array[Color] = [Color("5fd4f4"), Color("ffc531"), Color("b7c3d9")]
 var _top := VBoxContainer.new()
 var _rest := VBoxContainer.new()
 var _tag: Label
+var _empty: Label
+var _heading: Label
+var _subtitle := "Los 10 mejores"
 
 
 func _ready() -> void:
@@ -52,8 +53,9 @@ func _ready() -> void:
 	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(words)
 	words.add_child(UiKit.label("RANKING DEL DÍA", UiKit.BUTTON_FONT, 11, Palette.CORAL))
-	words.add_child(UiKit.label("Los 10 mejores", UiKit.HEADING_FONT, 30, Palette.INK))
-	_tag = UiKit.label("EJEMPLO", UiKit.BUTTON_FONT, 9, Palette.TEAL)
+	_heading = UiKit.label(_subtitle, UiKit.HEADING_FONT, 30, Palette.INK)
+	words.add_child(_heading)
+	_tag = UiKit.label("NUEVO", UiKit.BUTTON_FONT, 9, Palette.CORAL)
 	_tag.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	head.add_child(_tag)
 	_top.add_theme_constant_override("separation", 8)
@@ -64,35 +66,58 @@ func _ready() -> void:
 	_rest.add_theme_constant_override("separation", 2)
 	_rest.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(_rest)
-	show_sample()
-
-
-func show_sample() -> void:
-	var rows: Array[Array] = []
-	for row in SAMPLE:
-		rows.append(row)
-	show_rows(rows)
-	_tag.visible = true
-
-
-#Rows of [name, points], best first; only the first ten show
-func show_rows(rows: Array[Array]) -> void:
+	_empty = UiKit.label("Todavía no juega nadie.\n¿Quién estrena la corona?", UiKit.BOLD_FONT, 18, Palette.INK_SOFT)
+	_empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_empty.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_rest.add_child(_empty)
 	_tag.visible = false
+
+
+#The line under the title (the full list says how many there are)
+func set_subtitle(text: String) -> void:
+	_subtitle = text
+	if _heading != null:
+		_heading.text = text
+
+
+#Rows of [name, points], best first; only the first ten show. "fresh" are the places (from 0) of the entries of the game that just ended:
+#with "animate" the rows come in one after the other and those light up while their points count up
+func show_rows(rows: Array[Array], fresh: Array[int] = [], animate := false) -> void:
+	_tag.visible = not fresh.is_empty()
 	for child in _top.get_children() + _rest.get_children():
-		child.queue_free()
+		if child != _empty:
+			child.queue_free()
+	_empty.visible = rows.is_empty()
 	for index in mini(rows.size(), ROWS):
 		var shown := str(rows[index][0])
 		var points := int(rows[index][1])
-		if index < TOP:
-			_top.add_child(_crowned(index, shown, points))
-		else:
-			_rest.add_child(_row(index, shown, points))
+		var line := _crowned(index, shown, points, fresh.has(index)) if index < TOP else _row(index, shown, points, fresh.has(index))
+		(_top if index < TOP else _rest).add_child(line)
+		if animate:
+			_enter(line, index, points, fresh.has(index))
+
+
+#A row slides in from the right after the ones above it; a new one counts its points up from zero
+func _enter(line: Control, index: int, points: int, fresh: bool) -> void:
+	line.modulate.a = 0.0
+	var arrive := create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	arrive.tween_interval(0.12 * index)
+	arrive.tween_property(line, "modulate:a", 1.0, 0.3)
+	if not fresh:
+		return
+	var score := line.get_meta("score") as Label
+	var count := create_tween()
+	count.tween_interval(0.12 * index)
+	count.tween_method(func(value: float) -> void: score.text = str(roundi(value)), 0.0, float(points), 1.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var pulse := create_tween().set_loops(3)
+	pulse.tween_property(line, "scale", Vector2(1.04, 1.04), 0.25).set_delay(0.12 * index)
+	pulse.tween_property(line, "scale", Vector2.ONE, 0.25)
 
 
 #One of the first three: a white card edged in the colour of its crown, with its seal, its name and the name of its crown
-func _crowned(index: int, shown_name: String, points: int) -> Control:
+func _crowned(index: int, shown_name: String, points: int, fresh := false) -> Control:
 	var card := PanelContainer.new()
-	var face := UiKit.box(Color(Palette.PAPER, 0.96), 22)
+	var face := UiKit.box(Color(Palette.PAPER, 0.96) if not fresh else Color("ffe3ea"), 22)
 	face.border_color = EDGES[index]
 	face.set_border_width_all(4 if index == 0 else 3)
 	face.content_margin_left = 10.0
@@ -117,14 +142,16 @@ func _crowned(index: int, shown_name: String, points: int) -> Control:
 	var who := UiKit.label(shown_name, UiKit.HEADING_FONT, 26 if index == 0 else 21, Palette.INK)
 	who.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	words.add_child(who)
-	var score := UiKit.label(str(points), UiKit.BUTTON_FONT, 20 if index == 0 else 16, Palette.INK)
+	var score := UiKit.label(str(points), UiKit.BUTTON_FONT, 20 if index == 0 else 16, Palette.CORAL if fresh else Palette.INK)
 	score.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	line.add_child(score)
+	card.set_meta("score", score)
+	card.pivot_offset = Vector2(150.0, 30.0)
 	return card
 
 
 #From the fourth on: the place, the name and the points, as in the positions of the final count
-func _row(index: int, shown_name: String, points: int) -> Control:
+func _row(index: int, shown_name: String, points: int, fresh := false) -> Control:
 	var line := HBoxContainer.new()
 	line.add_theme_constant_override("separation", 12)
 	line.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -133,12 +160,14 @@ func _row(index: int, shown_name: String, points: int) -> Control:
 	place.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	place.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	line.add_child(place)
-	var who := UiKit.label(shown_name, UiKit.BOLD_FONT, 18, Palette.INK)
+	var who := UiKit.label(shown_name, UiKit.BOLD_FONT, 18, Palette.CORAL if fresh else Palette.INK)
 	who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	who.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	who.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	line.add_child(who)
-	var score := UiKit.label(str(points), UiKit.BUTTON_FONT, 14, Palette.INK)
+	var score := UiKit.label(str(points), UiKit.BUTTON_FONT, 14, Palette.CORAL if fresh else Palette.INK)
 	score.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	line.add_child(score)
+	line.set_meta("score", score)
+	line.pivot_offset = Vector2(150.0, 12.0)
 	return line

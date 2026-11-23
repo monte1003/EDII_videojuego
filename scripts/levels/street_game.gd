@@ -183,7 +183,11 @@ func _spawn_runner(half_width: float) -> void:
 	_runner.position = Vector3(start_x, 0.0, 0.0)
 	_runner.set_character(slot.character, GameSession.variant_of(slot.player_id))
 	_runner.set_input_enabled(false)
-	add_poser(_runner, true)
+	#The fair screen has no runner of its own: the first one is a puppet like the others
+	var watching := GameSession.is_networked() and not GameSession.practice and slot.player_id != GameSession.local_id
+	if watching:
+		_runner.make_remote()
+	add_poser(_runner, not watching)
 	#In a room the runners of the other computers run beside, as puppets: whoever the street takes watches them
 	if GameSession.is_networked() and not GameSession.practice:
 		for other in participants:

@@ -4,7 +4,8 @@ extends CanvasLayer
 #The frame of the fair screen over the full-screen picture, drawn like the screens of the game (light cards, ink, a coral line, the seals
 #of the medals). Top left, the banner of who or what is in focus, as the header of the lobby, with the seal of its crown when it has
 #one; on the right, the light that says whether a game is on and, under it, the ranking of the day as tall as the screen; at the bottom
-#left, two short lines of the fair that take turns
+#left, two short lines of the fair that take turns, or the live board of the game being watched. In the middle, when a game ends, the
+#ranking in big with its messages, and for the staff the full list and short notices
 
 const COLUMN_WIDTH := 380.0
 const STRIP_SECONDS := 7.0
@@ -26,10 +27,20 @@ var _strip_turn := 0
 var _strip_left := STRIP_SECONDS
 var _clock := 0.0
 var _live := false
+var _strips: Control
+var _board := HBoxContainer.new()
+var _finale := CenterContainer.new()
+var _finale_ranking: RankingPanel
+var _finale_lines := VBoxContainer.new()
+var _full := CenterContainer.new()
+var _full_text: Label
+var _notice: PanelContainer
+var _notice_text: Label
 
 
 func _ready() -> void:
-	layer = 10
+	#Over everything of the rounds it shows, their loading cover included (layer 30)
+	layer = 40
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -49,7 +60,12 @@ func _ready() -> void:
 	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	left.add_child(gap)
-	left.add_child(_build_strips())
+	_strips = _build_strips()
+	left.add_child(_strips)
+	_board.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_board.add_theme_constant_override("separation", 10)
+	_board.visible = false
+	left.add_child(_board)
 	var column := VBoxContainer.new()
 	column.custom_minimum_size.x = COLUMN_WIDTH
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -58,6 +74,9 @@ func _ready() -> void:
 	column.add_child(_build_live())
 	ranking.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(ranking)
+	_build_finale()
+	_build_full_list()
+	_build_notice()
 	show_focus("RumbleNet", "PANTALLA DE FERIA", ScoreSheet.Medal.NONE)
 	set_live("BUSCANDO LA SALA", false)
 
@@ -97,6 +116,139 @@ func set_live(text: String, live: bool) -> void:
 	(_live_dot.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Palette.CORAL if live else Palette.LILAC
 	if not live:
 		_live_dot.modulate.a = 1.0
+
+
+#The live board of the game being watched, in place of the lines of the fair: one card per player, the best first, with the colour of
+#its character, its name, its total and, after a round, what it just won. Empty rows: back to the lines of the fair
+func show_board(rows: Array[Dictionary]) -> void:
+	_strips.visible = rows.is_empty()
+	_board.visible = not rows.is_empty()
+	for child in _board.get_children():
+		child.queue_free()
+	for index in rows.size():
+		var row := rows[index]
+		var card := PanelContainer.new()
+		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_theme_stylebox_override("panel", _card(20, 8.0, 14.0))
+		card.modulate.a = 0.55 if bool(row.get("gone", false)) else 1.0
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 9)
+		card.add_child(line)
+		line.add_child(UiKit.label("%d.º" % (index + 1), UiKit.BUTTON_FONT, 11, Palette.INK_SOFT))
+		var dot := Panel.new()
+		dot.custom_minimum_size = Vector2(12.0, 12.0)
+		dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		dot.add_theme_stylebox_override("panel", UiKit.box(row.get("color", Palette.LILAC), 6))
+		line.add_child(dot)
+		var words := VBoxContainer.new()
+		words.add_theme_constant_override("separation", -3)
+		line.add_child(words)
+		words.add_child(UiKit.label(str(row.get("name", "")), UiKit.HEADING_FONT, 18, Palette.INK))
+		var points := "%d PTS" % int(row.get("total", 0))
+		if int(row.get("gain", 0)) > 0:
+			points += "  +%d" % int(row.get("gain", 0))
+		words.add_child(UiKit.label(points, UiKit.BUTTON_FONT, 10, Palette.CORAL if int(row.get("gain", 0)) > 0 else Palette.INK_SOFT))
+		_board.add_child(card)
+
+
+#The end of a game: the ranking in big in the middle, its rows coming in, and under it what happened (a record, who got in, who was short)
+func show_finale(rows: Array[Array], fresh: Array[int], lines: Array[String]) -> void:
+	_finale.visible = true
+	_finale.modulate.a = 0.0
+	create_tween().tween_property(_finale, "modulate:a", 1.0, 0.4)
+	_finale_ranking.show_rows(rows, fresh, true)
+	for child in _finale_lines.get_children():
+		child.queue_free()
+	for index in lines.size():
+		var pill := PanelContainer.new()
+		pill.add_theme_stylebox_override("panel", _card(20, 8.0, 18.0))
+		var text := UiKit.label(lines[index], UiKit.BUTTON_FONT, 12 if index == 0 else 11, Palette.CORAL if index == 0 else Palette.INK)
+		text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pill.add_child(text)
+		pill.modulate.a = 0.0
+		_finale_lines.add_child(pill)
+		create_tween().tween_property(pill, "modulate:a", 1.0, 0.4).set_delay(1.6 + 0.5 * index)
+
+
+func hide_finale() -> void:
+	if _finale.visible:
+		var out := create_tween()
+		out.tween_property(_finale, "modulate:a", 0.0, 0.4)
+		out.tween_callback(_finale.hide)
+
+
+#For the staff: every entry of the ranking in columns, or hidden again
+func toggle_full_list(rows: Array[Array]) -> void:
+	_full.visible = not _full.visible
+	if not _full.visible:
+		return
+	var lines: Array[String] = []
+	for index in rows.size():
+		lines.append("%d.º  %s  ·  %d" % [index + 1, str(rows[index][0]), int(rows[index][1])])
+	_full_text.text = "\n".join(lines) if not lines.is_empty() else "Todavía no hay nadie en el ranking"
+
+
+#A short notice for the staff at the top of the screen
+func notice(text: String, seconds := 4.0) -> void:
+	_notice_text.text = text
+	_notice.visible = true
+	_notice.modulate.a = 1.0
+	var out := create_tween()
+	out.tween_interval(seconds)
+	out.tween_property(_notice, "modulate:a", 0.0, 0.4)
+	out.tween_callback(_notice.hide)
+
+
+func _build_finale() -> void:
+	_finale.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_finale.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_finale.visible = false
+	add_child(_finale)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 12)
+	_finale.add_child(column)
+	_finale_ranking = RankingPanel.new()
+	_finale_ranking.custom_minimum_size = Vector2(460.0, 560.0)
+	column.add_child(_finale_ranking)
+	_finale_lines.add_theme_constant_override("separation", 8)
+	column.add_child(_finale_lines)
+
+
+func _build_full_list() -> void:
+	_full.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_full.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_full.visible = false
+	add_child(_full)
+	var card := PanelContainer.new()
+	var face := UiKit.card_style(0.97, 26)
+	face.content_margin_left = 28.0
+	face.content_margin_right = 28.0
+	face.content_margin_top = 20.0
+	face.content_margin_bottom = 20.0
+	card.add_theme_stylebox_override("panel", face)
+	_full.add_child(card)
+	var column := VBoxContainer.new()
+	card.add_child(column)
+	column.add_child(UiKit.label("RANKING COMPLETO · F6 CIERRA", UiKit.BUTTON_FONT, 11, Palette.CORAL))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(620.0, 520.0)
+	column.add_child(scroll)
+	_full_text = UiKit.label("", UiKit.BODY_FONT, 17, Palette.INK)
+	scroll.add_child(_full_text)
+
+
+func _build_notice() -> void:
+	var holder := CenterContainer.new()
+	holder.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	holder.offset_top = 96.0
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(holder)
+	_notice = PanelContainer.new()
+	_notice.add_theme_stylebox_override("panel", _card(20, 10.0, 20.0))
+	_notice.visible = false
+	holder.add_child(_notice)
+	_notice_text = UiKit.label("", UiKit.BUTTON_FONT, 12, Palette.INK)
+	_notice.add_child(_notice_text)
 
 
 func _build_banner() -> Control:
