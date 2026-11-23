@@ -1,0 +1,778 @@
+class_name AttractReel
+extends Node3D
+
+#The trailer of the fair screen, made inside the engine with the real pieces of the game (it is not a video): the night stage of the
+#podium, La Plaza, El Plató and SocialDrop, the four characters running, shoving, posing and dancing, the 3D letters of the title and
+#short lines of our own. Three acts cut on the bars of the game's music (the victory theme, the trend war theme and the end of the
+#victory theme, about 70 s in all), and the loop fades to night and starts over without a cut
+
+#What the banner of the frame shows: who or what is on screen, the line over it and the seal of its crown (a ScoreSheet.Medal)
+signal focus_changed(title: String, detail: String, medal: int)
+#The places are built and the trailer is playing
+signal started
+
+const VICTORY: AudioStream = preload("res://assets/audio/music/victory_theme.ogg")
+const PLAZA_THEME: AudioStream = preload("res://assets/audio/music/trend_war.ogg")
+const MARK: Texture2D = preload("res://assets/ui/textures/mark.png")
+#Bars of the two tracks (117.5 and 123 beats a minute, four beats a bar) and the first beat of the victory theme
+const VICTORY_BAR := 2.043
+const VICTORY_BEAT := 0.84
+const PLAZA_BAR := 1.951
+#The break of the trend war theme, where the maps end, and the climb of the victory theme to its end
+const PLAZA_END := 40.5
+const CLOSING_FROM := 22.0
+const CLOSING_END := 36.2
+const MUSIC_DB := -8.0
+const STAGE_SCALE := 1.6
+#Fast and slow motion, and how long the speed takes to ramp into them, as films do (real seconds)
+const FAST_MOTION := 1.6
+const SLOW_MOTION := 0.2
+const RAMP := 0.35
+#The speed of a player in the game and the jump of a runner: the run of the characters matches their legs
+const RUN_SPEED := 5.0
+const HOP_SECONDS := 0.55
+const HOP_HEIGHT := 0.9
+#The bars of the cinema, always on, and a little closer at the big moments
+const BARS := 0.075
+const BARS_CLOSE := 0.1
+#The ranking column covers the right quarter of the screen: every shot slides its subject to the middle of what is left, a share of
+#its distance to the camera (the tangent of half the horizontal view times a quarter of the screen)
+const FRAME_SHIFT := 0.23
+#Lines of text ride close in front of the camera (nothing of the scene, not even confetti, gets between): their distance and the height
+#of their letters
+const LINE_DISTANCE := 2.6
+const LINE_HEIGHT := 0.177
+const PLACES: Array[StringName] = [AttractSets.STAGE, AttractSets.PLAZA, AttractSets.PLATO, AttractSets.DROP]
+#The crown of each character's block on the stage, in the order of AttractSets.CHARACTERS (as on the podium: diamond for the first)
+const CROWNS: Array[ScoreSheet.Medal] = [ScoreSheet.Medal.DIAMOND, ScoreSheet.Medal.GOLD, ScoreSheet.Medal.SILVER, ScoreSheet.Medal.BRONZE]
+#The pose each character strikes when it lands on its block, and the dance of each one at the end
+const HERO_POSES: Array[int] = [0, 1, 2, 4]
+const DANCES: Array[int] = [3, 5, 2, 4]
+
+var places: Dictionary = {}
+var active: AttractSets.Place
+
+var _camera := CinemaCamera.new()
+var _board_middle := Vector3.ZERO
+var _figures: Array[Figure] = []
+var _track: AudioStreamPlayer
+#Where the track started and when, in real time: the cuts follow this clock, which slow and fast motion do not touch
+var _track_from := 0.0
+var _track_at := 0
+var _players: Array[AudioStreamPlayer] = []
+var _clock := 0.0
+var _words: Array[Node3D] = []
+var _title: Array[Node3D] = []
+var _rng := RandomNumberGenerator.new()
+var _veil := ColorRect.new()
+var _flash := ColorRect.new()
+var _bars: Array[ColorRect] = []
+var _fireworks := false
+var _firework_left := 0.0
+#The runners the camera runs alongside during the race, the side it watches them from and the way they run
+var _pack: Array[Figure] = []
+var _pack_side := Vector3.ZERO
+var _pack_ahead := Vector3.ZERO
+var _pack_center := Vector3.ZERO
+
+
+class Figure:
+	var root := Node3D.new()
+	var model: CharacterModel
+	var data: CharacterData
+
+
+func _ready() -> void:
+	_rng.seed = 2611
+	_camera.fov = 55.0
+	add_child(_camera)
+	for index in 2:
+		var player := AudioStreamPlayer.new()
+		player.volume_db = -40.0
+		add_child(player)
+		_players.append(player)
+	for id in AttractSets.CHARACTERS:
+		var figure := Figure.new()
+		figure.data = load("res://resources/characters/%s.tres" % id) as CharacterData
+		figure.model = figure.data.model_scene.instantiate() as CharacterModel
+		figure.root.add_child(figure.model)
+		figure.root.visible = false
+		add_child(figure.root)
+		_figures.append(figure)
+	_build_overlay()
+	_run.call_deferred()
+
+
+func _process(delta: float) -> void:
+	_clock += delta
+	if active != null and active.ground != null:
+		active.ground.update(_clock)
+	if not _pack.is_empty():
+		_follow_pack(delta)
+	if _fireworks and active != null and active.podium != null:
+		_firework_left -= delta
+		if _firework_left <= 0.0:
+			_firework_left = _rng.randf_range(0.45, 1.0)
+			active.podium.firework()
+
+
+func _exit_tree() -> void:
+	Engine.time_scale = 1.0
+	#The places waiting out of the tree are nobody's children: they go with the trailer
+	for place: AttractSets.Place in places.values():
+		if place != active and is_instance_valid(place.root):
+			place.root.queue_free()
+
+
+#Builds the places one per frame behind a night veil, then plays the three acts forever
+func _run() -> void:
+	_veil.color.a = 1.0
+	for id in PLACES:
+		places[id] = AttractSets.build(id, self)
+		await get_tree().process_frame
+	started.emit()
+	while is_inside_tree():
+		await _act_stage()
+		await _act_maps()
+		await _act_closing()
+
+
+#Act one, on the start of the victory theme: the stage at night, the emblem on the first beat, the title dropping letter by letter and
+#the four characters landing one per bar
+func _act_stage() -> void:
+	_show(AttractSets.STAGE)
+	_hide_figures()
+	_play(VICTORY, 0.0)
+	_fade(false, 1.4)
+	_letterbox(BARS_CLOSE, 0.01)
+	_camera.make_current()
+	_camera.zoom_to(55.0, 0.01)
+	_shift(10.5)
+	_camera.place(Vector3(0.0, 16.0, 34.0), Vector3(0.0, 6.0, 0.0))
+	_camera.glide(Vector3(0.0, 8.6, 4.6), Vector3(0.0, 8.9, -5.9), 4.4, Tween.TRANS_CUBIC, Tween.EASE_OUT)
+	active.podium.crowd.set_excitement(1.2)
+	focus_changed.emit("RumbleNet", "DEL FEED AL RING", ScoreSheet.Medal.NONE)
+	SynthSound.play(self, SynthSound.cheer(4.0), -17.0)
+	await _until(VICTORY_BEAT)
+	_flash_screen(0.45)
+	_camera.shake(0.3)
+	_raise_title()
+	await _until(VICTORY_BEAT + 2.0 * VICTORY_BAR)
+	_clear_title(true)
+	for index in _figures.size():
+		await _hero(index, VICTORY_BEAT + (3.0 + index) * VICTORY_BAR)
+	focus_changed.emit("Los cuatro", "EN ESCENA", ScoreSheet.Medal.NONE)
+	_shift(13.0)
+	_camera.place(Vector3(0.0, 2.6, 11.5), Vector3(0.0, 2.4, 0.0))
+	_camera.glide(Vector3(0.0, 3.6, 14.5), Vector3(0.0, 2.8, 0.0), VICTORY_BAR * 1.2)
+	_say(["AQUÍ NADIE TE", "DEJA EN VISTO."], true)
+	await _until(VICTORY_BEAT + 7.0 * VICTORY_BAR)
+	_clear_words()
+	_flash_screen(0.8)
+
+
+#One character drops onto its block, lands with a bounce, its light comes on, its name stands next to it and it strikes its pose; the
+#camera pushes in from a low angle until "until"
+func _hero(index: int, until: float) -> void:
+	var figure := _figures[index]
+	var entry := AttractSets.entry_of(active, index)
+	var top := active.podium.top_of(entry)
+	var side := signf(top.x) if absf(top.x) > 0.1 else 1.0
+	_shift(5.4)
+	_camera.place(top + Vector3(side * 2.2, 0.5, 7.0), top + Vector3(0.0, 1.7, 0.0))
+	_camera.glide(top + Vector3(side * 1.1, 1.0, 4.9), top + Vector3(0.0, 1.8, 0.0), until - _now(), Tween.TRANS_QUAD, Tween.EASE_OUT)
+	_stand(figure, top + Vector3(0.0, 7.0, 0.0), top + Vector3(side * 1.5, 0.0, 6.0), STAGE_SCALE)
+	figure.model.set_state(false, true)
+	focus_changed.emit(figure.data.display_name, "PERSONAJE", CROWNS[index])
+	var fall := create_tween()
+	fall.tween_property(figure.root, "position", top, 0.42).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	await fall.finished
+	if not is_inside_tree():
+		return
+	figure.model.set_state(false, false)
+	_squash(figure)
+	_camera.shake(0.4)
+	active.podium.light_block(entry, 6.0, 0.3)
+	SynthSound.play(self, SynthSound.thump(0.3), -9.0)
+	_name_tag(figure, top + Vector3(-side * 1.9, 2.3, 0.4))
+	await _wait(0.4)
+	_pose(figure, HERO_POSES[index])
+	await _until(until)
+	_clear_words()
+
+
+#Act two, on the trend war theme: La Plaza from the sky, a race in fast motion, a shove in slow motion, El Plató, the SocialDrop board
+#and a pass over each map, a few bars per shot
+func _act_maps() -> void:
+	_show(AttractSets.PLAZA)
+	_play(PLAZA_THEME, 0.0)
+	_letterbox(BARS, 0.6)
+	var middle := active.layout.position_of(TrendLayout.CORE)
+	_gather(AttractSets.PLAZA, false)
+	focus_changed.emit(_title_of(&"trend_war"), "LA PLAZA", ScoreSheet.Medal.NONE)
+	_camera.zoom_to(58.0, 0.01)
+	_shift(20.0)
+	_camera.place(middle + Vector3(-30.0, 62.0, 78.0), middle)
+	_camera.glide(middle + Vector3(6.0, 9.0, 17.0), middle + Vector3(0.0, 1.0, 0.0), 3.0 * PLAZA_BAR, Tween.TRANS_CUBIC, Tween.EASE_OUT)
+	await _until(PLAZA_BAR)
+	_say(["ATRAPA LA TENDENCIA ANTES", "DE QUE PASE DE MODA."], false)
+	await _until(2.0 * PLAZA_BAR)
+	_pose(_figures[3], 5)
+	_hop(_figures[1])
+	await _until(3.0 * PLAZA_BAR)
+	_clear_words()
+	await _race(6.0 * PLAZA_BAR)
+	await _shove(middle, 9.0 * PLAZA_BAR)
+	_dip(Palette.LILAC)
+	await _plato(13.0 * PLAZA_BAR)
+	_dip(Palette.LILAC)
+	await _board(17.0 * PLAZA_BAR)
+	var span := (PLAZA_END - 17.0 * PLAZA_BAR) / 3.0
+	for index in 3:
+		_flyover(PLACES[index + 1], span)
+		await _until(17.0 * PLAZA_BAR + span * (index + 1))
+	_flash_screen(0.8)
+
+
+#The four characters race across La Plaza: the time speeds up, each runs at its own pace (they pass each other), weaving a little and
+#hopping here and there, and the camera runs alongside at their height
+func _race(until: float) -> void:
+	var path := AttractSets.plaza_run(active.layout)
+	focus_changed.emit("A toda velocidad", "CÁMARA RÁPIDA", ScoreSheet.Medal.NONE)
+	var start := path[0]
+	var finish := path[-1]
+	var across := Vector3(finish.z - start.z, 0.0, start.x - finish.x).normalized()
+	var paces: Array[float] = [1.0, 1.06, 0.97, 1.03]
+	for index in _figures.size():
+		var lane: Array[Vector3] = []
+		var phase := _rng.randf_range(0.0, TAU)
+		for step in path.size():
+			var weave := sin(step * 0.35 + phase) * 0.35
+			lane.append(_on_ground(path[step] + across * ((index - 1.5) * 1.1 + weave)))
+		_stand(_figures[index], lane[0], lane[1], 1.0)
+		var hops: Array[float] = [_rng.randf_range(0.2, 0.4), _rng.randf_range(0.55, 0.8)]
+		_run_along(_figures[index], lane, RUN_SPEED * paces[index], 0.05 * index, hops)
+	_ramp(FAST_MOTION)
+	_shift(6.5)
+	_pack = _figures.duplicate()
+	_pack_side = across
+	_pack_ahead = (finish - start).normalized()
+	_pack_center = start
+	_say(["EL FEED NO SE ACABA.", "ESTA CARRERA, SÍ."], false)
+	await _until(until - RAMP)
+	_ramp(1.0)
+	await _until(until)
+	_pack.clear()
+	_clear_words()
+
+
+#The camera runs beside the middle of the runners, a little behind and at the height of their heads, looking a little ahead of them
+func _follow_pack(delta: float) -> void:
+	var center := Vector3.ZERO
+	for figure in _pack:
+		center += figure.root.position / _pack.size()
+	_pack_center = _pack_center.lerp(center, 1.0 - exp(-5.0 * delta))
+	_camera.place(_pack_center + _pack_side * 6.5 - _pack_ahead * 1.2 + Vector3(0.0, 1.5, 0.0), _pack_center + _pack_ahead * 1.5 + Vector3(0.0, 0.7, 0.0))
+
+
+#Face to face in the middle of La Plaza: one takes a run-up and shoves, time ramps almost to a stop at the contact, the other flies back
+#in a somersault, lands and staggers, and time comes back
+func _shove(middle: Vector3, until: float) -> void:
+	_hide_figures()
+	var pusher := _figures[0]
+	var target := _figures[1]
+	var run_from := _on_ground(middle + Vector3(-3.2, 0.0, 0.0))
+	var contact := _on_ground(middle + Vector3(-0.9, 0.0, 0.0))
+	var victim := _on_ground(middle + Vector3(0.0, 0.0, 0.0))
+	var landing := _on_ground(middle + Vector3(3.4, 0.0, 0.0))
+	_stand(pusher, run_from, victim, 1.0)
+	_stand(target, victim, run_from, 1.0)
+	_stand(_figures[2], _on_ground(middle + Vector3(-1.0, 0.0, -3.0)), victim, 1.0)
+	_stand(_figures[3], _on_ground(middle + Vector3(1.4, 0.0, -3.2)), victim, 1.0)
+	focus_changed.emit("El empujón", "CÁMARA LENTA", ScoreSheet.Medal.NONE)
+	_shift(4.6)
+	_camera.place(middle + Vector3(-1.6, 0.55, 4.8), middle + Vector3(-0.6, 0.95, 0.0))
+	_camera.glide(middle + Vector3(-0.4, 0.75, 4.2), middle + Vector3(0.0, 0.95, 0.0), PLAZA_BAR * 1.2)
+	await _until(_now() + PLAZA_BAR * 0.45)
+	var steps: Array[Vector3] = [run_from, contact]
+	_run_along(pusher, steps, RUN_SPEED * 1.1, 0.0, [])
+	await _wait(run_from.distance_to(contact) / (RUN_SPEED * 1.1))
+	pusher.model.play_move(CharacterModel.SHOVE)
+	SynthSound.play(self, SynthSound.whoosh(0.4), -10.0)
+	await _wait(0.16)
+	_ramp(SLOW_MOTION, 0.15)
+	target.model.play_move(CharacterModel.STAGGER)
+	SynthSound.play(self, SynthSound.thump(0.4), -6.0, 0.7)
+	_camera.punch(9.0, 2.2)
+	_camera.orbit(middle, 4.4, 0.9, 0.0, 38.0, 1.1, middle + Vector3(1.0, 1.0, 0.0))
+	_say(["LAS PELEAS, AQUÍ.", "NO EN LOS COMENTARIOS."], false)
+	var flight := create_tween()
+	flight.tween_method(_somersault.bind(target, victim, landing), 0.0, 1.0, 0.8)
+	flight.tween_callback(_landed.bind(target))
+	await _wait_real(1.2)
+	_ramp(1.0, 0.5)
+	pusher.model.stop_move()
+	_pose(pusher, 0)
+	await _until(until)
+	_clear_words()
+
+
+#A body thrown back in an arc that turns over once around its waist
+func _somersault(share: float, figure: Figure, from: Vector3, to: Vector3) -> void:
+	figure.root.position = from.lerp(to, share) + Vector3(0.0, sin(share * PI) * 1.3, 0.0)
+	var turn := Basis(Vector3.RIGHT, share * TAU)
+	var waist := Vector3(0.0, 0.5, 0.0)
+	figure.model.transform = Transform3D(turn, waist - turn * waist)
+
+
+func _landed(figure: Figure) -> void:
+	figure.model.transform = Transform3D.IDENTITY
+	_squash(figure)
+	figure.model.play_move(CharacterModel.STAGGER)
+	SynthSound.play(self, SynthSound.land(0.16), -8.0)
+
+
+#El Plató: one on the turntable under the ring light; the others run in and stand by it, and on the beat of the photo all four pose
+func _plato(until: float) -> void:
+	_show(AttractSets.PLATO)
+	_hide_figures()
+	var hub := active.layout.position_of(SelfieLayout.HUB)
+	hub.y = active.layout.height_at(hub.x, hub.z)
+	var lens := hub + Vector3(0.0, 0.0, 8.0)
+	_stand(_figures[2], hub, lens, 1.0)
+	var spots: Array[Vector3] = [hub + Vector3(-1.5, 0.0, 0.6), hub + Vector3(1.5, 0.0, 0.6), hub + Vector3(0.0, 0.0, 1.6)]
+	var runners: Array[int] = [0, 1, 3]
+	for index in runners.size():
+		var figure := _figures[runners[index]]
+		var spot := _on_ground(spots[index])
+		var from := _on_ground(spot + Vector3(-6.0 + index * 6.0, 0.0, -5.0 + index * 2.0))
+		_stand(figure, from, spot, 1.0)
+		var path: Array[Vector3] = [from, spot]
+		_run_along(figure, path, RUN_SPEED, 0.15 + 0.2 * index, [], lens)
+	focus_changed.emit(_title_of(&"perfect_selfie"), "EL PLATÓ", ScoreSheet.Medal.NONE)
+	_camera.zoom_to(50.0, 0.01)
+	_shift(8.0)
+	_camera.orbit(hub, 8.5, 2.6, -28.0, 28.0, until - _now(), hub + Vector3(0.0, 1.0, 0.0))
+	_say(["LA SELFIE PERFECTA", "SALE SIN FILTRO."], false)
+	_pose(_figures[2], 3)
+	await _until(_now() + 2.5 * PLAZA_BAR)
+	_flash_screen(0.7)
+	SynthSound.play(self, SynthSound.chime(1568.0, 0.35), -12.0)
+	_camera.punch(5.0, 0.6)
+	for index in runners.size():
+		_pose(_figures[runners[index]], [0, 4, 1][index])
+	await _until(until)
+	_clear_words()
+
+
+#The SocialDrop board from high above: the icons show, the cards blink and every card but the right one falls; the four hop for joy
+func _board(until: float) -> void:
+	_show(AttractSets.DROP)
+	_hide_figures()
+	var board := active.board
+	var target := 3
+	var deal_rng := RandomNumberGenerator.new()
+	deal_rng.seed = 7
+	board.restore()
+	board.deal(deal_rng, target, 4, 4)
+	board.show_icons(true)
+	var spots := board.spawn_points()
+	var middle := Vector3.ZERO
+	for spot in spots:
+		middle += spot / spots.size()
+	_board_middle = middle
+	for index in _figures.size():
+		var spot := board.cell_position(target, spots[index % spots.size()] * 3.0)
+		_stand(_figures[index], spot + Vector3((index % 2) * 0.5 - 0.25, 0.0, 0.0), middle + Vector3(0.0, 0.0, 8.0), 1.0)
+	focus_changed.emit(_title_of(&"social_drop"), "MEMORIA", ScoreSheet.Medal.NONE)
+	_camera.zoom_to(56.0, 0.01)
+	_shift(14.0)
+	_camera.place(middle + Vector3(0.0, 34.0, 4.0), middle)
+	_camera.glide(middle + Vector3(0.0, 10.5, 10.5), middle + Vector3(0.0, 0.5, 0.0), 2.0 * PLAZA_BAR, Tween.TRANS_CUBIC, Tween.EASE_OUT)
+	_say(["NO TODAS LAS APPS", "TE SOSTIENEN."], true)
+	await _until(_now() + 2.0 * PLAZA_BAR)
+	board.show_icons(false)
+	board.warn(target, PLAZA_BAR * 0.9)
+	await _until(_now() + PLAZA_BAR)
+	board.drop(target)
+	board.celebrate()
+	_camera.shake(0.3)
+	for index in _figures.size():
+		_hop(_figures[index], 0.08 * index)
+	await _until(until)
+	_clear_words()
+
+
+#A pass over a whole map from high up, as the openings of the rounds circle it, with the four characters in the middle of it
+func _flyover(id: StringName, seconds: float) -> void:
+	_show(id)
+	_dip(Palette.LILAC)
+	var center := _board_middle
+	var radius := 11.0
+	if active.layout != null:
+		_gather(id, true)
+		center = active.layout.position_of(TrendLayout.CORE if id == AttractSets.PLAZA else SelfieLayout.HUB)
+		radius = 17.0
+	var titles := {AttractSets.PLAZA: &"trend_war", AttractSets.PLATO: &"perfect_selfie", AttractSets.DROP: &"social_drop"}
+	focus_changed.emit(_title_of(titles.get(id, &"")), "DESDE ARRIBA", ScoreSheet.Medal.NONE)
+	_shift(radius * 1.2)
+	var from := _rng.randf_range(-60.0, 60.0)
+	_camera.zoom_to(55.0, 0.01)
+	_camera.orbit(center, radius, radius * 0.7, from, from + 45.0, seconds, center + Vector3(0.0, 0.8, 0.0))
+
+
+#The name a minigame has in the game
+func _title_of(minigame: StringName) -> String:
+	var info := MinigameCatalog.find(minigame)
+	return info.title if info != null else ""
+
+
+#The four characters together around the middle of La Plaza or the turntable of El Plató, each turned its own way; with "posing" each
+#strikes its own pose a moment after the other
+func _gather(id: StringName, posing: bool) -> void:
+	if active.layout == null:
+		return
+	var middle := active.layout.position_of(TrendLayout.CORE if id == AttractSets.PLAZA else SelfieLayout.HUB)
+	for index in _figures.size():
+		var angle := index * TAU / _figures.size() + 0.4
+		var at := _on_ground(middle + Vector3(cos(angle) * 1.7, 0.0, sin(angle) * 1.7))
+		_stand(_figures[index], at, middle + Vector3(cos(angle) * 6.0 + 3.0, 0.0, sin(angle) * 6.0 + 5.0), 1.0)
+		if posing:
+			_pose_later(_figures[index], index + 1, 0.15 * index)
+
+
+#Act three, on the end of the victory theme: everybody dancing on the stage under fireworks, the last line, the title and the call to play
+func _act_closing() -> void:
+	_show(AttractSets.STAGE)
+	_play(VICTORY, CLOSING_FROM)
+	_letterbox(BARS_CLOSE, 0.6)
+	_hide_figures()
+	for index in _figures.size():
+		var top := active.podium.top_of(AttractSets.entry_of(active, index))
+		_stand(_figures[index], top, top + Vector3(0.0, 0.0, 6.0), STAGE_SCALE)
+		_pose_later(_figures[index], DANCES[index], 0.12 * index)
+	active.podium.confetti()
+	active.podium.crowd.set_excitement(2.6)
+	_fireworks = true
+	focus_changed.emit("RumbleNet", "DEL FEED AL RING", ScoreSheet.Medal.NONE)
+	_camera.zoom_to(56.0, 0.01)
+	_shift(11.0)
+	_camera.orbit(Vector3(0.0, 0.0, 1.0), 11.0, 3.6, -30.0, 25.0, 3.0 * VICTORY_BAR, Vector3(0.0, 2.2, 0.0))
+	_say(["CUATRO JUGADORES.", "CERO NOTIFICACIONES."], true)
+	await _until(CLOSING_FROM + 3.0 * VICTORY_BAR)
+	_clear_words()
+	_flash_screen(0.7)
+	_shift(13.0)
+	_camera.place(Vector3(0.0, 8.0, 8.6), Vector3(0.0, 8.0, -5.9))
+	_camera.glide(Vector3(0.0, 7.9, 7.0), Vector3(0.0, 7.9, -5.9), CLOSING_END - _now())
+	_raise_title()
+	await _until(_now() + VICTORY_BAR)
+	var call := PuffyWord.make(&"acercate", 0.9, &"gold", 0.1)
+	call.position = Vector3(0.0, 5.0, PodiumStage.BACK + 1.6)
+	add_child(call)
+	_title.append(call)
+	_pop_letters(call, 0.05)
+	SynthSound.play(self, SynthSound.cheer(3.0), -10.0)
+	await _until(CLOSING_END)
+	_fade(true, 1.3)
+	await _wait(1.4)
+	_fireworks = false
+	_clear_title()
+	_clear_words()
+	active.podium.crowd.set_excitement(1.0)
+
+
+#The emblem pops in over the stage and RUMBLE and NET drop letter by letter, as in the title of the game
+func _raise_title() -> void:
+	_clear_title()
+	var back := PodiumStage.BACK + 0.6
+	var mark := Sprite3D.new()
+	mark.texture = MARK
+	mark.pixel_size = 1.9 / MARK.get_width()
+	mark.shaded = false
+	mark.position = Vector3(0.0, 12.0, back)
+	mark.scale = Vector3.ZERO
+	add_child(mark)
+	_title.append(mark)
+	create_tween().tween_property(mark, "scale", Vector3.ONE, 0.6).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	var rumble := PuffyWord.make(&"rumble", 2.0, &"title", 0.12)
+	rumble.position = Vector3(-0.3, 9.4, back)
+	add_child(rumble)
+	_title.append(rumble)
+	_drop_letters(rumble, 7.0, 0.09, 0.3)
+	var net := PuffyWord.make(&"net", 2.0, &"party", 0.12)
+	net.position = Vector3(0.7, 7.1, back + 0.5)
+	add_child(net)
+	_title.append(net)
+	_drop_letters(net, 7.0, 0.11, 1.0)
+
+
+func _drop_letters(word: Node3D, height: float, step: float, delay: float) -> void:
+	var letters := PuffyWord.letters(word)
+	for index in letters.size():
+		var letter := letters[index]
+		var rest := letter.position
+		letter.position = rest + Vector3(0.0, height / word.scale.y, 0.0)
+		var fall := create_tween()
+		fall.tween_interval(delay + step * index)
+		fall.tween_property(letter, "position", rest, 0.42).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+		fall.tween_callback(SynthSound.play.bind(self, SynthSound.land(0.12), -15.0, 1.0 + 0.06 * index))
+
+
+func _pop_letters(word: Node3D, step: float) -> void:
+	for index in PuffyWord.letters(word).size():
+		var letter := PuffyWord.letters(word)[index]
+		letter.scale = Vector3.ZERO
+		create_tween().tween_property(letter, "scale", Vector3.ONE, 0.55).set_delay(step * index).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+
+
+#A line of our own in letters with volume, like the title card of a film: it rides in front of the camera in the middle of the free part of
+#the screen, a little turned so its coral sides show; the face is white over the night of the stage and ink over the light of the maps.
+#It rises into place instead of popping
+func _say(lines: Array[String], on_night: bool) -> void:
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return
+	var holder := Node3D.new()
+	camera.add_child(holder)
+	var reach := LINE_DISTANCE * tan(deg_to_rad(camera.fov / 2.0))
+	var view := get_viewport().get_visible_rect().size
+	var across := reach * view.x / maxf(view.y, 1.0)
+	var rest := Vector3(camera.h_offset - 0.25 * across, reach * 0.42, -LINE_DISTANCE)
+	holder.position = rest - Vector3(0.0, LINE_HEIGHT * 0.8, 0.0)
+	holder.rotation = Vector3(deg_to_rad(5.0), deg_to_rad(-9.0), 0.0)
+	for index in lines.size():
+		var word := Word3D.make(lines[index], LINE_HEIGHT, across * 1.3, Palette.CORAL, LINE_HEIGHT * 0.32, Palette.PAPER if on_night else Palette.INK)
+		word.position = Vector3(0.0, -index * LINE_HEIGHT * 1.3, 0.0)
+		holder.add_child(word)
+	holder.scale = Vector3(1.0, 0.0, 1.0)
+	var rise := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	rise.tween_property(holder, "position", rest, 0.45)
+	rise.tween_property(holder, "scale", Vector3.ONE, 0.35)
+	_words.append(holder)
+
+
+#The name of a character standing next to it on the stage, in its colour
+func _name_tag(figure: Figure, at: Vector3) -> void:
+	var holder := Node3D.new()
+	add_child(holder)
+	holder.position = at
+	var toward := _camera.global_position - at
+	holder.rotation.y = atan2(toward.x, toward.z)
+	holder.add_child(Word3D.make(figure.data.display_name.to_upper(), 0.8, 6.0, figure.data.accent_color.darkened(0.35), 0.24, Palette.PAPER))
+	holder.scale = Vector3.ZERO
+	create_tween().tween_property(holder, "scale", Vector3.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_words.append(holder)
+
+
+#Slides the subject of the shot to the middle of the free part of the screen, for a subject at "distance" from the camera
+func _shift(distance: float) -> void:
+	_camera.h_offset = FRAME_SHIFT * distance
+
+
+func _clear_words() -> void:
+	for word in _words:
+		if is_instance_valid(word):
+			word.queue_free()
+	_words.clear()
+
+
+#Takes the title away, at once or shrinking first
+func _clear_title(shrink := false) -> void:
+	for piece in _title:
+		if not is_instance_valid(piece):
+			continue
+		if shrink:
+			var out := create_tween()
+			out.tween_property(piece, "scale", Vector3.ZERO, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+			out.tween_callback(piece.queue_free)
+		else:
+			piece.queue_free()
+	_title.clear()
+
+
+#Puts one place in the scene and takes the one before out
+func _show(id: StringName) -> void:
+	var next: AttractSets.Place = places[id]
+	if next == active:
+		return
+	if active != null:
+		remove_child(active.root)
+	active = next
+	add_child(active.root)
+	move_child(active.root, 0)
+
+
+func _hide_figures() -> void:
+	for figure in _figures:
+		figure.root.visible = false
+		figure.model.stop_move()
+		figure.model.transform = Transform3D.IDENTITY
+
+
+func _stand(figure: Figure, at: Vector3, facing: Vector3, size: float) -> void:
+	figure.root.visible = true
+	figure.root.scale = Vector3.ONE * size
+	figure.root.position = at
+	figure.root.rotation.y = atan2(facing.x - at.x, facing.z - at.z)
+	figure.model.stop_move()
+	figure.model.transform = Transform3D.IDENTITY
+	figure.model.set_state(false, false)
+
+
+func _pose(figure: Figure, index: int) -> void:
+	figure.model.play_move(CharacterModel.POSES[index % CharacterModel.POSES.size()], true, 0.25)
+
+
+func _pose_later(figure: Figure, index: int, delay: float) -> void:
+	var later := create_tween()
+	later.tween_interval(delay)
+	later.tween_callback(_pose.bind(figure, index))
+
+
+#Lands with a bounce: wider and lower for an instant, then back to its size
+func _squash(figure: Figure) -> void:
+	var size := figure.root.scale.y
+	figure.root.scale = Vector3(1.14, 0.84, 1.14) * size
+	create_tween().tween_property(figure.root, "scale", Vector3.ONE * size, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+
+
+#A jump on the spot with the jump of the game and a bounce on landing
+func _hop(figure: Figure, delay := 0.0) -> void:
+	var base := figure.root.position
+	var jump := create_tween()
+	jump.tween_interval(delay)
+	jump.tween_callback(figure.model.stop_move)
+	jump.tween_callback(figure.model.set_state.bind(false, true))
+	jump.tween_property(figure.root, "position", base + Vector3(0.0, HOP_HEIGHT, 0.0), HOP_SECONDS / 2.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	jump.tween_property(figure.root, "position", base, HOP_SECONDS / 2.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	jump.tween_callback(figure.model.set_state.bind(false, false))
+	jump.tween_callback(_squash.bind(figure))
+
+
+#Runs a figure along the points at "speed" meters a second of game time, turning smoothly the way it goes and jumping at the shares of
+#the way in "hops"; at the end it stands still, turned to "facing" when given
+func _run_along(figure: Figure, path: Array[Vector3], speed: float, delay: float, hops: Array[float], facing := Vector3.INF) -> void:
+	var length := 0.0
+	for step in path.size() - 1:
+		length += path[step].distance_to(path[step + 1])
+	var seconds := maxf(length / speed, 0.05)
+	var tween := create_tween()
+	tween.tween_interval(delay)
+	tween.tween_callback(figure.model.set_state.bind(true, false))
+	tween.tween_method(_step_runner.bind(figure, path, hops, seconds), 0.0, 1.0, seconds)
+	tween.tween_callback(figure.model.set_state.bind(false, false))
+	if facing != Vector3.INF:
+		tween.tween_method(func(share: float) -> void:
+			var aim := atan2(facing.x - figure.root.position.x, facing.z - figure.root.position.z)
+			figure.root.rotation.y = lerp_angle(figure.root.rotation.y, aim, share), 0.0, 1.0, 0.3)
+
+
+func _step_runner(share: float, figure: Figure, path: Array[Vector3], hops: Array[float], seconds: float) -> void:
+	var spot := share * (path.size() - 1)
+	var index := mini(floori(spot), path.size() - 2)
+	var at := path[index].lerp(path[index + 1], spot - index)
+	var lift := 0.0
+	for hop in hops:
+		var into := (share - hop) * seconds / HOP_SECONDS
+		if into >= 0.0 and into <= 1.0:
+			lift = sin(into * PI) * HOP_HEIGHT
+	figure.root.position = at + Vector3(0.0, lift, 0.0)
+	var ahead := path[index + 1] - path[index]
+	if ahead.length() > 0.01:
+		figure.root.rotation.y = lerp_angle(figure.root.rotation.y, atan2(ahead.x, ahead.z), 0.2)
+	figure.model.set_state(true, lift > 0.0)
+
+
+func _on_ground(at: Vector3) -> Vector3:
+	if active.layout != null:
+		return Vector3(at.x, active.layout.height_at(at.x, at.z), at.z)
+	return at
+
+
+#Speeds the time up or down to "amount" in "seconds" of real time, the way a film ramps into fast or slow motion
+func _ramp(amount: float, seconds := RAMP) -> void:
+	var tween := create_tween().set_ignore_time_scale(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(Engine, "time_scale", amount, seconds)
+
+
+#Starts a track at "from" seconds and fades out the one before
+func _play(stream: AudioStream, from: float) -> void:
+	var next := _players[0] if _track != _players[0] else _players[1]
+	if _track != null:
+		var out := create_tween()
+		out.tween_property(_track, "volume_db", -40.0, 0.5)
+		out.tween_callback(_track.stop)
+	next.stream = stream
+	next.volume_db = -30.0
+	next.play(from)
+	create_tween().tween_property(next, "volume_db", MUSIC_DB, 0.25)
+	_track = next
+	_track_from = from
+	_track_at = Time.get_ticks_msec()
+
+
+#Seconds into the track that is playing, by the real clock (the same as the music's, and it also runs with the sound off)
+func _now() -> float:
+	return _track_from + (Time.get_ticks_msec() - _track_at) / 1000.0
+
+
+#Waits until the track playing reaches "seconds": every cut lands on the music
+func _until(seconds: float) -> void:
+	while is_inside_tree() and _now() < seconds:
+		await get_tree().process_frame
+
+
+#Waits in game time (slower or faster with the motion)
+func _wait(seconds: float) -> void:
+	await get_tree().create_timer(seconds).timeout
+
+
+func _wait_real(seconds: float) -> void:
+	await get_tree().create_timer(seconds, true, false, true).timeout
+
+
+func _build_overlay() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 3
+	add_child(layer)
+	for top in [true, false]:
+		var bar := ColorRect.new()
+		bar.color = Palette.NIGHT
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bar.set_anchors_preset(Control.PRESET_TOP_WIDE if top else Control.PRESET_BOTTOM_WIDE)
+		bar.offset_top = 0.0
+		bar.offset_bottom = 0.0
+		layer.add_child(bar)
+		_bars.append(bar)
+	for shade: ColorRect in [_flash, _veil]:
+		shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+		shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.add_child(shade)
+	_flash.color = Color(Palette.PAPER, 0.0)
+	_veil.color = Color(Palette.NIGHT, 1.0)
+
+
+#The bars of the cinema close to "share" of the height, top and bottom
+func _letterbox(share: float, seconds: float) -> void:
+	var height := get_viewport().get_visible_rect().size.y * share
+	var tween := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(_bars[0], "offset_bottom", height, seconds)
+	tween.tween_property(_bars[1], "offset_top", -height, seconds)
+
+
+#A white flash on a strong beat of the music
+func _flash_screen(strength: float) -> void:
+	_flash.color = Color(Palette.PAPER, strength)
+	create_tween().set_ignore_time_scale(true).tween_property(_flash, "color:a", 0.0, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	SynthSound.play(self, SynthSound.whoosh(0.35), -16.0)
+
+
+#A quick dip through a colour of the game between two places
+func _dip(colour: Color) -> void:
+	_flash.color = Color(colour, 0.85)
+	create_tween().set_ignore_time_scale(true).tween_property(_flash, "color:a", 0.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+func _fade(to_night: bool, seconds: float) -> void:
+	create_tween().tween_property(_veil, "color:a", 1.0 if to_night else 0.0, seconds)
