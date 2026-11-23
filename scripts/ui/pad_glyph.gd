@@ -24,12 +24,14 @@ func _init(button: Dictionary, size_points: int) -> void:
 	custom_minimum_size = Vector2(wide, height)
 
 
+#Drawn at its own size and centred in the space it gets, so a row that stretches it never makes it spill over its neighbours
 func _draw() -> void:
-	var height := size.y
+	var height := minf(size.y, custom_minimum_size.y)
 	var radius := height / 2.0
-	var centre := Vector2(radius, radius)
+	var left := (size.x - custom_minimum_size.x) / 2.0 if size.x > custom_minimum_size.x else 0.0
+	var centre := Vector2(left + radius, size.y / 2.0)
 	if shape.begins_with("stick") and side.x < 0.0:
-		centre.x = size.x - radius
+		centre.x = left + custom_minimum_size.x - radius
 	draw_circle(centre, radius, BODY, true, -1.0, true)
 	draw_arc(centre, radius - maxf(1.5, height * 0.06), PI * 1.1, PI * 1.9, 24, RIM, maxf(1.5, height * 0.06), true)
 	var width := maxf(2.0, height * 0.1)

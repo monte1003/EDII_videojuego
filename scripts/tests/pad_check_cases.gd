@@ -8,13 +8,14 @@ const KEYS := {
 	&"move_forward": [87], &"move_back": [83], &"move_left": [65], &"move_right": [68], &"jump": [32], &"help": [4194332],
 	&"interact": [69], &"toggle_debug": [4194334], &"demo_route": [4194335], &"pause": [4194305], &"menu_left": [4194319],
 	&"menu_right": [4194321], &"menu_up": [4194320], &"menu_down": [4194322], &"menu_confirm": [4194309, 4194310, 32],
-	&"menu_back": [4194308, 69], &"ready": [4194309, 4194310], &"shove": [4194325],
+	&"menu_back": [4194308, 69], &"ready": [4194309, 4194310], &"shove": [4194325], &"pick_prev": [65], &"pick_next": [68],
 }
 #The button of each action on the pad (decided on 21/11/2026; R1 for "ready" on 22/11)
 const BUTTONS := {
 	&"jump": JOY_BUTTON_A, &"menu_confirm": JOY_BUTTON_A, &"shove": JOY_BUTTON_X, &"interact": JOY_BUTTON_B, &"menu_back": JOY_BUTTON_B,
 	&"help": JOY_BUTTON_Y, &"pause": JOY_BUTTON_START, &"ready": JOY_BUTTON_RIGHT_SHOULDER, &"menu_left": JOY_BUTTON_DPAD_LEFT,
 	&"menu_right": JOY_BUTTON_DPAD_RIGHT, &"menu_up": JOY_BUTTON_DPAD_UP, &"menu_down": JOY_BUTTON_DPAD_DOWN, &"ui_accept": JOY_BUTTON_A,
+	&"pick_prev": JOY_BUTTON_LEFT_SHOULDER, &"pick_next": JOY_BUTTON_RIGHT_SHOULDER,
 }
 const STICKS := {
 	&"move_forward": [JOY_AXIS_LEFT_Y, -1.0], &"move_back": [JOY_AXIS_LEFT_Y, 1.0], &"move_left": [JOY_AXIS_LEFT_X, -1.0],
@@ -98,7 +99,9 @@ func run(test_tree: SceneTree) -> int:
 	_check_hints()
 	await _check_rumble()
 	await _check_focus()
+	await _check_main_menu()
 	await _check_lobby_ready()
+	await _check_name_keyboard()
 	await _check_round_unplug()
 	await _check_arena_shove()
 	return _failures
@@ -128,7 +131,7 @@ func _check_map() -> void:
 		_check(pad_events.is_empty(), "%s sigue siendo solo de teclado" % action)
 	for action: StringName in [&"ui_left", &"ui_right"]:
 		var axes := InputMap.action_get_events(action).filter(func(event: InputEvent) -> bool: return event is InputEventJoypadMotion)
-		_check(axes.is_empty(), "%s ya no mueve el foco con el stick (en la sala el stick cambia de personaje)" % action)
+		_check(not axes.is_empty(), "%s mueve la selección también con el stick, como trae Godot" % action)
 
 
 #The active device: keyboard without a pad, the pad once it is plugged or touched, back to the keyboard with a key or a real mouse move
@@ -161,9 +164,12 @@ func _check_device() -> void:
 class Counter:
 	extends Node
 	var presses := 0
+	var back_presses := 0
 	func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed("move_right"):
 			presses += 1
+		if event.is_action_pressed("move_left"):
+			back_presses += 1
 
 
 #A stick held to one side is one press for the menus, while the movement still reads its tilt every frame
@@ -180,7 +186,18 @@ func _check_stick() -> void:
 	await _send(_stick(JOY_AXIS_LEFT_X, 0.1))
 	await _send(_stick(JOY_AXIS_LEFT_X, 0.8))
 	_check(counter.presses == 2, "soltarlo y volver a empujarlo es otra pulsación")
+	for value in [0.6, 0.28, 0.24, 0.0]:
+		await _send(_stick(JOY_AXIS_LEFT_X, value))
+	_check(counter.presses == 2, "al soltarlo pasa por 0,28 y 0,24 (sobre la zona muerta) y no cuenta como otro empujón")
+	await _send(_stick(JOY_AXIS_LEFT_X, 0.9))
 	await _send(_stick(JOY_AXIS_LEFT_X, 0.0))
+	await _send(_stick(JOY_AXIS_LEFT_X, -0.6))
+	await _send(_stick(JOY_AXIS_LEFT_X, 0.0))
+	_check(counter.presses == 3 and counter.back_presses == 0, "el rebote al otro lado justo al soltarlo no cuenta (%d a la izquierda)" % counter.back_presses)
+	OS.delay_msec(120)
+	await _send(_stick(JOY_AXIS_LEFT_X, -0.8))
+	await _send(_stick(JOY_AXIS_LEFT_X, 0.0))
+	_check(counter.back_presses == 1, "un empujón de verdad a la izquierda sí cuenta")
 	counter.queue_free()
 	var column := VBoxContainer.new()
 	root.add_child(column)
@@ -293,6 +310,28 @@ func _check_focus() -> void:
 	await tree.process_frame
 
 
+#The main menu: the stick reaches every button, SALIR included (it is to the right of OPCIONES)
+func _check_main_menu() -> void:
+	var menu := (load("res://scenes/menus/main_menu.tscn") as PackedScene).instantiate()
+	root.add_child(menu)
+	tree.current_scene = menu
+	for frame in 5:
+		await tree.process_frame
+	(menu.get_node("%OptionsButton") as Control).grab_focus()
+	await _send(_stick(JOY_AXIS_LEFT_X, 0.9))
+	await _send(_stick(JOY_AXIS_LEFT_X, 0.0))
+	var owner := root.gui_get_focus_owner()
+	_check(owner == menu.get_node("%ExitButton"), "en el menú principal el stick a la derecha llega a SALIR (%s)" % (owner.name if owner != null else "nada"))
+	#A person takes longer than the swing of a stick let go; with --fixed-fps a timer of the game would not wait real time
+	OS.delay_msec(120)
+	await _send(_stick(JOY_AXIS_LEFT_X, -0.9))
+	await _send(_stick(JOY_AXIS_LEFT_X, 0.0))
+	owner = root.gui_get_focus_owner()
+	_check(owner == menu.get_node("%OptionsButton"), "y a la izquierda vuelve a OPCIONES (%s)" % (owner.name if owner != null else "nada"))
+	menu.queue_free()
+	await tree.process_frame
+
+
 #"Listo" selected in the lobby: one press of Enter or of the cross marks it once (it used to mark on the press and unmark on the release)
 func _check_lobby_ready() -> void:
 	var session := root.get_node("GameSession")
@@ -316,6 +355,88 @@ func _check_lobby_ready() -> void:
 		await _send(release)
 		_check(bool(session.get("lobby").call("all_ready")), "en la sala, %s sobre Listo lo marca una sola vez" % ("Enter" if event is InputEventKey else "la Cruz"))
 	session.get("lobby").call("set_ready", 1, false)
+	var back := lobby.find_children("*", "TextButton", true, false).filter(func(node: Node) -> bool: return str(node.get("text")) == "Atrás")
+	(back[0] as Control).grab_focus()
+	await _send(_button(JOY_BUTTON_A, true))
+	_check(not bool(session.get("lobby").call("all_ready")), "la Cruz sobre ATRÁS no marca Listo antes de volver (pasaba al pulsarla)")
+	root.gui_release_focus()
+	await _send(_button(JOY_BUTTON_A, false))
+	var picked := func() -> StringName: return (session.get("lobby").call("find", 1) as PlayerSlot).character.id
+	var first: StringName = picked.call()
+	(lobby.get("_ready_button") as Control).grab_focus()
+	await _send(_stick(JOY_AXIS_LEFT_X, 0.9))
+	await _send(_stick(JOY_AXIS_LEFT_X, 0.0))
+	_check(picked.call() == first, "en la sala el stick ya no cambia de personaje (mueve la selección de botones)")
+	await _send(_button(JOY_BUTTON_RIGHT_SHOULDER, true))
+	await _send(_button(JOY_BUTTON_RIGHT_SHOULDER, false))
+	var second: StringName = picked.call()
+	await _send(_button(JOY_BUTTON_RIGHT_SHOULDER, true))
+	await _send(_button(JOY_BUTTON_RIGHT_SHOULDER, false))
+	var ids: Array[StringName] = [&"fire", &"water", &"plant", &"lightning"]
+	_check(ids.find(second) == posmod(ids.find(first) + 1, 4) and ids.find(picked.call()) == posmod(ids.find(first) + 2, 4),
+		"R1 pasa al siguiente personaje de a uno: %s, %s, %s" % [first, second, picked.call()])
+	await _send(_button(JOY_BUTTON_LEFT_SHOULDER, true))
+	await _send(_button(JOY_BUTTON_LEFT_SHOULDER, false))
+	_check(picked.call() == second, "L1 vuelve al anterior")
+	(lobby.get("_name_field") as Control).grab_focus()
+	await _send(_button(JOY_BUTTON_LEFT_SHOULDER, true))
+	await _send(_button(JOY_BUTTON_LEFT_SHOULDER, false))
+	_check(picked.call() == first, "L1 y R1 también funcionan con el nombre seleccionado")
+	lobby.queue_free()
+	await tree.process_frame
+
+
+#The keyboard on screen: the cross on the name field opens it, the cross writes the selected key, square deletes, triangle adds a space,
+#Options accepts and circle goes back; a real keyboard also types in it and the selection never leaves its keys
+func _check_name_keyboard() -> void:
+	var game_state := root.get_node("GameState")
+	game_state.call("set_player_name", 1, "ANA")
+	var lobby := (load("res://scenes/menus/lobby.tscn") as PackedScene).instantiate()
+	root.add_child(lobby)
+	tree.current_scene = lobby
+	await tree.create_timer(0.8).timeout
+	var field := lobby.get("_name_field") as LineEdit
+	var keyboard := lobby.get("_keyboard") as NameKeyboard
+	field.grab_focus()
+	await _send(_button(JOY_BUTTON_A, true))
+	await _send(_button(JOY_BUTTON_A, false))
+	_check(keyboard.is_open(), "la Cruz sobre el nombre abre el teclado en pantalla")
+	var owner := root.gui_get_focus_owner() as Button
+	_check(owner != null and owner.text == "Q", "empieza en la Q")
+	await _send(_button(JOY_BUTTON_A, true))
+	await _send(_button(JOY_BUTTON_A, false))
+	await _send(_button(JOY_BUTTON_Y, true))
+	await _send(_button(JOY_BUTTON_Y, false))
+	var shown := keyboard.get("_text") as String
+	_check(shown == "ANAQ ", "la Cruz escribe la Q y Triángulo pone un espacio (%s)" % shown)
+	await _send(_button(JOY_BUTTON_X, true))
+	await _send(_button(JOY_BUTTON_X, false))
+	await _send(_button(JOY_BUTTON_DPAD_LEFT, true))
+	await _send(_button(JOY_BUTTON_DPAD_LEFT, false))
+	owner = root.gui_get_focus_owner() as Button
+	_check(keyboard.get("_text") == "ANAQ" and owner != null and owner.text == "P", "Cuadrado borra y la cruceta da la vuelta en la fila (de la Q a la P)")
+	for letter in "ñ1":
+		var key := InputEventKey.new()
+		key.unicode = letter.unicode_at(0)
+		key.keycode = KEY_A
+		key.pressed = true
+		await _send(key)
+	_check(keyboard.get("_text") == "ANAQÑ1", "un teclado de verdad también escribe (%s)" % keyboard.get("_text"))
+	await _send(_button(JOY_BUTTON_START, true))
+	await _send(_button(JOY_BUTTON_START, false))
+	_check(not keyboard.is_open() and field.text == "ANAQÑ1" and str(game_state.call("get_player_name", 1)) == "ANAQÑ1",
+		"Options acepta: el nombre queda en el campo y en la sala")
+	_check(root.gui_get_focus_owner() == field, "y la selección vuelve al nombre")
+	await _send(_button(JOY_BUTTON_A, true))
+	await _send(_button(JOY_BUTTON_A, false))
+	for step in 3:
+		await _send(_button(JOY_BUTTON_X, true))
+		await _send(_button(JOY_BUTTON_X, false))
+	await _send(_button(JOY_BUTTON_B, true))
+	await _send(_button(JOY_BUTTON_B, false))
+	_check(not keyboard.is_open() and field.text == "ANAQÑ1", "Círculo cierra sin cambiar el nombre")
+	_check(lobby.is_inside_tree() and tree.current_scene == lobby, "y no saca de la sala")
+	game_state.call("set_player_name", 1, "")
 	lobby.queue_free()
 	await tree.process_frame
 

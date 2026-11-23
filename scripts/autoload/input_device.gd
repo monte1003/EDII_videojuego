@@ -14,6 +14,8 @@ signal pad_plugged(connected: bool)
 #How far a stick must tilt to count as a press, and how far back it must come to let go: the gap keeps a shaky stick from pressing twice
 const STICK_PRESS := 0.5
 const STICK_RELEASE := 0.3
+#A stick let go springs back and may swing past the middle: a push to the other side this soon after (milliseconds) is that swing
+const STICK_SETTLE := 90
 #A mouse moved less than this (pixels in one event) is a bump of the desk, not a player taking the mouse
 const MOUSE_WAKE := 3.0
 #Screens that move their own selection with the arrows: no button gets the focus there
@@ -24,6 +26,8 @@ var kind := Kind.KEYS
 var pad := -1
 
 var _tilt: Dictionary = {}
+#When each stick was last let go, and from which side
+var _let_go: Dictionary = {}
 var _hid_cursor := false
 var _notice := PadNotice.new()
 #The pause this computer opened when its pad went away, so it closes again when the pad is back
@@ -64,8 +68,9 @@ func _input(event: InputEvent) -> void:
 			_use(Kind.KEYS, -1)
 
 
-#Moving the stick is read every frame through the actions; as an event it only goes on when it crosses its threshold, like a button, so a
-#menu or a list never jumps several places for one push
+#Moving the stick is read every frame through the actions; as an event it only goes on once per push, when it crosses its threshold, like
+#a button, so a menu or a list never jumps several places for one push. Letting it go is never a push: on its way back it still passes
+#through values the actions would count, and it may swing a little to the other side
 func _crossed(motion: InputEventJoypadMotion) -> bool:
 	var key := motion.device * 16 + motion.axis
 	var before: int = _tilt.get(key, 0)
@@ -74,8 +79,16 @@ func _crossed(motion: InputEventJoypadMotion) -> bool:
 		now = 1 if motion.axis_value > 0.0 else -1
 	elif absf(motion.axis_value) < STICK_RELEASE:
 		now = 0
+	if now == before:
+		return false
 	_tilt[key] = now
-	return now != before
+	var clock := Time.get_ticks_msec()
+	if before != 0:
+		_let_go[key] = [clock, before]
+		if now == 0:
+			return false
+	var last: Array = _let_go.get(key, [])
+	return last.is_empty() or int(last[1]) != -now or clock - int(last[0]) >= STICK_SETTLE
 
 
 func _use(next: Kind, device: int) -> void:

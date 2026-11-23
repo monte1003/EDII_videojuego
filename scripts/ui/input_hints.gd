@@ -9,7 +9,7 @@ const PAD := {
 	&"jump": {"shape": "cross"}, &"menu_confirm": {"shape": "cross"},
 	&"interact": {"shape": "circle"}, &"menu_back": {"shape": "circle"},
 	&"shove": {"shape": "square"}, &"help": {"shape": "triangle"},
-	&"pause": {"text": "OPTIONS"}, &"ready": {"text": "R1"},
+	&"pause": {"text": "OPTIONS"}, &"ready": {"text": "R1"}, &"pick_prev": {"text": "L1"}, &"pick_next": {"text": "R1"},
 	&"move": {"shape": "stick_l"}, &"move_left": {"shape": "stick_l", "side": Vector2.LEFT},
 	&"move_right": {"shape": "stick_l", "side": Vector2.RIGHT}, &"move_forward": {"shape": "stick_l"}, &"move_back": {"shape": "stick_l"},
 	&"look": {"shape": "stick_r"},
