@@ -2,7 +2,9 @@ extends SceneTree
 
 #Checks the sockets and threads of the game on the local network in one process: the framing of the messages (whole, cut in pieces and
 #several together), what is thrown away (unknown types, broken JSON, a message too long), a server with three clients that talk both ways
-#through their threads, and that every thread finishes. run: godot --headless --path . --script res://scripts/tests/net_check.gd
+#through their threads, and that every thread finishes. Then the fair screen, in net_check_cases.gd: the players get the same with it and
+#without it, it changes nothing and gets the whole game, and it finds the room by itself.
+#run: godot --headless --fixed-fps 60 --path . --script res://scripts/tests/net_check.gd
 
 const TEST_PORT := 47830
 #Every wait for the threads is in real time: with --fixed-fps the frames can go by much faster than the sockets
@@ -14,6 +16,9 @@ var _failures := 0
 func _initialize() -> void:
 	_check_framing()
 	await _check_links()
+	var cases: Object = (load("res://scripts/tests/net_check_cases.gd") as GDScript).new()
+	var found: int = await cases.call("run", self)
+	_failures += found
 	print("net_check: %s" % ("OK" if _failures == 0 else "%d FALLOS" % _failures))
 	quit(1 if _failures > 0 else 0)
 

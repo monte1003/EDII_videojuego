@@ -26,6 +26,7 @@ GameSession="*res://scripts/autoload/game_session.gd"
 ScreenFader="*res://scripts/autoload/screen_fader.gd"
 InputDevice="*res://scripts/autoload/input_device.gd"
 Rumble="*res://scripts/autoload/rumble.gd"
+FairMode="*res://scripts/display/fair_mode.gd"
 
 [display]
 
