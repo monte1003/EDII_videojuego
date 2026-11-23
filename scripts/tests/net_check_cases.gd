@@ -322,7 +322,8 @@ func _check_room_again() -> void:
 func _check_finder() -> void:
 	var path := "user://net_check_feria.cfg"
 	var cases := {"192.168.1.10": "192.168.1.10", "[feria]\nip_anfitrion=\"10.0.0.5\"\n": "10.0.0.5",
-		"# la ip del anfitrion\r\nip_anfitrion = 172.16.0.9 \r\n": "172.16.0.9", "ip_anfitrion=hola\n": "", "ÿ\u0001 {[ basura": ""}
+		"# la ip del anfitrion\r\nip_anfitrion = 172.16.0.9 \r\n": "172.16.0.9", "ip_anfitrion=hola\n": "", "ÿ\u0001 {[ basura": "",
+		"# ejemplo: ip_anfitrion = 10.1.1.1\nip_anfitrion = 10.0.0.7\n": "10.0.0.7", "; ip_anfitrion = 10.1.1.2\n": ""}
 	var read: Array[String] = []
 	for text: String in cases:
 		var file := FileAccess.open(path, FileAccess.WRITE)
@@ -331,8 +332,8 @@ func _check_finder() -> void:
 		read.append(NetWatch.read_config(path))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	read.append(NetWatch.read_config(path))
-	_expect(read == ["192.168.1.10", "10.0.0.5", "172.16.0.9", "", "", ""],
-		"feria.cfg: la dirección sola o con «ip_anfitrion», con o sin comillas; una dirección mala, basura o ningún archivo = ninguna (%s)" % str(read))
+	_expect(read == ["192.168.1.10", "10.0.0.5", "172.16.0.9", "", "", "10.0.0.7", "", ""],
+		"feria.cfg: la dirección sola o con «ip_anfitrion», con o sin comillas; los comentarios no cuentan; una dirección mala, basura o ningún archivo = ninguna (%s)" % str(read))
 	var room := NetRoom.new()
 	var finder := NetWatch.new()
 	finder.net = room

@@ -73,13 +73,15 @@ static func config_path() -> String:
 	return folder.path_join(CONFIG_FILE)
 
 
-#The first address in feria.cfg: a line with just the address or with "ip_anfitrion = ..." (quotes or not); none when the file is
-#missing or has no valid address
+#The first address in feria.cfg: a line with just the address or with "ip_anfitrion = ..." (quotes or not); lines that start with # or ;
+#are comments. None when the file is missing or has no valid address
 static func read_config(path := "") -> String:
 	var file := FileAccess.open(path if path != "" else config_path(), FileAccess.READ)
 	if file == null:
 		return ""
 	for line in file.get_as_text().split("\n"):
+		if line.strip_edges().begins_with("#") or line.strip_edges().begins_with(";"):
+			continue
 		var value := line.get_slice("=", line.count("=")).strip_edges().trim_prefix("\"").trim_suffix("\"")
 		if value.is_valid_ip_address():
 			return value

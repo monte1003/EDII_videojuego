@@ -101,7 +101,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_message(message: Dictionary) -> void:
 	match String(message["t"]):
 		"warmup":
-			if mode != Mode.ATTRACT:
+			#Only a round left on screen goes away: the podium and the ranking end by themselves
+			if mode == Mode.SPECTATOR:
 				_to_attract()
 		"start":
 			_game = _game_key()
@@ -309,15 +310,15 @@ func _game_key() -> String:
 
 func _to_attract() -> void:
 	_clear_stage()
-	frame.hide_finale()
 	_set_mode(Mode.ATTRACT)
 	#The music of a round watched here may still be playing: the trailer brings its own
 	ScreenFlow.music.play_for(&"fair_screen")
 	reel.play()
 
 
-#Takes away the round or the podium on screen and stops the trailer
+#Takes away the round, the podium or the ranking of the end on screen and stops the trailer
 func _clear_stage() -> void:
+	frame.hide_finale()
 	if _round != null:
 		_round.queue_free()
 		_round = null

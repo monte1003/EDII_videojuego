@@ -11,7 +11,7 @@ const ROWS := 10
 #The crown of each of the first three places, its name and the colour of its card's edge
 const CROWNS: Array[ScoreSheet.Medal] = [ScoreSheet.Medal.DIAMOND, ScoreSheet.Medal.GOLD, ScoreSheet.Medal.SILVER]
 const CROWN_NAMES: Array[String] = ["CORONA DE DIAMANTE", "CORONA DE ORO", "CORONA DE PLATA"]
-const EDGES: Array[Color] = [Color("5fd4f4"), Color("ffc531"), Color("b7c3d9")]
+const EDGES: Array[Color] = [MedalBadge.FILL[ScoreSheet.Medal.DIAMOND], MedalBadge.FILL[ScoreSheet.Medal.GOLD], MedalBadge.FILL[ScoreSheet.Medal.SILVER]]
 
 var _top := VBoxContainer.new()
 var _rest := VBoxContainer.new()
@@ -117,7 +117,7 @@ func _enter(line: Control, index: int, points: int, fresh: bool) -> void:
 #One of the first three: a white card edged in the colour of its crown, with its seal, its name and the name of its crown
 func _crowned(index: int, shown_name: String, points: int, fresh := false) -> Control:
 	var card := PanelContainer.new()
-	var face := UiKit.box(Color(Palette.PAPER, 0.96) if not fresh else Color("ffe3ea"), 22)
+	var face := UiKit.box(Color(Palette.PAPER, 0.96) if not fresh else Palette.PAPER.lerp(Palette.CORAL, 0.14), 22)
 	face.border_color = EDGES[index]
 	face.set_border_width_all(4 if index == 0 else 3)
 	face.content_margin_left = 10.0
