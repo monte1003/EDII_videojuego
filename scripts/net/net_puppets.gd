@@ -20,7 +20,8 @@ func _physics_process(delta: float) -> void:
 	_left -= delta
 	if _left > 0.0:
 		return
-	_left = SEND_EVERY
+	#Added and not set: three physics frames of 1/60 leave a rest a hair above zero, and setting it sent only 15 times a second
+	_left += SEND_EVERY
 	var mine: Player = (get_parent() as RoundScene).everyone.get(GameSession.local_id)
 	if mine != null and is_instance_valid(mine):
 		GameSession.net.send_state(mine.remote_state())

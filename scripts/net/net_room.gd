@@ -171,6 +171,13 @@ func close() -> void:
 	started = false
 	go_round = -1
 	_wait_round = -1
+	#Nothing of the waits of the last game may reach the next room: no stale clock, loaded player or points
+	_go_left = -1.0
+	_loaded.clear()
+	_round_members.clear()
+	_points.clear()
+	_points_left = -1.0
+	_points_round = -1
 	GameSession.local_id = GameState.PLAYER_ONE
 	room_changed.emit()
 
@@ -572,6 +579,8 @@ func _apply_from_host(message: Dictionary) -> void:
 			GameSession.advance_now()
 		"warmup":
 			started = true
+			#A new game: the rounds of the last one no longer count as started (the server does the same in reopen)
+			go_round = -1
 			GameSession.enter_warmup()
 		"warm":
 			warm_received.emit(float(message.get("left", 0.0)), int(message.get("votes", 0)), int(message.get("total", 1)))

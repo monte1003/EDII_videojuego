@@ -39,6 +39,7 @@ func run(scene_tree: SceneTree) -> int:
 	for heard in watched:
 		sizes.append(heard.size())
 	_expect(not plain.is_empty() and plain == watched, "los 3 jugadores reciben exactamente los mismos mensajes, en el mismo orden, con la pantalla y sin ella (%s)" % str(sizes))
+	await _check_room_again()
 	await _check_finder()
 	return _failures
 
@@ -73,7 +74,7 @@ func _kinds_seen(kind: String) -> Array[Dictionary]:
 	return found
 
 
-#A fresh room for the host each time, as in a game just opened (a room closed and opened again keeps the points of its last round)
+#A fresh room for the host each time, as in a game just opened (_check_room_again opens the same one twice)
 func _open_room() -> bool:
 	if _host != null:
 		_host.queue_free()
@@ -270,6 +271,51 @@ func _check_screen_saw_the_game() -> void:
 	for id in 4:
 		apart += NetProtocol.pack({"p": [9.0, 0.5, 9.0], "r": 1.0, "m": false, "a": true, "po": true, "ps": 2, "t": "st", "id": id + 1}).size()
 	print("      4 posiciones juntas: %d bytes en 1 mensaje; una a una: %d bytes en 4 mensajes" % [together, apart])
+
+
+#The same room of the host, closed in the middle of a game (after the points of the first round, with a start still waiting) and opened
+#again: the new game starts from nothing. Before 23/11 the old points blocked the first marker and the old clock sent a start of its own
+func _check_room_again() -> void:
+	var room := NetRoom.new()
+	tree.root.add_child(room)
+	var got: Array[Array] = []
+	for game in 2:
+		var opened := false
+		for attempt in 10:
+			opened = opened or room.host("ANFITRION", &"fire")
+			if not opened:
+				await _settle(300)
+		var link := NetLink.connecting("127.0.0.1", NetProtocol.PORT)
+		link.start()
+		link.send({"t": "hello", "v": NetProtocol.VERSION, "name": "J2", "character": "water"})
+		var heard: Array[String] = []
+		await _settle()
+		if game == 1:
+			#Long enough for any clock left from the last game to run out (with --fixed-fps the frames go fast)
+			for frame in 600:
+				await tree.process_frame
+			await _settle()
+		room.begin_warmup()
+		room.start_game(PLAN, SEEDS)
+		link.send({"t": "loaded", "round": 0})
+		await _settle()
+		room.report_loaded(0)
+		link.send({"t": "points", "round": 0, "points": 300})
+		await _settle()
+		room.report_points(0, 400)
+		await _settle()
+		#The game is left with the next round loading and its start waiting for the player
+		room.report_loaded(1)
+		for message in link.take():
+			if message["t"] in ["go", "scores"]:
+				heard.append("%s %s" % [message["t"], str(int(message.get("round", -9)))])
+		got.append(heard)
+		room.close()
+		link.stop()
+		await _settle()
+	room.queue_free()
+	_expect(got.size() == 2 and got[0] == ["go 0", "scores 0"] and got[1] == got[0],
+		"una sala cerrada a mitad de partida y abierta otra vez empieza de cero: salida y marcador de la ronda 1, nada viejo (%s)" % str(got))
 
 
 #How the screen finds the room

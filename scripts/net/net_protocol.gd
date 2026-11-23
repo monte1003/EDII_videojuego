@@ -5,7 +5,8 @@ extends RefCounted
 #in 4 bytes in front (big endian) so the other side knows where it ends. Anything too long, broken or unknown is thrown away.
 #The last five types only go to the fair screen, which says hello with "role": "watch"
 
-const VERSION := 1
+#2 since the fair screen (23/11/2026): a room of version 1 would take the screen for a player
+const VERSION := 2
 const GAME := "rumblenet"
 #TCP port of the room and UDP port where rooms announce themselves on the local network
 const PORT := 47820

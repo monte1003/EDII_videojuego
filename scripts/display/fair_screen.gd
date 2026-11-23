@@ -17,6 +17,8 @@ var _traffic: Label
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+	#The main menu started its music for an instant before this screen: silence until the fair screen has its own (Phase 3)
+	ScreenFlow.music.play_for(&"fair_screen")
 	add_child(SocialBackground.new())
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
