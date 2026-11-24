@@ -116,6 +116,8 @@ var dive_enabled := false
 var carried := false
 #A player of another computer: it follows the states that come from there instead of its own physics and ignores the blows of this one
 var remote := false
+#In a room the pause menu does not stop the round: while it is open the keys do not move the player
+var menu_open := false
 var dive_phase := Dive.NONE
 #The pull of the ground: 1 down or -1 up, and how strong it is. Only set_gravity_state changes them
 var gravity_sign := 1.0
@@ -294,6 +296,18 @@ func set_remote_state(at: Vector3, yaw: float, moving: bool, airborne: bool, pos
 		pose_style = style
 		posing = false
 		posing = pose_on
+
+
+func remote_airborne() -> bool:
+	return _remote_airborne
+
+
+#A puppet whose computer left the game: out of sight and out of the way
+func vanish() -> void:
+	hide()
+	collision_layer = 0
+	collision_mask = 0
+	process_mode = Node.PROCESS_MODE_DISABLED
 
 
 #What this computer sends of its own player

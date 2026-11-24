@@ -3,7 +3,6 @@ extends Screen
 #What happened in the round that just ended: the medal, the points, what is missing for the next one, and the way on
 
 const BUTTON_WIDTH := 340.0
-const ENTER_ICON := preload("res://assets/ui/icons/key_enter.svg")
 const BADGE_SIZE := 118.0
 const COUNT_TIME := 0.8
 const COUNT_TICKS := 12
@@ -100,7 +99,8 @@ func _build() -> void:
 	gap_button.custom_minimum_size = Vector2(0, 8)
 	_column.add_child(gap_button)
 	_button = UiKit.game_button(_next_text(), true, BUTTON_WIDTH, true)
-	_button.icon = ENTER_ICON
+	_button.icon = InputHints.confirm_icon()
+	InputDevice.changed.connect(_on_device_changed)
 	_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_button.pressed.connect(_confirm)
 	_column.add_child(_button)
@@ -251,3 +251,8 @@ func _after_count() -> void:
 	pop.tween_property(_record_label, "modulate:a", 1.0, 0.15)
 	pop.tween_property(_record_label, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	SynthSound.play(self, SynthSound.tone(1318.0, 0.4, 0.0, 0.4), -9.0)
+
+
+#The key on the main button follows the device in use: Enter or the cross of the pad
+func _on_device_changed(_kind: int) -> void:
+	_button.set_icon(InputHints.confirm_icon())

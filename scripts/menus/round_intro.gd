@@ -136,7 +136,7 @@ func _build_brief(stack: VBoxContainer) -> void:
 		pair.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pair.add_theme_constant_override("separation", 8)
 		pair.modulate.a = 0.0
-		pair.add_child(UiKit.key_chip(InputHints.entry_label(parts[0]), 18))
+		pair.add_child(UiKit.action_chip(StringName(parts[0]), 18))
 		if parts.size() > 1:
 			pair.add_child(UiKit.body(parts[1], 20, Palette.INK))
 		row.add_child(pair)

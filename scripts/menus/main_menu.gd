@@ -14,6 +14,8 @@ var _back_base := Vector2.ZERO
 @onready var _test_button: Button = %TestButton
 @onready var _foreground: Control = %Foreground
 @onready var _background: Control = %Background
+@onready var _hint: Label = $Foreground/Center/Layout/Hint
+@onready var _hint_text := _hint.text
 
 
 func _ready() -> void:
@@ -26,6 +28,17 @@ func _ready() -> void:
 	_play_button.grab_focus()
 	_front_base = _foreground.position
 	_back_base = _background.position
+	_show_key()
+	InputDevice.changed.connect(_on_device_changed)
+
+
+#The line under JUGAR names the key that starts: ENTER, or the cross of the pad
+func _show_key() -> void:
+	_hint.text = _hint_text.replace("ENTER", InputHints.spoken(&"menu_confirm"))
+
+
+func _on_device_changed(_kind: int) -> void:
+	_show_key()
 
 
 #La pantalla se desplaza un poco contra el mouse, como una camara que mira alrededor.

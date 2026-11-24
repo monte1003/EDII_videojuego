@@ -6,6 +6,8 @@ extends CanvasLayer
 
 signal retry_requested
 signal menu_requested
+#Each number of the countdown as it shows, and 0 for "YA"
+signal counted(number: int)
 
 const GLOW_SHADER: Shader = preload("res://assets/ui/shaders/edge_glow.gdshader")
 const OUTLINE := Color(Palette.NIGHT, 0.88)
@@ -91,6 +93,7 @@ func tick_countdown(left: float) -> void:
 		return
 	_count_shown = shown
 	show_countdown(str(shown))
+	counted.emit(shown)
 	SynthSound.play(self, SynthSound.tone(523.0, 0.14, 0.0, 0.4), -9.0)
 
 
@@ -98,6 +101,7 @@ func tick_countdown(left: float) -> void:
 func show_go() -> void:
 	_count_shown = 0
 	show_countdown("YA")
+	counted.emit(0)
 	_countdown.add_theme_color_override("font_color", Palette.GOLD)
 	SynthSound.play(self, SynthSound.tone(1046.0, 0.4, 0.0, 0.45), -7.0)
 	var leave := create_tween()
@@ -146,7 +150,7 @@ func show_mission(text: String, keys: Array[String] = [], hold := 3.6) -> void:
 		child.queue_free()
 	for entry in keys:
 		var parts := entry.split("|")
-		_mission_keys.add_child(UiKit.key_chip(parts[0], 16))
+		_mission_keys.add_child(UiKit.entry_chip(parts[0], 16))
 		if parts.size() > 1:
 			var caption := _text(parts[1], UiKit.BODY_FONT, 18)
 			_mission_keys.add_child(caption)

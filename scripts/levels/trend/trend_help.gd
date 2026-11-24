@@ -5,7 +5,6 @@ extends RefCounted
 
 
 static func pages(settings: TrendSettings) -> Array[Dictionary]:
-	var key := InputHints.markup
 	return [
 		{
 			"title": "La misión",
@@ -44,7 +43,7 @@ Con %s dos veces en el aire barres: llegas más lejos, pero quedas tendido un mo
 			"body": "Mover: %s · Saltar: %s · Mirar: %s
 Empujar: %s
 Pausa: %s · Esta ayuda: %s" % [
-				InputHints.move_markup(), InputHints.key_markup(&"jump"), key.call("MOUSE"), InputHints.key_markup(&"shove"),
+				InputHints.move_markup(), InputHints.key_markup(&"jump"), InputHints.look_markup(), InputHints.key_markup(&"shove"),
 				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
 		},
 	]

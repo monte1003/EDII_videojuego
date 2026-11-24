@@ -83,7 +83,7 @@ func _ready() -> void:
 	_help.setup(HelpPages.trend_war(settings))
 	hud.set_time(settings.zone_seconds)
 	hud.show_mission("Atrapa tu tendencia", [
-		"%s|mover" % InputHints.move_label(), "%s|saltar" % InputHints.key_label(&"jump"), "%s|empujar" % InputHints.key_label(&"shove")], 4.5)
+		"move=%s|mover" % InputHints.move_label(), "jump=%s|saltar" % InputHints.key_label(&"jump"), "shove=%s|empujar" % InputHints.key_label(&"shove")], 4.5)
 
 
 func _on_round_started() -> void:

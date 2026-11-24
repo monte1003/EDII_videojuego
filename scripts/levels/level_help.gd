@@ -80,7 +80,7 @@ func _go(step: int) -> void:
 func _show_page() -> void:
 	var page := _pages[_page]
 	_title.text = page["title"]
-	_body.text = page["body"]
+	_body.text = InputHints.resolve(page["body"])
 	var first := _page == 0
 	_previous.modulate.a = 0.0 if first else 1.0
 	_previous.disabled = first

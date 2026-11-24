@@ -20,7 +20,7 @@ const TRACKS := {
 	&"controls": &"menu", &"graphics": &"menu", &"accessibility": &"menu", &"test_games": &"menu",
 	&"warmup": &"warmup", &"round_intro": &"results", &"round_results": &"results", &"session_results": &"results",
 	&"level_01": &"level_01", &"street_game": &"street_game", &"social_drop": &"social_drop", &"trend_war": &"trend_war",
-	&"perfect_selfie": &"perfect_selfie", &"podium": &"",
+	&"perfect_selfie": &"perfect_selfie", &"podium": &"", &"rejoin": &"results", &"fair_screen": &"",
 }
 
 var _player: AudioStreamPlayer

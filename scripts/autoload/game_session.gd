@@ -42,6 +42,8 @@ var round_seed := 0
 var _rng := RandomNumberGenerator.new()
 #In a room, the result of this computer while the server gathers the points of everybody
 var _waiting_result: RoundResult
+#This computer came back to a game under way and waits for the next round
+var _rejoined := false
 
 
 func _ready() -> void:
@@ -137,6 +139,8 @@ func sync_lobby(members: Array[Dictionary]) -> void:
 		var character: CharacterData = load(character_path) if ResourceLoader.exists(character_path) else DEFAULT_CHARACTER
 		var slot := PlayerSlot.new(int(member.get("id", 0)), str(member.get("name", "JUGADOR")), character)
 		slot.ready = bool(member.get("ready", false))
+		#Whoever lost its connection, or came back and waits for the next round, does not play the round under way
+		slot.connected = bool(member.get("connected", true)) and not bool(member.get("waiting", false))
 		lobby.slots.append(slot)
 	lobby.changed.emit()
 
@@ -167,6 +171,42 @@ func finish_warmup() -> void:
 		seeds.append(_rng.randi_range(1, 2147483646))
 	net.start_game(plan, seeds)
 	begin_networked(plan, seeds)
+
+
+#Back in a game under way after losing the connection: the order, the seeds and the points so far come from the server; this computer
+#waits for the next round on a screen of its own
+func rejoin(order: Array[StringName], round_seeds: Array[int], current: int, table: Array[Dictionary]) -> void:
+	plan = order.duplicate()
+	seeds = round_seeds.duplicate()
+	practice = false
+	_waiting_result = null
+	results.clear()
+	if plan.is_empty():
+		enter_warmup()
+		return
+	for index in table.size():
+		results.append(_kept_result(index, table[index]))
+	round_index = maxi(current, 0)
+	_rejoined = true
+	_set_phase(Phase.ROUND_RESULTS)
+	ScreenFlow.open(&"rejoin")
+
+
+#A round this computer did not play, with the points the server gave everybody
+func _kept_result(index: int, points: Dictionary) -> RoundResult:
+	var result := RoundResult.make(plan[index] if index < plan.size() else &"", false, "", "")
+	return result.with_score(RoundScore.make(score_sheet, int(points.get(local_id, 0)), ""), points)
+
+
+#The fair screen watches a round of a room without playing it: the order, the seeds and the round it builds, with nobody of the room as
+#its player and no change of phase, so it never reports points
+func follow_round(order: Array[StringName], round_seeds: Array[int], index: int) -> void:
+	plan = order.duplicate()
+	seeds = round_seeds.duplicate()
+	round_index = index
+	round_seed = seeds[index] if index >= 0 and index < seeds.size() else 0
+	practice = false
+	local_id = 0
 
 
 #Everybody of a room goes to the warm-up together
@@ -223,6 +263,9 @@ func report_result(result: RoundResult) -> bool:
 
 #The server sent the points of everybody for a round: the result of this computer takes them and the results show
 func apply_round_points(index: int, points: Dictionary) -> void:
+	if _rejoined and _waiting_result == null and index == round_index and results.size() == index:
+		results.append(_kept_result(index, points))
+		return
 	if _waiting_result == null or index != round_index or phase != Phase.PLAYING:
 		return
 	var result := _waiting_result
@@ -345,6 +388,7 @@ func reset() -> void:
 
 
 func _select_next_round() -> void:
+	_rejoined = false
 	round_index += 1
 	round_seed = seeds[round_index] if round_index < seeds.size() else 0
 	_set_phase(Phase.INTRO)

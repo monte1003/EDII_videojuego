@@ -1,7 +1,9 @@
 class_name LobbyStage
 extends Node3D
 
-#The 3D waiting room: a podium for every place of the lobby, with the character of whoever sits there
+#The 3D waiting room: a podium for every place of the lobby, with the character of whoever sits there. The ring of its podium takes its
+#colour and beats once it is ready, a burst of confetti answers "Listo" and over it go its name in the wide letters of the game and
+#whether it is you or ready. The lobby draws a halo of that colour behind each place (on the 2D screen, where a soft glow blends well)
 
 const SLOT_X: Array[float] = [-1.15, 1.15, -3.45, 3.45]
 const SLOT_Z: Array[float] = [0.0, 0.0, -0.4, -0.4]
@@ -11,8 +13,12 @@ const MODEL_SCALE := 1.6
 const PODIUM_COLOR := Color("f5f1fd")
 const SKIRT_COLOR := Color("d3c8f0")
 const EMPTY_RING := Color("b9aee6")
+#Where the halo of a place is centred, over its podium
+const HALO_HEIGHT := 1.25
 
 var _places: Array[Dictionary] = []
+var _clock := 0.0
+var _camera: Camera3D
 
 
 func _ready() -> void:
@@ -27,7 +33,7 @@ func show_slots(slots: Array[PlayerSlot], local_id: int) -> void:
 		_fill(_places[index], slot, slot != null and slot.player_id == local_id)
 
 
-#The character of that player jumps: the answer to pressing "Listo"
+#The character of that player jumps and a little confetti goes up from its podium: the answer to pressing "Listo"
 func cheer(player_id: int) -> void:
 	for place in _places:
 		if place["player_id"] == player_id and place["model"] != null:
@@ -35,6 +41,38 @@ func cheer(player_id: int) -> void:
 			model.set_state(false, true)
 			#The timer belongs to the model, so it disappears with it
 			model.create_tween().tween_callback(model.set_state.bind(false, false)).set_delay(0.55)
+			ImpactFx.confetti(self, (place["root"] as Node3D).position + Vector3(0.0, 0.4, 0.0), 40, 38.0, 4.6)
+
+
+#The rings of the ready players beat slowly
+func _process(delta: float) -> void:
+	_clock += delta
+	var beat := 0.5 + 0.5 * sin(_clock * 3.6)
+	for place in _places:
+		if place["player_id"] < 0 or not place["ready"]:
+			continue
+		_tint(place["ring"], place["color"], 1.1 + 0.7 * beat)
+
+
+#Where a place is on the picture of the stage, and what it shows: for the halos the lobby draws behind it
+func place_point(index: int) -> Vector2:
+	return _camera.unproject_position((_places[index]["root"] as Node3D).position + Vector3(0.0, HALO_HEIGHT, 0.0))
+
+
+func place_taken(index: int) -> bool:
+	return _places[index]["player_id"] >= 0
+
+
+func place_ready(index: int) -> bool:
+	return _places[index]["ready"]
+
+
+func place_color(index: int) -> Color:
+	return _places[index]["color"]
+
+
+func place_count() -> int:
+	return _places.size()
 
 
 func _build_environment() -> void:
@@ -51,12 +89,12 @@ func _build_environment() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	add_child(sun)
-	var camera := Camera3D.new()
-	camera.fov = 32.0
-	camera.position = Vector3(0.0, 1.6, 9.6)
-	add_child(camera)
-	camera.look_at(Vector3(0.0, 0.85, 0.0))
-	camera.current = true
+	_camera = Camera3D.new()
+	_camera.fov = 32.0
+	_camera.position = Vector3(0.0, 1.6, 9.6)
+	add_child(_camera)
+	_camera.look_at(Vector3(0.0, 0.85, 0.0))
+	_camera.current = true
 
 
 func _build_place(index: int) -> Dictionary:
@@ -90,30 +128,38 @@ func _build_place(index: int) -> Dictionary:
 	holder.position.y = PODIUM_HEIGHT + 0.05
 	root.add_child(holder)
 
-	var name_label := _label3d("", UiKit.BOLD_FONT, 46, Palette.INK)
-	name_label.position = Vector3(0.0, PODIUM_HEIGHT + 0.05 + 2.04, 0.0)
+	var name_label := _label3d("", UiKit.BUTTON_FONT, 40, Palette.INK)
+	name_label.position = Vector3(0.0, PODIUM_HEIGHT + 0.05 + 2.06, 0.0)
 	root.add_child(name_label)
-	var status_label := _label3d("", UiKit.BODY_FONT, 36, Palette.INK_SOFT)
-	status_label.position = Vector3(0.0, PODIUM_HEIGHT + 0.05 + 1.8, 0.0)
+	var status_label := _label3d("", UiKit.BUTTON_FONT, 26, Palette.INK_SOFT)
+	status_label.position = Vector3(0.0, PODIUM_HEIGHT + 0.05 + 1.84, 0.0)
 	root.add_child(status_label)
 
 	return {"root": root, "holder": holder, "ring": ring_material, "name": name_label,
-		"status": status_label, "model": null, "character": null, "player_id": -1}
+		"status": status_label, "model": null, "character": null, "player_id": -1, "ready": false, "color": EMPTY_RING}
 
 
 func _fill(place: Dictionary, slot: PlayerSlot, is_local: bool) -> void:
 	if slot == null:
 		_set_model(place, null)
 		place["player_id"] = -1
+		place["ready"] = false
 		_tint(place["ring"], EMPTY_RING, 0.25)
 		_text(place["name"], "", Palette.INK_SOFT)
 		_text(place["status"], "", Palette.INK_SOFT)
 		return
 	place["player_id"] = slot.player_id
+	place["ready"] = slot.ready
+	place["color"] = slot.character.accent_color
 	_set_model(place, slot.character, GameSession.variant_of(slot.player_id))
 	_tint(place["ring"], slot.character.accent_color, 1.4 if slot.ready else 0.7)
-	_text(place["name"], slot.display_name + ("  ·  Tú" if is_local else ""), Palette.INK)
-	_text(place["status"], "Listo" if slot.ready else "", Palette.TEAL)
+	_text(place["name"], slot.display_name.to_upper(), Palette.INK)
+	var status := ""
+	if is_local:
+		status = "TÚ  ·  LISTO" if slot.ready else "TÚ"
+	elif slot.ready:
+		status = "LISTO"
+	_text(place["status"], status, Palette.TEAL if slot.ready else Palette.CORAL)
 
 
 func _set_model(place: Dictionary, character: CharacterData, variant := 0) -> void:

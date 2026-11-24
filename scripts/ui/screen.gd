@@ -27,5 +27,11 @@ func accepts_confirm() -> bool:
 	return _confirm_armed
 
 
+#A selected button answers the confirm key by itself when it is let go; the screen answers it only when nothing is selected, so one press
+#never does two things (the screen's action on the press and the button's on the release)
+func confirm_is_free() -> bool:
+	return not get_viewport().gui_get_focus_owner() is BaseButton
+
+
 func _arm_confirm() -> void:
 	_confirm_armed = true

@@ -19,7 +19,11 @@ class JumpRing extends Control:
 			draw_arc(center, RADIUS, -PI / 2.0, -PI / 2.0 + TAU * fill, 40, Palette.PAPER, WIDTH, true)
 
 
+const PROGRESS_SCENE: PackedScene = preload("res://scenes/ui/progress_indicator.tscn")
+
 var _ring: JumpRing
+#The little street on the left: how far the runner is from the end line
+var _progress: ProgressIndicator
 
 
 func _ready() -> void:
@@ -34,6 +38,22 @@ func _ready() -> void:
 	_ring.modulate.a = 0.0
 	_bottom.add_child(_ring)
 	_bottom.move_child(_ring, 0)
+	_progress = PROGRESS_SCENE.instantiate() as ProgressIndicator
+	add_child(_progress)
+
+
+func set_runner_icon(character_id: StringName) -> void:
+	_progress.set_character(character_id)
+
+
+#0 on the end line, 1 as far back as the runner can go
+func set_progress(value: float, instant := false) -> void:
+	_progress.set_progress(value, instant)
+
+
+func hide_play_ui() -> void:
+	super()
+	create_tween().tween_property(_progress, "modulate:a", 0.0, 0.3)
 
 
 #The jump rests for "total" seconds after landing; the ring only shows while it does

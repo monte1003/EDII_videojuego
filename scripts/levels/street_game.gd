@@ -108,7 +108,9 @@ var elapsed := 0.0
 var _runner: StreetRunner
 var _lanes: Array[Lane] = []
 var _obstacles: Array[StreetObstacle] = []
+#The traffic draws from the seed of the room; effects of the blows from their own dice, so a blow here never changes the traffic there
 var _rng := RandomNumberGenerator.new()
+var _fx_rng := RandomNumberGenerator.new()
 var _clock := 0.0
 var _phase_timer := 0.0
 #Hits the runner took in the round; the score counts them
@@ -142,9 +144,10 @@ func _ready() -> void:
 	_runner.landed.connect(_on_runner_landed)
 	_runner.jump_cooldown_changed.connect(_hud.set_jump_cooldown)
 	_hud.set_time(time_limit)
+	_hud.set_progress(_safety(), true)
 	var move_keys := " ".join([InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
 		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
-	_hud.show_mission("%d s contra la cinta" % int(time_limit), [move_keys, InputHints.key_label(&"jump")])
+	_hud.show_mission("%d s contra la cinta" % int(time_limit), ["move=" + move_keys, "jump=" + InputHints.key_label(&"jump")])
 
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_phase_timer = countdown_seconds
@@ -180,8 +183,14 @@ func _spawn_runner(half_width: float) -> void:
 	_actors.add_child(_runner)
 	_runner.position = Vector3(start_x, 0.0, 0.0)
 	_runner.set_character(slot.character, GameSession.variant_of(slot.player_id))
+	if slot.character != null:
+		_hud.set_runner_icon(slot.character.id)
 	_runner.set_input_enabled(false)
-	add_poser(_runner, true)
+	#The fair screen has no runner of its own: the first one is a puppet like the others
+	var watching := GameSession.is_networked() and not GameSession.practice and slot.player_id != GameSession.local_id
+	if watching:
+		_runner.make_remote()
+	add_poser(_runner, not watching)
 	#In a room the runners of the other computers run beside, as puppets: whoever the street takes watches them
 	if GameSession.is_networked() and not GameSession.practice:
 		for other in participants:
@@ -241,6 +250,7 @@ func _update_running(delta: float) -> void:
 
 	#The edge of the screen glows when the end line is close
 	_hud.set_danger((1.0 - (end_x - _runner.position.x) / DANGER_RANGE) * 0.9)
+	_hud.set_progress(_safety())
 
 	#Tells the player every third of the round that the flow got faster
 	if _next_speed_notice < 3 and elapsed >= time_limit * _next_speed_notice / 3.0:
@@ -263,6 +273,12 @@ func _run_belt() -> void:
 func _stop_belt() -> void:
 	_world.set_belt_speed(0.0)
 	_runner.external_velocity = Vector3.ZERO
+
+
+#How far the runner is from the end line: 0 on it, 1 at the furthest point it may walk back to
+func _safety() -> float:
+	var safe_x := start_x - back_limit
+	return clampf((end_x - _runner.position.x) / (end_x - safe_x), 0.0, 1.0)
 
 
 func _speed_scale() -> float:
@@ -531,25 +547,25 @@ func _check_hits() -> void:
 	_runner.take_hit(hit)
 	hits_taken += 1
 	hit_by.react()
-	if hit_by.kind in [StreetObstacle.Kind.CAR, StreetObstacle.Kind.TANK] and _rng.randf() < 0.5:
-		SynthSound.play(self, SynthSound.honk(), -8.0, _rng.randf_range(0.9, 1.1))
+	if hit_by.kind in [StreetObstacle.Kind.CAR, StreetObstacle.Kind.TANK] and _fx_rng.randf() < 0.5:
+		SynthSound.play(self, SynthSound.honk(), -8.0, _fx_rng.randf_range(0.9, 1.1))
 
 
 #The blow is felt: dust and stars where it landed, the edge of the screen flashes and the game stops for a breath
 func _on_runner_hit(hit: Player.Hit) -> void:
-	ImpactFx.blow(self, _runner, hit, _rng, true)
+	ImpactFx.blow(self, _runner, hit, _fx_rng, true)
 	_hud.flash(Palette.CORAL, 0.3 + 0.3 * hit.strength, 0.45)
 
 
 func _on_runner_landed(_at: Vector3, hard: bool) -> void:
-	ImpactFx.landing(self, _runner, hard, _rng)
+	ImpactFx.landing(self, _runner, hard, _fx_rng)
 
 
 #Up or down the screen, away from the obstacle's centre; toward the open side near an edge
 func _shove_side(obstacle: StreetObstacle) -> float:
 	var side := signf(_runner.position.z - obstacle.position.z)
 	if side == 0.0:
-		side = -1.0 if _rng.randf() < 0.5 else 1.0
+		side = -1.0 if _fx_rng.randf() < 0.5 else 1.0
 	var room := _runner.max_z - _runner.position.z if side > 0.0 else _runner.position.z - _runner.min_z
 	if room < 1.0:
 		side = -side

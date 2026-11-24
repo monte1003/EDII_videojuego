@@ -3,7 +3,8 @@ extends VBoxContainer
 
 #The room on the local network, at the bottom left of the lobby: one line that says how this computer plays (alone, with its room open
 #and the address the others must use, or inside the room of another) and the links to open a room, join one or leave it. Joining opens a
-#list of the rooms found on the network and a field for the address of the server, checked before trying
+#list of the rooms found on the network and a field for the address of the server, checked before trying; each room can be joined as a
+#player (four at most) or as its fair screen (one at most), which turns this computer into the screen that watches the game
 
 var _status: Label
 var _open_link: TextButton
@@ -13,6 +14,7 @@ var _picker: CanvasLayer
 var _list: VBoxContainer
 var _address: LineEdit
 var _note: Label
+var _cancel_link: TextButton
 
 
 #The character this computer picked, as the room names it
@@ -83,7 +85,11 @@ func _show_picker() -> void:
 	_note.text = "Buscando salas en la red..."
 	GameSession.net.browse()
 	_fill_rooms()
-	_address.grab_focus()
+	if InputHints.uses_pad():
+		_cancel_link.grab_focus()
+		_fill_rooms()
+	else:
+		_address.grab_focus()
 
 
 func _hide_picker() -> void:
@@ -103,9 +109,23 @@ func _connect_to(address: String) -> void:
 		say("No se pudo conectar con %s" % clean)
 
 
+#This computer becomes the fair screen of that room: it watches the game and plays nothing
+func _watch_room(address: String) -> void:
+	var clean := address.strip_edges()
+	if not clean.is_valid_ip_address():
+		_note.text = "Esa no es una dirección IP (ejemplo: 192.168.0.10)"
+		return
+	_hide_picker()
+	FairMode.open(clean)
+
+
 func _fill_rooms() -> void:
 	if _list == null or not _picker.visible:
 		return
+	#The list is made again every time a room speaks: with the pad the selection stays on the same choice of the same room
+	var focused := get_viewport().gui_get_focus_owner()
+	var kept := str(focused.get_meta("choice", "")) if focused != null and _list.is_ancestor_of(focused) else ""
+	var follow := InputHints.uses_pad() and (kept != "" or focused == _cancel_link or focused == null)
 	for child in _list.get_children():
 		child.queue_free()
 	var rooms := GameSession.net.rooms
@@ -113,12 +133,32 @@ func _fill_rooms() -> void:
 		_note.text = "Salas encontradas:"
 	for address: String in rooms:
 		var info: Dictionary = rooms[address]
-		var open := bool(info.get("open", true)) and int(info.get("players", 0)) < NetRoom.CAPACITY
-		var text := "%s  ·  %d/%d  ·  %s" % [str(info.get("name", "Sala")), int(info.get("players", 0)), NetRoom.CAPACITY, address]
-		var entry := UiKit.text_button(text if open else text + "  (llena o en juego)", Palette.TEAL if open else Palette.INK_SOFT, 20)
-		entry.disabled = not open
-		entry.pressed.connect(_connect_to.bind(address))
+		var players := int(info.get("players", 0))
+		var open := bool(info.get("open", true)) and players < NetRoom.CAPACITY
+		#During a game, whoever dropped can still take its place back
+		var back := not bool(info.get("open", true)) and int(info.get("gone", 0)) > 0
+		var screen_free := not bool(info.get("screen", false))
+		var entry := VBoxContainer.new()
 		_list.add_child(entry)
+		entry.add_child(UiKit.label("%s  ·  %d/%d jugadores  ·  %s" % [str(info.get("name", "Sala")), players, NetRoom.CAPACITY, address],
+			UiKit.BOLD_FONT, 20, Palette.INK))
+		var choices := HBoxContainer.new()
+		choices.add_theme_constant_override("separation", 24)
+		entry.add_child(choices)
+		var player_text := "Unirse como jugador" if open else ("Volver a la partida" if back else "Jugadores: llena o en juego")
+		var as_player := _link(choices, player_text, Palette.TEAL if open or back else Palette.INK_SOFT, _connect_to.bind(address))
+		as_player.disabled = not (open or back)
+		as_player.set_meta("choice", address + " player")
+		var as_screen := _link(choices, "Unirse como feria" if screen_free else "Feria: ya tiene pantalla", Palette.CORAL if screen_free else Palette.INK_SOFT,
+			_watch_room.bind(address))
+		as_screen.disabled = not screen_free
+		as_screen.set_meta("choice", address + " screen")
+		for choice: TextButton in [as_player, as_screen]:
+			if follow and not choice.disabled and (kept == "" or kept == str(choice.get_meta("choice"))):
+				choice.grab_focus()
+				follow = false
+	if follow and kept != "":
+		_cancel_link.grab_focus()
 
 
 func _build_picker() -> void:
@@ -168,8 +208,9 @@ func _build_picker() -> void:
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 24)
 	column.add_child(actions)
-	_link(actions, "Conectar", Palette.TEAL, func() -> void: _connect_to(_address.text))
-	_link(actions, "Cancelar", Palette.INK_SOFT, _hide_picker)
+	_link(actions, "Unirse como jugador", Palette.TEAL, func() -> void: _connect_to(_address.text))
+	_link(actions, "Unirse como feria", Palette.CORAL, func() -> void: _watch_room(_address.text))
+	_cancel_link = _link(actions, "Cancelar", Palette.INK_SOFT, _hide_picker)
 
 
 func _link(parent: Control, text: String, color: Color, action: Callable) -> TextButton:

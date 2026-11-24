@@ -4,6 +4,11 @@ extends Screen
 
 const START_DELAY := 1.3
 const ACTION_WIDTH := 300.0
+const MARK: Texture2D = preload("res://assets/ui/textures/mark.png")
+#The halo behind each place: its size on the screen, and how strong it is while waiting and once ready
+const HALO_SIZE := Vector2(330, 400)
+const HALO_ALPHA := 0.34
+const HALO_READY_ALPHA := 0.55
 
 var _stage: LobbyStage
 var _ready_button: GameButton
@@ -17,6 +22,12 @@ var _links: Array[TextButton] = []
 var _practice: TextButton
 var _net_panel: NetPanel
 var _character_label: Label
+var _character_dot: Panel
+#The keyboard on screen for the name, with the pad, and the hint that offers it next to the field
+var _keyboard := NameKeyboard.new()
+var _write_hint: Control
+var _halos: Array[TextureRect] = []
+var _clock := 0.0
 
 
 func _ready() -> void:
@@ -30,20 +41,87 @@ func _ready() -> void:
 	GameSession.net.left.connect(_on_room_left)
 	_refresh()
 	_ready_button.grab_focus()
+	add_child(_keyboard)
+	_keyboard.accepted.connect(_on_name_written)
+	_keyboard.cancelled.connect(_name_field.grab_focus)
+	InputDevice.changed.connect(_on_device_changed)
+	_on_device_changed(0)
 
 
+#A selected button answers the confirm key by itself, so here it only marks "Listo" when nothing is selected. On the name field the pad
+#opens the keyboard on screen (the real keyboard types in the field). The character changes with A and D, or L1 and R1 on the pad
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("menu_confirm") and not _name_field.has_focus() and not _net_panel.is_picking():
+	var idle := not _name_field.has_focus() and not _net_panel.is_picking()
+	if event.is_action_pressed("menu_confirm") and _name_field.has_focus() and not _net_panel.is_picking():
+		get_viewport().set_input_as_handled()
+		_keyboard.open(_name_field.text, GameState.MAX_NAME_LENGTH)
+	elif event.is_action_pressed("menu_confirm") and idle and confirm_is_free():
 		get_viewport().set_input_as_handled()
 		_toggle_ready()
-	elif (event.is_action_pressed("move_left") or event.is_action_pressed("move_right")) and not _name_field.has_focus() and not _net_panel.is_picking():
+	elif (event.is_action_pressed("pick_prev") or event.is_action_pressed("pick_next")) and not _net_panel.is_picking():
 		get_viewport().set_input_as_handled()
-		_cycle_character(-1 if event.is_action_pressed("move_left") else 1)
+		_cycle_character(-1 if event.is_action_pressed("pick_prev") else 1)
 	else:
 		super(event)
 
 
+func _on_name_written(text: String) -> void:
+	_name_field.text = text
+	_on_name_changed(text)
+	_name_field.grab_focus()
+
+
+#The key drawn on "Listo" and the offer to write the name follow the device in use
+func _on_device_changed(_kind: int) -> void:
+	_ready_button.set_icon(InputHints.confirm_icon())
+	_update_write_hint()
+
+
+func _update_write_hint() -> void:
+	_write_hint.visible = _name_field.has_focus() and InputHints.uses_pad()
+
+
+#A soft glow of each player's colour behind its place, stronger and breathing once it is ready
+func _process(delta: float) -> void:
+	_clock += delta
+	var beat := 0.5 + 0.5 * sin(_clock * 3.6)
+	for index in _halos.size():
+		var halo := _halos[index]
+		halo.visible = _stage.place_taken(index)
+		if not halo.visible:
+			continue
+		halo.position = _stage.place_point(index) - HALO_SIZE / 2.0
+		var strength := HALO_READY_ALPHA + 0.1 * beat if _stage.place_ready(index) else HALO_ALPHA
+		halo.modulate = Color(_stage.place_color(index), strength)
+
+
+func _build_halos() -> void:
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
+	gradient.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+	gradient.add_point(0.35, Color(1.0, 1.0, 1.0, 0.62))
+	gradient.add_point(0.7, Color(1.0, 1.0, 1.0, 0.16))
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.5, 0.5)
+	texture.fill_to = Vector2(0.5, 0.0)
+	texture.width = 256
+	texture.height = 256
+	for index in LobbyState.CAPACITY:
+		var halo := TextureRect.new()
+		halo.texture = texture
+		halo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		halo.stretch_mode = TextureRect.STRETCH_SCALE
+		halo.size = HALO_SIZE
+		halo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		halo.visible = false
+		add_child(halo)
+		_halos.append(halo)
+
+
 func _build_stage() -> void:
+	_build_halos()
 	var container := SubViewportContainer.new()
 	container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	container.stretch = true
@@ -76,11 +154,7 @@ func _build_interface() -> void:
 	var top := HBoxContainer.new()
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(top)
-	var titles := VBoxContainer.new()
-	titles.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	titles.add_theme_constant_override("separation", 10)
-	top.add_child(titles)
-	titles.add_child(UiKit.label("Sala de espera", UiKit.BOLD_FONT, 44, Palette.INK))
+	top.add_child(_build_title())
 	var gap := CenterContainer.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -110,6 +184,7 @@ func _build_interface() -> void:
 	actions.size_flags_vertical = Control.SIZE_SHRINK_END
 	bottom.add_child(actions)
 	_ready_button = UiKit.game_button("Listo", true, ACTION_WIDTH, true, 28)
+	_ready_button.icon = InputHints.confirm_icon()
 	_ready_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_ready_button.pressed.connect(_toggle_ready)
 	actions.add_child(_ready_button)
@@ -141,6 +216,29 @@ func _caption(text: String, size: int, alpha: float) -> Label:
 	return UiKit.label(text, UiKit.BODY_FONT, size, Color(Palette.INK_SOFT, alpha))
 
 
+#The emblem of the game beside the title, with a short line over it that says what this room is for: you leave the feed and step into the
+#ring
+func _build_title() -> HBoxContainer:
+	var lockup := HBoxContainer.new()
+	lockup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lockup.add_theme_constant_override("separation", 16)
+	var mark := TextureRect.new()
+	mark.texture = MARK
+	mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	mark.custom_minimum_size = Vector2(62, 59)
+	mark.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lockup.add_child(mark)
+	var titles := VBoxContainer.new()
+	titles.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	titles.add_theme_constant_override("separation", 0)
+	lockup.add_child(titles)
+	titles.add_child(UiKit.label("DEL FEED AL RING", UiKit.BUTTON_FONT, 12, Palette.CORAL))
+	titles.add_child(UiKit.label("Sala de espera", UiKit.BOLD_FONT, 44, Palette.INK))
+	return lockup
+
+
 func _build_status() -> VBoxContainer:
 	var status := VBoxContainer.new()
 	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -151,6 +249,9 @@ func _build_status() -> VBoxContainer:
 	row.add_theme_constant_override("separation", 12)
 	row.alignment = BoxContainer.ALIGNMENT_END
 	status.add_child(row)
+	var ready_word := UiKit.label("LISTOS", UiKit.BUTTON_FONT, 12, Palette.INK_SOFT)
+	ready_word.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(ready_word)
 	_dots = HBoxContainer.new()
 	_dots.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_dots.add_theme_constant_override("separation", 7)
@@ -175,7 +276,7 @@ func _build_banner() -> PanelContainer:
 	style.content_margin_top = 9
 	style.content_margin_bottom = 9
 	banner.add_theme_stylebox_override("panel", style)
-	banner.add_child(UiKit.label("Todos listos  ·  empezando", UiKit.BOLD_FONT, 20, Palette.TEAL))
+	banner.add_child(UiKit.label("Todos listos  ·  al ring", UiKit.BOLD_FONT, 20, Palette.TEAL))
 	banner.visible = false
 	return banner
 
@@ -198,17 +299,42 @@ func _build_name_row() -> VBoxContainer:
 	_name_field.add_theme_stylebox_override("focus", _underline(Palette.CORAL))
 	_name_field.text_changed.connect(_on_name_changed)
 	_name_field.text_submitted.connect(func(_text: String) -> void: _name_field.release_focus())
-	box.add_child(_name_field)
-	#The character is picked here too, with the keys to each side of its name; everybody in the room sees the change at once
+	_name_field.focus_entered.connect(_update_write_hint)
+	_name_field.focus_exited.connect(_update_write_hint)
+	var name_row := HBoxContainer.new()
+	name_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_row.add_theme_constant_override("separation", 14)
+	name_row.add_child(_name_field)
+	_write_hint = HBoxContainer.new()
+	_write_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_write_hint.add_theme_constant_override("separation", 8)
+	_write_hint.add_child(UiKit.action_chip(&"menu_confirm", 14))
+	var write_word := UiKit.label("ESCRIBIR", UiKit.BUTTON_FONT, 12, Palette.INK_SOFT)
+	write_word.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_write_hint.add_child(write_word)
+	_write_hint.visible = false
+	name_row.add_child(_write_hint)
+	box.add_child(name_row)
+	#The character is picked here too, with A and D or L1 and R1 to each side of its name and a dot of its colour; everybody in the room
+	#sees the change at once
 	var picker := HBoxContainer.new()
 	picker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	picker.add_theme_constant_override("separation", 10)
-	picker.add_child(UiKit.key_chip(InputHints.key_label(&"move_left"), 14))
+	picker.add_child(UiKit.action_chip(&"pick_prev", 14))
+	var named := HBoxContainer.new()
+	named.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	named.alignment = BoxContainer.ALIGNMENT_CENTER
+	named.add_theme_constant_override("separation", 8)
+	named.custom_minimum_size = Vector2(132, 0)
+	_character_dot = Panel.new()
+	_character_dot.custom_minimum_size = Vector2(12, 12)
+	_character_dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_character_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	named.add_child(_character_dot)
 	_character_label = UiKit.label("", UiKit.BOLD_FONT, 22, Palette.INK)
-	_character_label.custom_minimum_size = Vector2(120, 0)
-	_character_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	picker.add_child(_character_label)
-	picker.add_child(UiKit.key_chip(InputHints.key_label(&"move_right"), 14))
+	named.add_child(_character_label)
+	picker.add_child(named)
+	picker.add_child(UiKit.action_chip(&"pick_next", 14))
 	box.add_child(picker)
 	_net_panel = NetPanel.new()
 	box.add_child(_net_panel)
@@ -270,6 +396,7 @@ func _refresh() -> void:
 	var mine := lobby.find(_local_id)
 	if mine != null and mine.character != null:
 		_character_label.text = mine.character.display_name.to_upper()
+		_character_dot.add_theme_stylebox_override("panel", UiKit.box(mine.character.accent_color, 6))
 	_ready_button.set_caption("Cancelar" if mine != null and mine.ready else "Listo")
 	if lobby.all_ready() and (not GameSession.is_networked() or GameSession.net.is_host()):
 		_begin_countdown()

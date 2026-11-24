@@ -63,12 +63,15 @@ func _read() -> void:
 				_rounds[key] = clampi(int(rounds[key]), 0, ScoreSheet.MAX_POINTS)
 
 
-#The only place that writes the file
+#The only place that writes the file: first to a temporary one that then replaces it, so a cut in the middle never breaks the records
 func _write() -> void:
-	var file := FileAccess.open(path, FileAccess.WRITE)
+	var temporary := path + ".tmp"
+	var file := FileAccess.open(temporary, FileAccess.WRITE)
 	if file == null:
 		return
 	file.store_string(JSON.stringify({"version": 1, "session": _session, "rounds": _rounds}, "\t"))
+	file.close()
+	DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(path))
 
 
 func _is_number(value: Variant) -> bool:

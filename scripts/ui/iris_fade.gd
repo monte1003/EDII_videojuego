@@ -4,6 +4,9 @@ extends CanvasLayer
 #Hides a jump of the camera, as when a player falls off the map and comes back: the picture closes into a circle toward the middle of the
 #screen, stays dark a moment and opens again where the player is now
 
+#The picture starts closing: the player of this screen fell
+signal closing
+
 const SHADER: Shader = preload("res://assets/ui/shaders/iris.gdshader")
 const OPEN := 1.3
 
@@ -30,6 +33,7 @@ func close(seconds := 0.32) -> void:
 	if _closed:
 		return
 	_closed = true
+	closing.emit()
 	_animate(0.0, seconds, Tween.EASE_IN, 0.0)
 	SynthSound.play(self, SynthSound.whoosh(seconds + 0.1), -14.0, 0.8)
 

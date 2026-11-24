@@ -6,11 +6,13 @@ extends RefCounted
 #so it never waits for the network
 
 const CONNECT_TIMEOUT := 5000
+#The thread itself says "still here" this often, so the other side hears it even while this game is busy loading a round
+const PING_EVERY := 1000
+#Bytes a link to the fair screen may keep waiting for it before giving it up (about half a minute of game)
+const MAX_BACKLOG := 262144
 
 var id := 0
 var address := ""
-#Last time anything came from the other side, in milliseconds
-var last_heard := 0
 
 var _peer: StreamPeerTCP
 var _thread := Thread.new()
@@ -21,6 +23,17 @@ var _running := false
 var _open := false
 var _closed := false
 var _reader := NetProtocol.Reader.new()
+#Last time any byte came from the other side, written by the thread
+var _heard := 0
+#A link to the fair screen never waits for the network: what the socket does not take yet waits in the backlog (thread only)
+var _watcher := false
+var _backlog := PackedByteArray()
+#What went through, counted by the thread: messages and bytes each way, and the messages of each type that came in
+var _messages_in := 0
+var _bytes_in := 0
+var _messages_out := 0
+var _bytes_out := 0
+var _kinds_in: Dictionary = {}
 
 
 #A link over a socket the server already accepted
@@ -46,7 +59,7 @@ func start() -> void:
 	if _closed:
 		return
 	_running = true
-	last_heard = Time.get_ticks_msec()
+	_heard = Time.get_ticks_msec()
 	_thread.start(_loop)
 
 
@@ -61,9 +74,15 @@ func take() -> Array[Dictionary]:
 	var messages := _inbox.duplicate()
 	_inbox.clear()
 	_mutex.unlock()
-	if not messages.is_empty():
-		last_heard = Time.get_ticks_msec()
 	return messages
+
+
+#Milliseconds since anything came from the other side
+func heard_ago() -> int:
+	_mutex.lock()
+	var heard := _heard
+	_mutex.unlock()
+	return Time.get_ticks_msec() - heard
 
 
 func is_open() -> bool:
@@ -80,6 +99,22 @@ func is_closed() -> bool:
 	return closed
 
 
+#The server marks the link of the fair screen: from now on its thread sends without waiting and cuts it if the screen stops reading
+func set_watcher() -> void:
+	_mutex.lock()
+	_watcher = true
+	_mutex.unlock()
+
+
+#Messages and bytes that went through this link so far, each way, and how many messages of each type came in
+func traffic() -> Dictionary:
+	_mutex.lock()
+	var counted := {"messages_in": _messages_in, "bytes_in": _bytes_in, "messages_out": _messages_out, "bytes_out": _bytes_out,
+		"kinds_in": _kinds_in.duplicate()}
+	_mutex.unlock()
+	return counted
+
+
 #Asks the thread to finish, waits for it and closes the socket
 func stop() -> void:
 	_running = false
@@ -94,6 +129,8 @@ func stop() -> void:
 
 func _loop() -> void:
 	var since := Time.get_ticks_msec()
+	var pinged := 0
+	var tuned := false
 	while _running:
 		_peer.poll()
 		var status := _peer.get_status()
@@ -104,14 +141,33 @@ func _loop() -> void:
 			continue
 		if status != StreamPeerTCP.STATUS_CONNECTED:
 			break
+		if not tuned:
+			#Small messages go out at once instead of waiting to be joined with others: less delay on a busy Wi-Fi
+			_peer.set_no_delay(true)
+			tuned = true
 		_mutex.lock()
 		_open = true
 		var outgoing := _outbox.duplicate()
 		_outbox.clear()
+		var watcher := _watcher
 		_mutex.unlock()
-		for bytes in outgoing:
-			if _peer.put_data(bytes) != OK:
-				_running = false
+		if Time.get_ticks_msec() - pinged >= PING_EVERY:
+			pinged = Time.get_ticks_msec()
+			outgoing.append(NetProtocol.pack({"t": "ping"}))
+		if watcher:
+			_send_without_waiting(outgoing)
+		else:
+			for bytes in outgoing:
+				if _peer.put_data(bytes) != OK:
+					_running = false
+		if not outgoing.is_empty():
+			var size := 0
+			for bytes in outgoing:
+				size += bytes.size()
+			_mutex.lock()
+			_messages_out += outgoing.size()
+			_bytes_out += size
+			_mutex.unlock()
 		var available := _peer.get_available_bytes()
 		if available > 0:
 			var answer := _peer.get_partial_data(available)
@@ -121,8 +177,30 @@ func _loop() -> void:
 					break
 				_mutex.lock()
 				_inbox.append_array(messages)
+				_heard = Time.get_ticks_msec()
+				_messages_in += messages.size()
+				_bytes_in += (answer[1] as PackedByteArray).size()
+				for message in messages:
+					_kinds_in[message["t"]] = int(_kinds_in.get(message["t"], 0)) + 1
 				_mutex.unlock()
 		OS.delay_msec(2)
 	_mutex.lock()
 	_closed = true
 	_mutex.unlock()
+
+
+#Thread: writes what the socket takes right now and keeps the rest for the next turn. A screen that stops reading for long (a Wi-Fi that
+#froze) is cut instead of making the server wait; it comes back by itself with a fresh picture of the game
+func _send_without_waiting(outgoing: Array[PackedByteArray]) -> void:
+	for bytes in outgoing:
+		_backlog.append_array(bytes)
+	if _backlog.size() > MAX_BACKLOG:
+		_running = false
+		return
+	if _backlog.is_empty():
+		return
+	var answer := _peer.put_partial_data(_backlog)
+	if answer[0] != OK:
+		_running = false
+	else:
+		_backlog = _backlog.slice(int(answer[1]))

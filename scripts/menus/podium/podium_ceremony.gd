@@ -501,7 +501,7 @@ func _build_overlay() -> void:
 	_lower.add_child(_place_label)
 	_lower.add_child(_name_label)
 	_lower.add_child(_points_label)
-	_skip_hint = _key_hint("ENTER", "SALTAR", 13)
+	_skip_hint = _key_hint(&"menu_confirm", "SALTAR", 13)
 	_skip_hint.anchor_left = 1.0
 	_skip_hint.anchor_right = 1.0
 	_skip_hint.anchor_top = 1.0
@@ -510,7 +510,7 @@ func _build_overlay() -> void:
 	_skip_hint.offset_top = -46.0
 	_skip_hint.modulate.a = 0.55
 	_overlay.add_child(_skip_hint)
-	_prompt = _key_hint("ENTER", "CONTINUAR", 16)
+	_prompt = _key_hint(&"menu_confirm", "CONTINUAR", 16)
 	_prompt.anchor_left = 0.5
 	_prompt.anchor_right = 0.5
 	_prompt.anchor_top = 1.0
@@ -573,11 +573,11 @@ func _outlined(text: String, font: Font, size_points: int, color: Color) -> Labe
 	return label
 
 
-func _key_hint(key: String, word: String, size_points: int) -> Control:
+func _key_hint(action: StringName, word: String, size_points: int) -> Control:
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 10)
-	row.add_child(UiKit.key_chip(key, size_points))
+	row.add_child(UiKit.action_chip(action, size_points, "ENTER"))
 	var label := _outlined(word, UiKit.BUTTON_FONT, size_points, Palette.PAPER)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(label)

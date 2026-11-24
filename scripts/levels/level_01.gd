@@ -15,6 +15,8 @@ const IRIS_LEAD := 7.0
 const START_SPREAD := 2.2
 #Seconds a racer stays protected (blinking) after it gets up from a blow, to step out of the way of what hit it
 const RECOVER_GRACE := 1.3
+#Feet more than this under the floor of the course are off it (on a deck, falling): nothing of the course hits them
+const COURSE_DEPTH := 1.5
 #Each racer starts in front of one of the bridges that leave the start: this far from the middle toward the bridges to the sides and this
 #far back, so the one ahead is taken from behind the gate
 const START_INSET := 4.0
@@ -268,7 +270,7 @@ func _begin_countdown() -> void:
 	var move_keys := " ".join([InputHints.key_label(&"move_forward"), InputHints.key_label(&"move_left"),
 		InputHints.key_label(&"move_back"), InputHints.key_label(&"move_right")])
 	_hud.show_mission("Llega a la meta", [
-		"%s|mover" % move_keys, "%s|saltar" % InputHints.key_label(&"jump"), "%s|ayuda" % InputHints.key_label(&"help")], 5.0)
+		"move=%s|mover" % move_keys, "jump=%s|saltar" % InputHints.key_label(&"jump"), "help=%s|ayuda" % InputHints.key_label(&"help")], 5.0)
 
 
 func _begin_round() -> void:
@@ -766,7 +768,26 @@ func _on_racer_finished(player_id: int, place: int) -> void:
 #A blow lands only on a racer that is on its feet and out of its protection: while it flies, lies on the floor and for RECOVER_GRACE
 #seconds after it gets up (blinking) nothing hits it again, so a row of swinging comments can never chain blows on it
 func _can_strike(id: int) -> bool:
-	return (_players[id] as Player).can_be_hit() and rules.register_hit(id)
+	return (_players[id] as Player).can_be_hit() and _on_course(id) and rules.register_hit(id)
+
+
+#Whether the feet are on the floor of the place where the racer is, not under it: a racer that fell to a deck or is falling is never hit
+#by what moves on the course above it
+func _on_course(id: int) -> bool:
+	var locator := _locators[id] as PlayerLocator
+	var feet := (_players[id] as Player).global_position
+	var surface: float = (Level01Layout.POSITIONS[locator.vertex] as Vector3).y
+	if locator.on_bridge:
+		var a: Vector3 = Level01Layout.POSITIONS[locator.bridge_a]
+		var b: Vector3 = Level01Layout.POSITIONS[locator.bridge_b]
+		var way := Vector2(b.x - a.x, b.z - a.z)
+		var share := clampf(Vector2(feet.x - a.x, feet.z - a.z).dot(way) / maxf(way.length_squared(), 0.01), 0.0, 1.0)
+		surface = lerpf(a.y, b.y, share)
+	return feet.y > surface - COURSE_DEPTH
+
+
+func _on_player_left(player_id: int) -> void:
+	rules.withdraw(player_id)
 
 
 #Every blow of the level is the same hit as in the street: it throws the racer, flips it, leaves it lying and gets it up

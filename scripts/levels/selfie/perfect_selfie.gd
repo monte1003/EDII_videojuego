@@ -98,7 +98,7 @@ func _ready() -> void:
 	_spawn_trolls()
 	_selfie_hud.set_photo(1, rules.photo_count())
 	hud.show_mission("Entra al marco", [
-		"%s|mover" % InputHints.move_label(), "%s|posar" % InputHints.key_label(&"interact"), "%s|empujar" % InputHints.key_label(&"shove")], 4.5)
+		"move=%s|mover" % InputHints.move_label(), "interact=%s|posar" % InputHints.key_label(&"interact"), "shove=%s|empujar" % InputHints.key_label(&"shove")], 4.5)
 
 
 #The studio brings its own sky, light and audience: there is no contest set around it
@@ -207,6 +207,11 @@ func _tick_round(delta: float) -> void:
 	_floor.clock = clock
 	for id: int in players:
 		var player: Player = players[id]
+		if player.remote:
+			#A player of another computer: where it is, whether it flies and whether it poses come from there
+			rules.place(id, player.global_position, not player.remote_airborne(), false)
+			rules.set_remote_pose(id, player.posing)
+			continue
 		_air[id] = 0.0 if player.is_on_floor() else float(_air.get(id, 0.0)) + delta
 		#A new press of the move keys or a jump drops the pose; keys held down since it started do not
 		if rules.is_posing(id) and (PoseKeeper.moves(_pose_held, id, player.move_input, settings.pose_break_input) or player.jump_requested):
@@ -221,8 +226,10 @@ func _tick_round(delta: float) -> void:
 		#A floor that bumps the player for a frame does not count as leaving it
 		rules.place(id, player.global_position, float(_air[id]) < PoseKeeper.AIR_GRACE, is_falling(id))
 	rules.extras.clear()
-	for bot in bots:
-		rules.extras.append(bot.global_position)
+	#Bots move on their own on each computer, so in a room they do not count in the photo: everybody gets the same crowd
+	if not _networked_round():
+		for bot in bots:
+			rules.extras.append(bot.global_position)
 	rules.tick(delta)
 	if phase == Phase.ENDED:
 		return

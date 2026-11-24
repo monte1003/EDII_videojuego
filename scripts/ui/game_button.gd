@@ -8,6 +8,8 @@ extends Button
 
 var _tween: Tween
 var _beat: Tween
+#The pad has this button selected, so it looks as under the mouse
+var _pad_hover := false
 
 @onready var _ring: Panel = %Ring
 @onready var _shadow: Panel = %Shadow
@@ -41,9 +43,20 @@ func _ready() -> void:
 	mouse_exited.connect(_on_exit)
 	focus_entered.connect(_paint.bind(base_color.lightened(0.1)))
 	focus_exited.connect(_paint.bind(base_color))
+	focus_entered.connect(_on_focus_changed)
+	focus_exited.connect(_on_focus_changed)
+	InputDevice.changed.connect(_on_device_changed)
 	pressed.connect(UiSound.play_click)
 	if pulse:
 		_start_beat()
+
+
+#Changes the icon after the button is on screen
+func set_icon(texture: Texture2D) -> void:
+	icon = texture
+	if _icon != null:
+		_icon.texture = texture
+		_icon.visible = texture != null
 
 
 #Changes the text after the button is on screen (the label is a child, not the button's own)
@@ -119,6 +132,22 @@ func _ping() -> void:
 	var ring := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	ring.tween_property(_ring, "scale", Vector2(1.08, 1.25), 1.1)
 	ring.tween_property(_ring, "modulate:a", 0.0, 1.1)
+
+
+#With the pad, the selected button grows and stops beating as it does under the mouse; the keyboard keeps its lighter colour only
+func _on_focus_changed() -> void:
+	var wanted := has_focus() and InputHints.uses_pad()
+	if wanted == _pad_hover:
+		return
+	_pad_hover = wanted
+	if wanted:
+		_on_enter()
+	elif not is_hovered():
+		_on_exit()
+
+
+func _on_device_changed(_kind: int) -> void:
+	_on_focus_changed()
 
 
 #Con el mouse encima deja de latir y se queda un poco mas grande

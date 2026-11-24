@@ -31,7 +31,7 @@ Los conos bajitos se saltan. Las aceras también están en la cinta y tienen pea
 Mirar: %s
 Saltar: %s (sale al instante; en el aire la cinta no te arrastra, pero al aterrizar descansa %s s)
 Pausa: %s · Esta ayuda: %s" % [
-				InputHints.move_markup(), key.call("MOUSE"),
+				InputHints.move_markup(), InputHints.look_markup(),
 				InputHints.key_markup(&"jump"), str(config["jump_cooldown"]), InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
 		},
 	]
@@ -73,7 +73,7 @@ Con el tiempo aparecen más íconos distintos y menos cartas buenas, hasta que e
 Mirar: %s
 Saltar: %s
 Pausa: %s · Esta ayuda: %s" % [
-				InputHints.move_markup(), key.call("MOUSE"), InputHints.key_markup(&"jump"),
+				InputHints.move_markup(), InputHints.look_markup(), InputHints.key_markup(&"jump"),
 				InputHints.key_markup(&"pause"), InputHints.key_markup(&"help")],
 		},
 	]

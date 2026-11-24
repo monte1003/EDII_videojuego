@@ -55,7 +55,7 @@ func _ready() -> void:
 	_chips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_chips.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_chips)
-	shove_chip = ActionChip.new(InputHints.key_label(&"shove"), SHOVE_KEY_WORD)
+	shove_chip = ActionChip.new(&"shove", SHOVE_KEY_WORD)
 	_chips.add_child(shove_chip)
 	card = SelfieCard.new()
 	add_child(card)
