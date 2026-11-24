@@ -33,6 +33,8 @@ func _ready() -> void:
 		player.dive_enabled = true
 	var local := RoundScene.local_of(_players)
 	_local = local
+	#Each computer looks through its own player (otherwise the first camera made, the one of the server's player, stays on)
+	local.view_camera().make_current()
 	var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 	var air_time := 2.0 * local.jump_velocity / gravity
 	var jump_height := local.jump_velocity * local.jump_velocity / (2.0 * gravity)

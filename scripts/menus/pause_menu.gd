@@ -13,7 +13,10 @@ signal help_requested
 var _restart_button: TextButton
 var _help_button: TextButton
 var _first_button: TextButton
+var _exit_button: TextButton
 var _stack: VBoxContainer
+#The server asked once whether to close the room for everybody
+var _confirming := false
 
 
 func _ready() -> void:
@@ -46,8 +49,8 @@ func _ready() -> void:
 	_restart_button.pressed.connect(_on_restart)
 	_help_button = _option("AYUDA", Palette.TEAL)
 	_help_button.pressed.connect(help_requested.emit)
-	var exit_button := _option("SALIR", Palette.AMBER)
-	exit_button.pressed.connect(GameSession.abandon)
+	_exit_button = _option("SALIR", Palette.AMBER)
+	_exit_button.pressed.connect(_on_exit)
 
 
 func _option(text: String, accent: Color) -> TextButton:
@@ -69,7 +72,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func open() -> void:
-	_help_button.visible = allow_help
+	#In a room the round goes on for the others: it cannot start again here and its help does not open
+	var in_room := GameSession.is_networked() and not GameSession.practice
+	_restart_button.visible = not in_room
+	_help_button.visible = allow_help and not in_room
+	_confirming = false
+	_exit_button.text = "SALIR"
 	show()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_first_button.grab_focus()
@@ -80,6 +88,15 @@ func close() -> void:
 	hide()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	closed.emit()
+
+
+#A player leaves the room alone; the server would close it for everybody, so it asks first
+func _on_exit() -> void:
+	if GameSession.is_networked() and GameSession.net.is_host() and not _confirming:
+		_confirming = true
+		_exit_button.text = "¿CERRAR LA SALA PARA TODOS?"
+		return
+	GameSession.abandon()
 
 
 #Inside a session the round starts again; on its own the scene is loaded again
