@@ -4,7 +4,8 @@ extends Node
 #The camera of the fair screen inside a round it watches without playing. It cuts between a wide shot of the whole field (going round it
 #from high up, as the openings of the rounds do) and shots that follow one player from behind and above, and it chooses by what happens:
 #a shove or a fall cuts to whoever took it, somebody finishing hands the camera to someone still playing, the last one in play keeps it;
-#with nothing happening it takes turns. No shot lasts less than MIN_SHOT seconds, so it never cuts too fast
+#with nothing happening it takes turns. No shot lasts less than MIN_SHOT seconds, so it never cuts too fast. La Calle and SocialDrop have
+#shots of their own: going round a runner would go into the buildings of the street, and the cards of the board read from high above
 
 #Who is in focus (-1 for the wide shot) and why, for the banner of the frame
 signal focus_changed(player_id: int, reason: String)
@@ -35,10 +36,16 @@ var _falling: Dictionary = {}
 var _angle := 0.0
 var _focus := Vector3.ZERO
 var _rng := RandomNumberGenerator.new()
+var _street: StreetGame
+var _board: SocialDrop
+#The field of SocialDrop, measured once (it never moves)
+var _board_area := AABB()
 
 
 func _ready() -> void:
 	_round = get_parent() as RoundScene
+	_street = _round as StreetGame
+	_board = _round as SocialDrop
 	camera.fov = 58.0
 	add_child(camera)
 	_rng.randomize()
@@ -102,6 +109,12 @@ func _cut() -> void:
 
 #Where the camera goes this frame: around the field, or behind and above the player in focus
 func _frame(delta: float) -> void:
+	if _street != null:
+		_frame_street(delta)
+		return
+	if _board != null:
+		_frame_board(delta)
+		return
 	if _target < 0:
 		var area := _round.playing_area()
 		var center := area.get_center() if area.size != Vector3.ZERO else _middle_of_players()
@@ -115,6 +128,48 @@ func _frame(delta: float) -> void:
 	_angle += delta * 0.15
 	camera.h_offset = SHIFT * FOLLOW_DISTANCE
 	camera.place(_focus + Vector3(sin(_angle) * FOLLOW_DISTANCE, FOLLOW_HEIGHT, cos(_angle) * FOLLOW_DISTANCE), _focus + Vector3(0.0, 0.9, 0.0))
+
+
+#La Calle runs along X with buildings on both sides and the arch of the end line: the wide shot looks up the street from high and in front
+#of the arch, the close one rides behind a runner and a little over it, swaying across the street, both looking at the traffic that comes;
+#near the end line the close one climbs instead of going behind the arch
+func _frame_street(delta: float) -> void:
+	_angle += delta * 0.4
+	var limit := _street.end_x - 1.5
+	if _target < 0:
+		var reach := _street.end_x - _street.start_x
+		camera.h_offset = SHIFT * reach
+		camera.place(Vector3(limit, 13.5, sin(_angle) * 2.0), Vector3(_street.start_x - reach, 0.0, 0.0))
+		return
+	var body := _round.everyone[_target] as Node3D
+	_focus = _focus.lerp(body.global_position, 1.0 - exp(-5.0 * delta))
+	var behind := minf(_focus.x + 6.5, limit)
+	var climb := maxf(_focus.x + 6.5 - limit, 0.0)
+	camera.h_offset = SHIFT * 7.5
+	camera.place(Vector3(behind, _focus.y + 4.2 + climb * 0.8, _focus.z + sin(_angle) * 1.5), _focus + Vector3(-5.0, 0.6, 0.0))
+
+
+#SocialDrop is a board of cards ringed by giant screens: the wide shot looks down on the whole board, turning slowly; the close one stays
+#over the board, on the side of its middle, looking down on the player so its card and the ones around read
+func _frame_board(delta: float) -> void:
+	if _board_area.size == Vector3.ZERO:
+		_board_area = _round.playing_area()
+	var area := _board_area
+	var middle := area.get_center() if area.size != Vector3.ZERO else _middle_of_players()
+	_angle += delta * 0.1
+	if _target < 0:
+		var reach := clampf(maxf(area.size.x, area.size.z) * 0.55, 12.0, 20.0)
+		camera.h_offset = SHIFT * reach * 1.6
+		camera.place(middle + Vector3(sin(_angle) * reach * 0.9, reach * 1.35, cos(_angle) * reach * 0.9), middle)
+		return
+	var body := _round.everyone[_target] as Node3D
+	_focus = _focus.lerp(body.global_position, 1.0 - exp(-6.0 * delta))
+	var inward := Vector3(middle.x - _focus.x, 0.0, middle.z - _focus.z)
+	if inward.length() < 1.0:
+		inward = Vector3(sin(_angle), 0.0, cos(_angle))
+	inward = inward.normalized().rotated(Vector3.UP, sin(_angle * 2.0) * 0.35)
+	camera.h_offset = SHIFT * 10.5
+	camera.place(_focus + inward * 5.5 + Vector3(0.0, 8.5, 0.0), _focus + Vector3(0.0, 0.5, 0.0))
 
 
 #The ground of each player follows it up at once and down slowly; well under it, the player is falling (said once per fall)
@@ -131,9 +186,12 @@ func _watch_falls(delta: float) -> void:
 		_falling[id] = falling
 
 
+#A player the camera can show: there and seen; in La Calle, not past the arch of the end line (the street took it and the arch would hide it)
 func _valid(player_id: int) -> bool:
 	var body: Variant = _round.everyone.get(player_id)
-	return body != null and is_instance_valid(body) and (body as Node3D).visible
+	if body == null or not is_instance_valid(body) or not (body as Node3D).visible:
+		return false
+	return _street == null or (body as Node3D).global_position.x < _street.end_x - 2.0
 
 
 func _playing() -> Array[int]:
