@@ -5,10 +5,13 @@ extends RefCounted
 #A room with the host and three players is played twice with the same steps: without the screen, and with a screen that comes in, sees a
 #second one turned away, leaves, is replaced by one that sends what it must not, comes back and drops in the middle of a round. Both
 #times the players must get exactly the same messages in the same order, and the start of the round and the points must not wait for the
-#screen, which must get the whole picture of the game. Then how the screen finds the room: feria.cfg, a wait that grows while there is
-#no room, the room it finds when the host opens after it, the network announcement and one source covering for the other
+#screen, which must get the whole picture of the game. Then a full room where one player drops and comes back, the next game without the
+#one that left for good, the limit of four players and the announcement that says whether the room already has its screen. Last, how the
+#screen finds the room: feria.cfg, a wait that grows while there is no room, the room it finds when the host opens after it, the network
+#announcement and one source covering for the other
 
 const SETTLE_MS := 250
+const FRAME_MS := 4
 #Real-time limits: with --fixed-fps the frames go much faster than the sockets. Each try at a closed port takes Windows a couple of seconds
 const FIND_MS := 30000
 const WAITS_MS := 60000
@@ -40,6 +43,7 @@ func run(scene_tree: SceneTree) -> int:
 		sizes.append(heard.size())
 	_expect(not plain.is_empty() and plain == watched, "los 3 jugadores reciben exactamente los mismos mensajes, en el mismo orden, con la pantalla y sin ella (%s)" % str(sizes))
 	await _check_room_again()
+	await _check_full_room()
 	await _check_finder()
 	return _failures
 
@@ -50,11 +54,12 @@ func _expect(condition: bool, label: String) -> void:
 		_failures += 1
 
 
-#Waits in real time while the players' messages come in
+#Waits in real time while the players' messages come in; frames take a few ms so the room's clocks (300 s for the points) never run out
 func _settle(ms := SETTLE_MS) -> void:
 	var until := Time.get_ticks_msec() + ms
 	while Time.get_ticks_msec() < until:
 		_listen()
+		OS.delay_msec(FRAME_MS)
 		await tree.process_frame
 	_listen()
 
@@ -316,6 +321,94 @@ func _check_room_again() -> void:
 	room.queue_free()
 	_expect(got.size() == 2 and got[0] == ["go 0", "scores 0"] and got[1] == got[0],
 		"una sala cerrada a mitad de partida y abierta otra vez empieza de cero: salida y marcador de la ronda 1, nada viejo (%s)" % str(got))
+
+
+#A full room where one drops and comes back, the next game without the one that left for good, and the screen told in the announcement
+func _check_full_room() -> void:
+	var room := NetRoom.new()
+	tree.root.add_child(room)
+	var opened := false
+	for attempt in 10:
+		opened = opened or room.host("ANFITRION", &"fire")
+		if not opened:
+			await _settle(300)
+	var finder := NetRoom.new()
+	tree.root.add_child(finder)
+	finder.browse()
+	var links: Array[NetLink] = []
+	for shown_name in ["J2", "J3", "J4"]:
+		links.append(_greet(shown_name))
+	var screen := NetRoom.new()
+	tree.root.add_child(screen)
+	screen.watch("127.0.0.1")
+	_expect(await _announced(finder, "screen", true), "el anuncio de la sala dice que ya tiene pantalla de feria")
+	room.begin_warmup()
+	room.start_game(PLAN, SEEDS)
+	await _settle()
+	links[2].stop()
+	await _settle(1500)
+	_expect(await _announced(finder, "gone", 1.0), "durante la partida el anuncio dice que hay un puesto para volver")
+	var back := _greet("J4")
+	await _settle()
+	var answer := _answers(back)
+	_expect(answer == ["welcome"] and room.room.size() == 4, "con la sala llena, el que se cayó vuelve a la partida con su nombre (%s)" % str(answer))
+	back.stop()
+	await _settle(1500)
+	room.reopen()
+	await _settle()
+	var gone := room.room.filter(func(member: Dictionary) -> bool: return not bool(member.get("connected", true)))
+	_expect(room.room.size() == 3 and gone.is_empty(), "jugar de nuevo deja fuera al que se fue y no volvió (sala de %d)" % room.room.size())
+	room.set_ready(true)
+	for index in 2:
+		links[index].send({"t": "ready", "value": true})
+	await _settle()
+	_expect(bool(_session.get("lobby").call("all_ready")), "los tres que siguen marcan Listo y la partida nueva puede empezar")
+	var newcomer := _greet("J5")
+	var extra := _greet("J6")
+	await _settle()
+	var newcomer_answer := _answers(newcomer)
+	var extra_answer := _answers(extra)
+	_expect(newcomer_answer == ["welcome"] and extra_answer == ["reject La sala está llena"] and room.room.size() == 4,
+		"en la sala nueva entra un cuarto jugador y un quinto no (%s, %s)" % [str(newcomer_answer), str(extra_answer)])
+	screen.close()
+	_expect(await _announced(finder, "screen", false), "cuando la pantalla se va, el anuncio deja libre el puesto de la feria")
+	for link: NetLink in [links[0], links[1], newcomer, extra]:
+		link.stop()
+	screen.queue_free()
+	finder.stop_browsing()
+	finder.queue_free()
+	room.close()
+	room.queue_free()
+	await _settle()
+
+
+func _greet(shown_name: String) -> NetLink:
+	var link := NetLink.connecting("127.0.0.1", NetProtocol.PORT)
+	link.start()
+	link.send({"t": "hello", "v": NetProtocol.VERSION, "name": shown_name, "character": "water"})
+	return link
+
+
+#What the room answered to a hello: "welcome" or "reject" with its reason
+func _answers(link: NetLink) -> Array[String]:
+	var seen: Array[String] = []
+	for message in link.take():
+		if message["t"] == "welcome":
+			seen.append("welcome")
+		elif message["t"] == "reject":
+			seen.append("reject %s" % str(message.get("reason", "")))
+	return seen
+
+
+#Waits until the announcement of the room has that value in "key"
+func _announced(finder: NetRoom, key: String, value: Variant) -> bool:
+	var until := Time.get_ticks_msec() + FIND_MS
+	while Time.get_ticks_msec() < until:
+		await tree.process_frame
+		for heard: String in finder.rooms:
+			if (finder.rooms[heard] as Dictionary).get(key) == value:
+				return true
+	return false
 
 
 #How the screen finds the room

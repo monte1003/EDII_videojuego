@@ -74,6 +74,8 @@ var _watch_link: NetLink
 #Server: the last state of each player that came since the last message to the screen, and the time to the next one
 var _watch_states: Dictionary = {}
 var _watch_left := 0.0
+#Server: whether a fair screen is watching, told in the announcement so nobody else offers to be the screen (read by its thread)
+var _screen_on := false
 
 
 func is_active() -> bool:
@@ -160,6 +162,7 @@ func close() -> void:
 		_watch_link.stop()
 		_watch_link = null
 	_watch_states = {}
+	_screen_on = false
 	if _host_link != null:
 		_host_link.stop()
 		_host_link = null
@@ -182,13 +185,18 @@ func close() -> void:
 	room_changed.emit()
 
 
-#A new game in the same room: nobody is ready and anybody can still come in
+#A new game in the same room: nobody is ready, whoever left during the last game frees its place and anybody can still come in
 func reopen() -> void:
 	if role != Role.HOST:
 		return
 	started = false
 	go_round = -1
 	_wait_round = -1
+	_mutex.lock()
+	for member in room.duplicate():
+		if not bool(member.get("connected", true)):
+			room.erase(member)
+	_mutex.unlock()
 	for member in room:
 		member["ready"] = false
 	_publish_room()
@@ -427,7 +435,12 @@ func _announce_loop() -> void:
 		if Time.get_ticks_msec() - last >= ANNOUNCE_EVERY:
 			last = Time.get_ticks_msec()
 			_mutex.lock()
-			var info := {"game": NetProtocol.GAME, "v": NetProtocol.VERSION, "name": String(room[0]["name"]) if not room.is_empty() else "", "players": room.size(), "open": not started}
+			#Places of players that dropped during the game: they can still come back to them
+			var gone := 0
+			for member in room:
+				gone += 0 if bool(member.get("connected", true)) else 1
+			var info := {"game": NetProtocol.GAME, "v": NetProtocol.VERSION, "name": String(room[0]["name"]) if not room.is_empty() else "", "players": room.size(), "open": not started,
+				"screen": _screen_on, "gone": gone}
 			_mutex.unlock()
 			udp.put_packet(JSON.stringify(info).to_utf8_buffer())
 		OS.delay_msec(50)
@@ -498,7 +511,7 @@ func _apply_from_client(link: NetLink, message: Dictionary) -> void:
 			reason = "La sala usa otra versión del juego"
 		elif started and returning.is_empty():
 			reason = "La partida ya empezó"
-		elif room.size() >= CAPACITY:
+		elif returning.is_empty() and room.size() >= CAPACITY:
 			reason = "La sala está llena"
 		if reason != "":
 			link.send({"t": "reject", "reason": reason})
@@ -822,7 +835,14 @@ func _take_watcher(link: NetLink, message: Dictionary) -> void:
 	_watch_link = link
 	_watch_states = {}
 	_watch_left = 0.0
+	_set_screen(true)
 	link.send(_snapshot())
+
+
+func _set_screen(value: bool) -> void:
+	_mutex.lock()
+	_screen_on = value
+	_mutex.unlock()
 
 
 #What the fair screen needs when it comes in at any moment: the room, where the game is, the order and the seeds, and the points so far
@@ -852,6 +872,7 @@ func _tend_watcher(delta: float) -> void:
 		_watch_link.stop()
 		_watch_link = null
 		_watch_states = {}
+		_set_screen(false)
 		return
 	_watch_left -= delta
 	if _watch_left <= 0.0 and not _watch_states.is_empty():
