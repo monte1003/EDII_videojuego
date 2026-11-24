@@ -5,7 +5,7 @@ extends Node
 #(spectator); at the end it plays the podium ceremony with no way to skip it, celebrates the winner, puts the game in the ranking of the
 #fair with its animations and goes back to the trailer. A new game takes it to the spectator from anywhere. It follows the messages of
 #the room and changes nothing of the game. Players never touch it; the staff has hidden keys: M mutes, F2 shows the connection, F6 opens
-#the full ranking and F8, pressed twice, empties it
+#the full ranking, F8 pressed twice empties it and Esc opens its menu (take a name out of the ranking, leave or close)
 
 signal mode_changed(mode: String)
 
@@ -28,6 +28,7 @@ var watch := NetWatch.new()
 var reel := AttractReel.new()
 var frame := FairFrame.new()
 var ranking := FairRanking.new()
+var menu := FairMenu.new()
 var mode := Mode.ATTRACT
 
 var _status_panel := PanelContainer.new()
@@ -39,6 +40,13 @@ var _podium: FairPodium
 var _game := ""
 var _fresh: Array[Dictionary] = []
 var _record := false
+#Who plays the game being watched, with the name and character each had when it started: {id: {"name", "character"}}
+var _cast: Dictionary = {}
+#The players of the game as it ended, kept for the podium and the ranking: the room may already be in the next game, and the results of
+#each name in the ranking of the day
+var _final: Array[Dictionary] = []
+var _final_game := ""
+var _results: Array[Dictionary] = []
 var _finale_turn := 0
 var _layers_left := 0.0
 var _reset_left := 0.0
@@ -66,6 +74,12 @@ func _ready() -> void:
 	GameSession.net.left.connect(_on_room_lost)
 	ranking.load_file()
 	frame.ranking.show_rows(_ranking_rows())
+	menu.name = "Menu"
+	menu.ranking = ranking
+	add_child(menu)
+	menu.name_removed.connect(_on_name_removed)
+	menu.leave_requested.connect(_leave)
+	menu.quit_requested.connect(get_tree().quit)
 	_build_status()
 	_to_attract()
 
@@ -82,7 +96,20 @@ func _process(delta: float) -> void:
 					(layer as CanvasLayer).visible = false
 
 
+#Esc opens the menu of the staff before anything else sees it (a round watched here would take it for its own pause)
+func _input(event: InputEvent) -> void:
+	if not event.is_action_pressed("pause"):
+		return
+	get_viewport().set_input_as_handled()
+	if menu.visible:
+		menu.close()
+	else:
+		menu.open()
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if menu.visible:
+		return
 	if event.is_action_pressed("fair_mute"):
 		AudioServer.set_bus_mute(0, not AudioServer.is_bus_mute(0))
 	elif event.is_action_pressed("fair_status"):
@@ -110,7 +137,15 @@ func _on_message(message: Dictionary) -> void:
 		"start":
 			_game = _game_key()
 			_record = false
+			_cast = _room_cast()
 			_watch_round(0)
+		"snapshot":
+			#A screen that comes in (or back) with a round under way watches it from where it is
+			if mode == Mode.ATTRACT and watch.stage in ["intro", "playing"] and watch.round_index >= 0:
+				_game = _game_key()
+				if _cast.is_empty():
+					_cast = _room_cast()
+				_watch_round(watch.round_index)
 		"advance":
 			if watch.stage == "finished":
 				_start_podium()
@@ -136,9 +171,9 @@ func _on_room_lost(_reason: String) -> void:
 		_to_attract()
 
 
-#The real scene of a round, with the order and the seed of the room, every player a puppet and the camera of the director
+#The real scene of a round, with the order and the seed of the room, every player a puppet and the camera of the director; a screen that
+#comes in late catches up with the players (RoundScene.catch_up)
 func _watch_round(index: int) -> void:
-	#A screen that came in with the game under way catches it at the next round
 	if _game == "":
 		_game = _game_key()
 	if index < 0 or index >= watch.plan.size() or _game == "":
@@ -181,7 +216,7 @@ func _start_podium() -> void:
 	_clear_stage()
 	GameSession.sync_lobby(watch.net.room)
 	_podium = FairPodium.new()
-	_podium.players = _standings()
+	_podium.players = _final if _final_game == _game else _standings()
 	_podium.done.connect(_start_finale)
 	add_child(_podium)
 	move_child(_podium, 0)
@@ -191,7 +226,7 @@ func _start_podium() -> void:
 
 #The winner celebrated on the stage of the trailer, then the ranking of the fair with the game in it, then back to the trailer
 func _start_finale() -> void:
-	var order := _standings()
+	var order := _final if _final_game == _game else _standings()
 	_clear_stage()
 	_set_mode(Mode.FINALE)
 	_finale_turn += 1
@@ -206,7 +241,7 @@ func _start_finale() -> void:
 	await reel.celebrate(StringName(str(winner.get("character", "fire"))), str(winner.get("name", "")), int(winner.get("total", 0)), lines)
 	if turn != _finale_turn or mode != Mode.FINALE:
 		return
-	_put_in_ranking()
+	_put_in_ranking(false)
 	var rows := _ranking_rows()
 	var places: Array[int] = []
 	var ordered := ranking.ordered()
@@ -222,14 +257,21 @@ func _start_finale() -> void:
 	_to_attract()
 
 
-#What the end of the ranking says: a new record of the day, who got into the top ten and where, who was short and by how much
+#What the end of the ranking says, a line per player: a new record of the day, a name that beat its own mark, who got into the top ten and
+#where, who was short and by how much, and a name whose total did not beat the mark it already had
 func _finale_lines(ordered: Array[Dictionary]) -> Array[String]:
 	var lines: Array[String] = []
-	for entry in _fresh:
+	for result in _results:
+		var entry: Dictionary = result["entry"]
 		var place := ordered.find(entry)
 		var shown := str(entry["name"]).to_upper()
-		if place == 0 and _record:
+		var status := str(result["status"])
+		if status == "kept":
+			lines.append("%s: %d NO SUPERA SU MEJOR MARCA (%d)" % [shown, int(result["total"]), int(result["before"])])
+		elif place == 0 and _record:
 			lines.push_front("¡NUEVO RÉCORD DEL DÍA: %s!" % shown)
+		elif status == "better":
+			lines.append("%s MEJORA SU MARCA: DE %d A %d" % [shown, int(result["before"]), int(result["total"])])
 		elif place >= 0 and place < FairRanking.TOP:
 			lines.append("%s ENTRA AL TOP 10 · PUESTO %d" % [shown, place + 1])
 		else:
@@ -238,15 +280,25 @@ func _finale_lines(ordered: Array[Dictionary]) -> Array[String]:
 
 
 #The players of the game in the ranking of the fair, once: at the points of the last round and again, the same game, with the final totals
-func _put_in_ranking() -> void:
+#The players are taken from the room ("refresh") at the points of the last round and the final totals; the finale only shows them again
+func _put_in_ranking(refresh := true) -> void:
 	if _game == "":
 		return
-	var players := _standings()
+	if refresh or _final_game != _game:
+		_final = _standings()
+		_final_game = _game
+	var players := _final
 	if players.is_empty():
 		return
-	var before := ranking.ordered()
-	var best_before := int(before[0]["total"]) if not before.is_empty() and str(before[0]["game"]) != _game else -1
-	_fresh = ranking.record(_game, players)
+	var best_before := -1
+	for entry in ranking.entries:
+		if str(entry["game"]) != _game:
+			best_before = maxi(best_before, int(entry["total"]))
+	_results = ranking.record(_game, players)
+	_fresh.clear()
+	for result in _results:
+		if str(result["status"]) != "kept":
+			_fresh.append(result["entry"])
 	var top := ranking.ordered()
 	_record = not top.is_empty() and str(top[0]["game"]) == _game and int(top[0]["total"]) > best_before
 	frame.ranking.show_rows(_ranking_rows())
@@ -256,8 +308,12 @@ func _put_in_ranking() -> void:
 #the best round to break a tie (the same AVL tree as the final count)
 func _standings() -> Array[Dictionary]:
 	var players: Array[Dictionary] = []
+	var members: Dictionary = {}
 	for member in watch.net.room:
-		var id := int(member.get("id", 0))
+		members[int(member.get("id", 0))] = member
+	for id: int in (_cast if not _cast.is_empty() else members):
+		var member: Dictionary = members.get(id, {})
+		var known: Dictionary = _cast.get(id, member)
 		var total := watch.total_of(id)
 		var best := 0
 		for points in watch.table:
@@ -266,8 +322,8 @@ func _standings() -> Array[Dictionary]:
 			if int(entry.get("id", 0)) == id:
 				total = int(entry.get("total", total))
 				best = int(entry.get("best", best))
-		players.append({"id": id, "name": str(member.get("name", "JUGADOR")), "character": str(member.get("character", "fire")),
-			"total": total, "best": best, "gone": not bool(member.get("connected", true))})
+		players.append({"id": id, "name": str(known.get("name", "JUGADOR")), "character": str(known.get("character", "fire")),
+			"total": total, "best": best, "gone": member.is_empty() or not bool(member.get("connected", true))})
 	var tree := AVLTree.new()
 	for player in players:
 		tree.insert(int(player["total"]), int(player["id"]), int(player["best"]))
@@ -277,6 +333,32 @@ func _standings() -> Array[Dictionary]:
 			if int(player["id"]) == node.player_id:
 				order.append(player)
 	return order
+
+
+#Who is in the room with its name and character as they are now: the cast of a game that starts
+func _room_cast() -> Dictionary:
+	var cast: Dictionary = {}
+	for member in watch.net.room:
+		cast[int(member.get("id", 0))] = {"name": str(member.get("name", "JUGADOR")), "character": str(member.get("character", "fire"))}
+	return cast
+
+
+func _on_name_removed(shown: String) -> void:
+	frame.ranking.show_rows(_ranking_rows())
+	frame.notice("%s SALIÓ DEL RANKING" % shown.to_upper())
+
+
+#Back to the main menu from the menu of the staff: this computer stops being the screen of the fair; the ranking stays in its file
+func _leave() -> void:
+	menu.close()
+	FairMode.active = false
+	FairMode.address = ""
+	Engine.time_scale = 1.0
+	Engine.max_fps = int(ProjectSettings.get_setting("application/run/max_fps", 0))
+	AudioServer.set_bus_mute(0, false)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	GameSession.reset()
+	ScreenFlow.go_to_root()
 
 
 #Rows of [name, total] of the ranking, best first (all of them with -1)
