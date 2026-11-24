@@ -68,6 +68,26 @@ func is_down(a: StringName, b: StringName) -> bool:
 		and ((edge[0] == a and edge[1] == b) or (edge[0] == b and edge[1] == a))
 
 
+#In a room the server picks the bridges: the others take each change it tells them, with no picking of their own
+func apply(change: String, a: StringName, b: StringName, seconds: float) -> void:
+	match change:
+		"warn":
+			edge.assign([a, b])
+			phase = Phase.WARNING
+			_timer = seconds
+			warned.emit(a, b, seconds)
+		"close":
+			edge.assign([a, b])
+			phase = Phase.CLOSED
+			_timer = _settings.feed_duration
+			closed.emit(a, b)
+		"open":
+			edge.clear()
+			phase = Phase.WAITING
+			_timer = _settings.feed_interval.x
+			reopened.emit(a, b)
+
+
 #Seconds until the next change of the feed
 func time_left() -> float:
 	return maxf(_timer, 0.0)

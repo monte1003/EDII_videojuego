@@ -25,6 +25,8 @@ signal vote_received(player_id: int)
 signal warm_received(seconds_left: float, votes: int, total: int)
 #The fair screen: every message about the game, so it keeps its own picture of it
 signal watched(message: Dictionary)
+#Something decided inside the round under way: from the server on the others ("from" 0), from a player on the server (its id)
+signal round_event(from: int, message: Dictionary)
 
 const CAPACITY := 4
 #A computer that says nothing for this long is gone: long enough for a Wi-Fi that stutters for a few seconds
@@ -45,8 +47,9 @@ var room: Array[Dictionary] = []
 #Rooms announced on the network: address -> {"name", "players", "seen"}
 var rooms: Dictionary = {}
 var started := false
-#The last round every computer was let go in
+#The last round every computer was let go in, and when it was let go here (ticks in ms; the fair screen catches up from it)
 var go_round := -1
+var go_at := 0
 
 var _server: TCPServer
 var _links: Array[NetLink] = []
@@ -173,6 +176,7 @@ func close() -> void:
 	room.clear()
 	started = false
 	go_round = -1
+	go_at = 0
 	_wait_round = -1
 	#Nothing of the waits of the last game may reach the next room: no stale clock, loaded player or points
 	_go_left = -1.0
@@ -312,6 +316,17 @@ func vote() -> void:
 #The server tells everybody how long the warm-up has left and how many voted
 func send_warm(seconds_left: float, votes: int, total: int) -> void:
 	_send_all({"t": "warm", "left": snappedf(seconds_left, 0.01), "votes": votes, "total": total})
+
+
+#Something of the round under way: the server tells it to everybody (the screen too), a player tells it to the server; the screen sends
+#nothing. It carries the round, so a late message of another round is never taken
+func send_round_event(message: Dictionary) -> void:
+	message["t"] = "rnd"
+	message["r"] = GameSession.round_index
+	if role == Role.HOST:
+		_send_all(message)
+	elif role == Role.CLIENT:
+		_host_link.send(message)
 
 
 #A player coming back to a game under way: the one that left with the same name or, if there is only one gone, that one
@@ -551,6 +566,8 @@ func _apply_from_client(link: NetLink, message: Dictionary) -> void:
 			_gather_points(int(message.get("round", -1)), link.id, int(message.get("points", 0)))
 		"vote":
 			vote_received.emit(link.id)
+		"rnd":
+			round_event.emit(link.id, message)
 		"bye":
 			_drop(link)
 
@@ -580,10 +597,11 @@ func _apply_from_host(message: Dictionary) -> void:
 			started = true
 			GameSession.begin_networked(plan, seeds)
 		"go":
-			go_round = maxi(go_round, int(message.get("round", -1)))
-			round_go.emit()
+			_take_go(int(message.get("round", -1)))
 		"st":
 			state_received.emit(int(message.get("id", 0)), message)
+		"rnd":
+			round_event.emit(0, message)
 		"hit":
 			hit_received.emit(message)
 		"scores":
@@ -623,6 +641,7 @@ func _apply_watch(message: Dictionary) -> void:
 			_read_room(message.get("room"))
 			started = bool(message.get("started", false))
 			go_round = int(message.get("go", -1))
+			go_at = Time.get_ticks_msec() - int(_number(message.get("since")) * 1000.0)
 			joined.emit()
 		"welcome":
 			#A server from before the fair screen took it for a player: it leaves at once
@@ -642,8 +661,7 @@ func _apply_watch(message: Dictionary) -> void:
 		"start":
 			started = true
 		"go":
-			go_round = maxi(go_round, int(message.get("round", -1)))
-			round_go.emit()
+			_take_go(int(message.get("round", -1)))
 		"sts":
 			var states: Variant = message.get("s")
 			if states is Dictionary:
@@ -654,7 +672,17 @@ func _apply_watch(message: Dictionary) -> void:
 			player_left.emit(int(message.get("id", 0)))
 		"warm":
 			warm_received.emit(float(message.get("left", 0.0)), int(message.get("votes", 0)), int(message.get("total", 1)))
+		"rnd":
+			round_event.emit(0, message)
 	watched.emit(message)
+
+
+#A round let go: the first time, the moment is kept
+func _take_go(round_index: int) -> void:
+	if round_index > go_round:
+		go_at = Time.get_ticks_msec()
+	go_round = maxi(go_round, round_index)
+	round_go.emit()
 
 
 func _read_room(raw: Variant) -> void:
@@ -755,6 +783,7 @@ func _release_go() -> void:
 	_go_left = -1.0
 	_loaded.clear()
 	go_round = _wait_round
+	go_at = Time.get_ticks_msec()
 	_send_all({"t": "go", "round": go_round})
 	round_go.emit()
 
@@ -858,7 +887,8 @@ func _snapshot() -> Dictionary:
 		table.append(shared)
 	var phase := String(GameSession.Phase.keys()[GameSession.phase]).to_lower()
 	return {"t": "snapshot", "room": room, "started": started, "phase": phase, "plan": order, "seeds": GameSession.seeds,
-		"round": GameSession.round_index, "go": go_round, "table": table}
+		"round": GameSession.round_index, "go": go_round, "since": (Time.get_ticks_msec() - go_at) / 1000.0 if go_round >= 0 else 0.0,
+		"table": table}
 
 
 #Server, every frame: the screen is only listened to for its goodbye; it gets the places of everybody together

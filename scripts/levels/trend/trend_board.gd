@@ -30,6 +30,8 @@ var bubbles: Dictionary = {}
 var clock := 0.0
 #The zone that is open (-1 for none)
 var zone := -1
+#In a room every computer but the server only shows the bubbles the server tells: it makes none and lets none age out
+var mirror := false
 
 var _layout: TrendLayout
 var _settings: TrendSettings
@@ -50,6 +52,10 @@ func _init(layout: TrendLayout, settings: TrendSettings, seed_value: int) -> voi
 
 #Opens a zone: the bubbles of the last one go and the first ones of this one are announced
 func open_zone(new_zone: int, players: Dictionary, wanted: Dictionary) -> void:
+	#A mirror keeps what the server told: its bubbles of the new zone may come before this computer opens it
+	if mirror:
+		zone = new_zone
+		return
 	close()
 	zone = new_zone
 	_viral_at = _rng.randf_range(_settings.viral_window.x, _settings.viral_window.y)
@@ -91,8 +97,10 @@ func tick(delta: float, share: float, players: Dictionary, wanted: Dictionary) -
 				bubble_spawned.emit(id)
 			continue
 		bubble.age += delta
-		if bubble.age >= _settings.bubble_life and bubble.kind != TrendRules.VIRAL:
+		if not mirror and bubble.age >= _settings.bubble_life and bubble.kind != TrendRules.VIRAL:
 			_remove(id, false)
+	if mirror:
+		return
 	for id: int in wanted:
 		var kind := int(wanted[id])
 		if kind >= 0 and count_of(kind) == 0:
@@ -133,6 +141,31 @@ func count_of(kind: int) -> int:
 
 func slot_of(id: int) -> int:
 	return (bubbles[id] as Bubble).slot
+
+
+func bob_of(id: int) -> float:
+	return (bubbles[id] as Bubble).phase
+
+
+#A bubble the server announced, with its id, point, kind and bob
+func mirror_add(id: int, slot: int, kind: int, bob: float) -> void:
+	if bubbles.has(id) or slot < 0 or slot >= _layout.slots.size() or kind < 0 or kind > TrendRules.VIRAL:
+		return
+	var bubble := Bubble.new()
+	bubble.id = id
+	bubble.slot = slot
+	bubble.kind = kind
+	bubble.phase = bob
+	bubble.pending = _settings.spawn_notice
+	bubbles[id] = bubble
+	_on_slot[slot] = id
+	bubble_announced.emit(id)
+
+
+#A bubble the server took away (taken by somebody or old)
+func mirror_gone(id: int, taken: bool) -> void:
+	if bubbles.has(id):
+		_remove(id, taken)
 
 
 #How far its ring is from being a bubble: 0 when it is announced, 1 when it is born

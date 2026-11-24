@@ -38,6 +38,9 @@ var _trend_hud: TrendHud
 var _glass_rest: Dictionary = {}
 #Player id -> bubble id -> second until which that bubble does not wobble again for that player
 var _passing: Dictionary = {}
+#In a room every computer but the server shows the bubbles the server makes and takes; the bubbles this one already claimed
+var _mirror := false
+var _claimed: Dictionary = {}
 var _screen_view: SubViewport
 var _screen_strip: TrendStrip
 var _screen_label: Label
@@ -80,6 +83,15 @@ func _ready() -> void:
 	rules.trend_drawn.connect(_on_trend_drawn)
 	rules.trend_completed.connect(_on_trend_completed)
 	rules.finished.connect(_on_finished)
+	#In a room the server makes and takes every bubble and tells the others: each computer sees the other players a little late
+	_mirror = _networked_round() and not GameSession.net.is_host()
+	board.mirror = _mirror
+	if _networked_round():
+		GameSession.net.round_event.connect(_on_round_event)
+		if not _mirror:
+			board.bubble_announced.connect(func(id: int) -> void: GameSession.net.send_round_event({"k": "bub", "id": id,
+				"slot": board.slot_of(id), "kind": board.kind_of(id), "ph": snappedf(board.bob_of(id), 0.001)}))
+			board.bubble_gone.connect(func(id: int, taken: bool) -> void: GameSession.net.send_round_event({"k": "gone", "id": id, "tk": taken}))
 	_help.setup(HelpPages.trend_war(settings))
 	hud.set_time(settings.zone_seconds)
 	hud.show_mission("Atrapa tu tendencia", [
@@ -211,7 +223,8 @@ func _positions() -> Dictionary:
 	return found
 
 
-#Everybody that touches a bubble: a trend of its own is taken; any other lets it through and wobbles
+#Everybody that touches a bubble: a trend of its own is taken; any other lets it through and wobbles. In a room a computer only takes for
+#its own player: the server takes what the others claim
 func _check_touches() -> void:
 	for id: int in players:
 		if is_falling(id):
@@ -226,12 +239,55 @@ func _check_touches() -> void:
 				continue
 			var kind := board.kind_of(bubble_id)
 			if rules.wants(id, kind):
-				board.take(bubble_id)
-				rules.collect(id, kind)
+				if id == local_id or not _networked_round():
+					_take(id, bubble_id)
 				break
 			if clock >= float(passing.get(bubble_id, -1.0)):
 				_pass_through(player, bubble_id)
 			passing[bubble_id] = clock + settings.wobble_rest
+
+
+#A player takes a bubble of its trend: here when this computer decides (alone or the server), otherwise asked of the server once
+func _take(player_id: int, bubble_id: int) -> void:
+	if _mirror:
+		if not _claimed.has(bubble_id):
+			_claimed[bubble_id] = true
+			GameSession.net.send_round_event({"k": "claim", "id": bubble_id})
+		return
+	var kind := board.kind_of(bubble_id)
+	if not board.is_live(bubble_id) or not rules.wants(player_id, kind) or is_falling(player_id):
+		return
+	board.take(bubble_id)
+	rules.collect(player_id, kind)
+	if _networked_round():
+		GameSession.net.send_round_event({"k": "take", "p": player_id, "kind": kind, "next": rules.state_of(player_id).trend})
+
+
+#What the server tells of the bubbles, or what a player claims of it (only the server listens to claims)
+func _on_round_event(from: int, message: Dictionary) -> void:
+	if int(_whole(message.get("r"))) != GameSession.round_index:
+		return
+	var bubble_id := _whole(message.get("id"))
+	match str(message.get("k", "")):
+		"claim":
+			if not _mirror and players.has(from):
+				_take(from, bubble_id)
+		"bub":
+			if _mirror:
+				var bob: Variant = message.get("ph", 0.0)
+				board.mirror_add(bubble_id, _whole(message.get("slot")), _whole(message.get("kind")), float(bob) if bob is float or bob is int else 0.0)
+		"gone":
+			if _mirror:
+				_claimed.erase(bubble_id)
+				board.mirror_gone(bubble_id, message.get("tk") is bool and bool(message.get("tk")))
+		"take":
+			if _mirror and players.has(_whole(message.get("p"))):
+				rules.apply_collect(_whole(message.get("p")), _whole(message.get("kind")), _whole(message.get("next")))
+
+
+#A whole number that came in a message, or -1 when it is not a number
+static func _whole(value: Variant) -> int:
+	return int(value) if value is float or value is int else -1
 
 
 #Whether a player touches a bubble: around it, and over or under the middle of its body (the same with the gravity turned over)

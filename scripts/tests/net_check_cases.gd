@@ -6,7 +6,8 @@ extends RefCounted
 #second one turned away, leaves, is replaced by one that sends what it must not, comes back and drops in the middle of a round. Both
 #times the players must get exactly the same messages in the same order, and the start of the round and the points must not wait for the
 #screen, which must get the whole picture of the game. Then a full room where one player drops and comes back, the next game without the
-#one that left for good, the limit of four players and the announcement that says whether the room already has its screen. Last, how the
+#one that left for good, the limit of four players and the announcement that says whether the room already has its screen; what the
+#server decides inside a round reaching everybody, and what a player asks reaching only the server. Last, how the
 #screen finds the room: feria.cfg, a wait that grows while there is no room, the room it finds when the host opens after it, the network
 #announcement and one source covering for the other
 
@@ -44,6 +45,7 @@ func run(scene_tree: SceneTree) -> int:
 	_expect(not plain.is_empty() and plain == watched, "los 3 jugadores reciben exactamente los mismos mensajes, en el mismo orden, con la pantalla y sin ella (%s)" % str(sizes))
 	await _check_room_again()
 	await _check_full_room()
+	await _check_round_events()
 	await _check_finder()
 	return _failures
 
@@ -364,8 +366,9 @@ func _check_full_room() -> void:
 	await _settle()
 	_expect(bool(_session.get("lobby").call("all_ready")), "los tres que siguen marcan Listo y la partida nueva puede empezar")
 	var newcomer := _greet("J5")
-	var extra := _greet("J6")
 	await _settle()
+	var extra := _greet("J6")
+	await _settle(800)
 	var newcomer_answer := _answers(newcomer)
 	var extra_answer := _answers(extra)
 	_expect(newcomer_answer == ["welcome"] and extra_answer == ["reject La sala está llena"] and room.room.size() == 4,
@@ -377,6 +380,51 @@ func _check_full_room() -> void:
 	screen.queue_free()
 	finder.stop_browsing()
 	finder.queue_free()
+	room.close()
+	room.queue_free()
+	await _settle()
+
+
+#What the server decides inside a round goes to every player and to the screen; what a player asks reaches only the server; the screen
+#sends nothing. A screen that comes in with a round under way learns how long ago it was let go
+func _check_round_events() -> void:
+	var room := NetRoom.new()
+	tree.root.add_child(room)
+	var opened := false
+	for attempt in 10:
+		opened = opened or room.host("ANFITRION", &"fire")
+		if not opened:
+			await _settle(300)
+	var player := _greet("J2")
+	await _settle()
+	room.begin_warmup()
+	room.start_game(PLAN, SEEDS)
+	player.send({"t": "loaded", "round": 0})
+	await _settle()
+	room.report_loaded(0)
+	await _settle(1200)
+	var screen := NetRoom.new()
+	tree.root.add_child(screen)
+	var heard_on_screen: Array[Dictionary] = []
+	var heard_on_server: Array[Array] = []
+	screen.round_event.connect(func(from: int, message: Dictionary) -> void: heard_on_screen.append({"from": from, "k": message.get("k")}))
+	room.round_event.connect(func(from: int, message: Dictionary) -> void: heard_on_server.append([from, str(message.get("k", ""))]))
+	screen.watch("127.0.0.1")
+	await _settle()
+	var since := (Time.get_ticks_msec() - screen.go_at) / 1000.0
+	_expect(screen.go_round == 0 and since >= 1.2 and since < 3.0, "la pantalla que entra con la ronda en juego sabe hace cuánto salió (%.1f s)" % since)
+	player.take()
+	room.send_round_event({"k": "feed", "e": "warn"})
+	player.send({"t": "rnd", "k": "claim", "id": 7, "r": 0})
+	screen.send_round_event({"k": "claim", "id": 8})
+	await _settle()
+	var to_player := player.take().filter(func(message: Dictionary) -> bool: return message["t"] == "rnd")
+	_expect(to_player.size() == 1 and str(to_player[0].get("k")) == "feed" and int(to_player[0].get("r", -1)) == GameSession.round_index,
+		"lo que decide el servidor en la ronda llega al jugador con el número de la ronda")
+	_expect(heard_on_screen.size() == 1 and int(heard_on_screen[0]["from"]) == 0, "y llega a la pantalla de feria")
+	_expect(heard_on_server == [[2, "claim"]], "lo que pide un jugador llega solo al servidor, con su id; la pantalla no manda nada (%s)" % str(heard_on_server))
+	player.stop()
+	screen.queue_free()
 	room.close()
 	room.queue_free()
 	await _settle()

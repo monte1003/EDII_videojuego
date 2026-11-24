@@ -124,6 +124,21 @@ func collect(player_id: int, kind: int) -> bool:
 	return true
 
 
+#In a room the server decides who completes a trend: the others take it as it says, with the next trend it drew
+func apply_collect(player_id: int, kind: int, next_trend: int) -> void:
+	var state := state_of(player_id)
+	if state == null or kind < 0 or kind > VIRAL:
+		return
+	var value := settings.viral_value if kind == VIRAL else 1
+	state.completed += value
+	if kind == VIRAL:
+		state.virals += 1
+	trend_completed.emit(player_id, kind, value, state.completed)
+	if kind != VIRAL and next_trend >= 0 and next_trend < TrendCatalog.COUNT:
+		state.trend = next_trend
+		trend_drawn.emit(player_id, next_trend)
+
+
 #How far the round of the zone is, from 0 when it starts to 1 when it ends
 func zone_share() -> float:
 	if phase != Phase.RUN:

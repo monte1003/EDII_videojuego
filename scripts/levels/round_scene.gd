@@ -4,6 +4,8 @@ extends Node3D
 #What every round scene shares: who plays, how it ends, pause and help; it runs in a session or on its own
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
+#Seconds behind the players from which the fair screen skips the film to catch up with them (a little network delay never counts)
+const LATE_START := 0.3
 
 @export var default_character: CharacterData
 
@@ -169,18 +171,34 @@ func _open_film() -> void:
 	var networked := GameSession.is_networked() and not GameSession.practice
 	if networked:
 		add_child(NetPuppets.new())
+	var cover: LoadingCover = null
 	if networked and info != null:
 		#The art of the round covers the screen until every computer has loaded it; then the film starts on all of them at once
 		filming = true
-		var cover := LoadingCover.new()
+		cover = LoadingCover.new()
 		add_child(cover)
 		cover.show_round(info, _step_text())
 		await _wait_for_everybody()
+	var films := films_enabled and info != null and _pose_player != null and DisplayServer.get_name() != "headless"
+	var shots: Array[RoundFilm.Shot] = []
+	if films:
+		shots = _film_shots()
+	#The fair screen never holds the players back: when it gets here after they were let go, it skips the film and catches up with them
+	var behind := _seconds_behind()
+	if behind > LATE_START:
+		var film_left := RoundFilm.length_of(shots) - behind
+		if film_left > 0.0:
+			await get_tree().create_timer(film_left).timeout
+		filming = false
+		catch_up(maxf(-film_left, 0.0))
+		if cover != null:
+			cover.lift()
+		return
+	if cover != null:
 		cover.lift()
-	if not films_enabled or info == null or _pose_player == null or DisplayServer.get_name() == "headless":
+	if not films:
 		filming = false
 		return
-	var shots := _film_shots()
 	if shots.is_empty():
 		return
 	filming = true
@@ -209,6 +227,27 @@ func _step_text() -> String:
 	if GameSession.practice or GameSession.round_index < 0 or GameSession.plan.is_empty():
 		return ""
 	return "RONDA %d DE %d" % [GameSession.round_index + 1, GameSession.plan.size()]
+
+
+#Seconds since the room let this round go, for the fair screen only: the players start together and are never behind
+func _seconds_behind() -> float:
+	var net := GameSession.net
+	if net.role != NetRoom.Role.WATCH or net.go_round < GameSession.round_index or net.go_at <= 0:
+		return 0.0
+	return (Time.get_ticks_msec() - net.go_at) / 1000.0
+
+
+#The fair screen got to the round late: the round runs the seconds it missed at once, in steps of the physics and without sound, so what
+#moves by its clock (traffic, hazards, bubbles, cards) is where the players see it
+func catch_up(seconds: float) -> void:
+	if seconds <= 0.0:
+		return
+	var muted := AudioServer.is_bus_mute(0)
+	AudioServer.set_bus_mute(0, true)
+	var step := 1.0 / Engine.physics_ticks_per_second
+	for index in floori(seconds / step):
+		call("_physics_process", step)
+	AudioServer.set_bus_mute(0, muted)
 
 
 #In a room every computer waits here until the server lets all of them start the round together

@@ -53,6 +53,8 @@ var rules: Level01Rules
 var events: Level01Events
 #The second feed, when the settings ask for one
 var extra_events: Level01Events
+#In a room every computer but the server takes the bridges of the feed from it
+var _feed_from_server := false
 var tiles := Level01Tiles.new()
 
 #Every racer by id
@@ -129,6 +131,14 @@ func _ready() -> void:
 		extra_events.warned.connect(_on_feed_warned)
 		extra_events.closed.connect(_on_feed_closed)
 		extra_events.reopened.connect(_on_feed_reopened)
+	#In a room the server picks the bridges and tells the others: each computer sees the other racers a little late and would pick its own
+	_feed_from_server = _networked_round() and not GameSession.net.is_host()
+	if _networked_round() and GameSession.net.is_host():
+		_tell_feed(events, 0)
+		if extra_events != null:
+			_tell_feed(extra_events, 1)
+	elif _feed_from_server:
+		GameSession.net.round_event.connect(_on_round_event)
 
 	_debug = Level01Debug.new()
 	add_child(_debug)
@@ -286,9 +296,10 @@ func _update_running(delta: float) -> void:
 	rules.tick(delta)
 	if phase != Phase.RUNNING:
 		return
-	events.tick(delta, _can_close, _edge_threat)
-	if extra_events != null:
-		extra_events.tick(delta, _can_close, _edge_threat)
+	if not _feed_from_server:
+		events.tick(delta, _can_close, _edge_threat)
+		if extra_events != null:
+			extra_events.tick(delta, _can_close, _edge_threat)
 	for id: int in _players.keys():
 		if not _players.has(id):
 			continue
@@ -832,6 +843,30 @@ func _on_feed_closed(a: StringName, b: StringName) -> void:
 func _on_feed_reopened(a: StringName, b: StringName) -> void:
 	graph.set_edge_enabled(a, b, true)
 	_world.set_bridge_open(a, b, true)
+
+
+#The server tells every change of one of its feeds to the others
+func _tell_feed(feed: Level01Events, which: int) -> void:
+	feed.warned.connect(func(a: StringName, b: StringName, seconds: float) -> void: _send_feed(which, "warn", a, b, seconds))
+	feed.closed.connect(func(a: StringName, b: StringName) -> void: _send_feed(which, "close", a, b, 0.0))
+	feed.reopened.connect(func(a: StringName, b: StringName) -> void: _send_feed(which, "open", a, b, 0.0))
+
+
+func _send_feed(which: int, change: String, a: StringName, b: StringName, seconds: float) -> void:
+	GameSession.net.send_round_event({"k": "feed", "w": which, "e": change, "a": String(a), "b": String(b), "s": snappedf(seconds, 0.01)})
+
+
+#A change of a feed that the server made, taken here as it is
+func _on_round_event(_from: int, message: Dictionary) -> void:
+	if str(message.get("k", "")) != "feed" or int(message.get("r", -1)) != GameSession.round_index:
+		return
+	var a := StringName(str(message.get("a", "")))
+	var b := StringName(str(message.get("b", "")))
+	if not Level01Layout.POSITIONS.has(a) or not Level01Layout.POSITIONS.has(b):
+		return
+	var feed := extra_events if int(message.get("w", 0)) == 1 and extra_events != null else events
+	var seconds: Variant = message.get("s", 0.0)
+	feed.apply(str(message.get("e", "")), a, b, float(seconds) if seconds is float or seconds is int else 0.0)
 
 
 #Meters from the middle of a bridge to the nearest racer still running

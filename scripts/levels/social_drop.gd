@@ -76,6 +76,8 @@ var _spares_left := SPARE_LIVES
 var _penalty := 0.0
 var _missed_drop := false
 var _reviving := false
+#In a room, the player of this computer fell for good: the board goes on for the others until the clock runs out
+var _out := false
 var _hud_timer := 0.0
 var _tick_sound: AudioStreamPlayer
 var _stop_sound: AudioStreamPlayer
@@ -115,7 +117,7 @@ func _ready() -> void:
 
 
 func _help_allowed() -> bool:
-	return phase != Phase.ENDED
+	return phase != Phase.ENDED and not _out
 
 
 #Everybody stands on the platform at once, each with its own id and camera; this screen controls the first one
@@ -339,17 +341,25 @@ func _film_shots() -> Array[RoundFilm.Shot]:
 
 
 func _pose_allowed(_player_id: int) -> bool:
-	return not paused and phase != Phase.ENDED
+	return not paused and phase != Phase.ENDED and not _out
 
 
 func _pose_shown() -> bool:
-	return not paused and phase != Phase.ENDED
+	return not paused and phase != Phase.ENDED and not _out
 
 
 func _finish(victory: bool, title: String, message: String) -> void:
-	if phase == Phase.ENDED:
+	if phase == Phase.ENDED or (_out and not victory):
 		return
-	phase = Phase.ENDED
+	#The clock ran out after this player had fallen: the board stops and nothing is told twice
+	if _out:
+		phase = Phase.ENDED
+		_world.screen_text("Fin", Palette.TEAL)
+		return
+	if _networked_round() and not victory:
+		_out = true
+	else:
+		phase = Phase.ENDED
 	_local.set_input_enabled(false)
 	#A late Esc press must not open the pause menu over the final panel
 	_pause_menu.set_process_unhandled_input(false)
@@ -368,8 +378,10 @@ func _finish(victory: bool, title: String, message: String) -> void:
 
 #Inside a session the results screen takes over; on its own the HUD shows the end panel
 func _end_round(victory: bool, title: String, message: String) -> void:
+	#Seconds this player held: in a room the clock goes on after its fall
+	var held_here: float = _fallen.get(_local.player_id, minf(elapsed, time_limit))
 	var lines: Array[Array] = [
-		["Segundos", "%d s" % floori(minf(elapsed, time_limit))],
+		["Segundos", "%d s" % floori(held_here)],
 		["Caídas esquivadas", str(_drops_survived)],
 	]
 	var sheet := GameSession.score_sheet
@@ -379,7 +391,7 @@ func _end_round(victory: bool, title: String, message: String) -> void:
 		if player == _local:
 			held = maxf(held - _penalty, 0.0)
 		points[player.player_id] = sheet.drop_points(held / time_limit * sheet.drop_seconds)
-	var score := RoundScore.make(sheet, points[_local.player_id], "%d de %d s" % [floori(minf(elapsed, time_limit)), int(time_limit)])
+	var score := RoundScore.make(sheet, points[_local.player_id], "%d de %d s" % [floori(held_here), int(time_limit)])
 	if not finish_round(RoundResult.make(MINIGAME_ID, victory, title, message, lines).with_score(score, points)):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_hud.show_end(title, message, victory)

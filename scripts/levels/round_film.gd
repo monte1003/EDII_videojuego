@@ -38,6 +38,16 @@ var _timer: Timer
 
 
 #Plays the shots, shows the title and lands on "handoff"
+#Seconds a film of these shots takes when nobody skips it: every shot and the flight down to the player
+static func length_of(shots: Array[Shot]) -> float:
+	if shots.is_empty():
+		return 0.0
+	var seconds := HANDOFF_TIME
+	for shot in shots:
+		seconds += maxf(shot.seconds - 0.05, 0.01)
+	return seconds
+
+
 func play(shots: Array[Shot], title: String, tagline: String, step: String, handoff: Camera3D) -> void:
 	_camera = CinemaCamera.new()
 	_camera.fov = 62.0

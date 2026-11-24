@@ -62,7 +62,6 @@ var _react: Tween
 func _init() -> void:
 	_visual = Node3D.new()
 	add_child(_visual)
-	_clock = randf() * TAU
 
 
 func _ready() -> void:
@@ -121,6 +120,11 @@ func build_pedestrian(rng: RandomNumberGenerator) -> void:
 	height = PEDESTRIAN_HEIGHT * size / 1.4
 	_sway = 0.5
 	_sway_rate = 1.1
+
+
+#Where its sway starts: the street gives each one its own, the same on every computer of a room
+func set_sway_start(at: float) -> void:
+	_clock = at
 
 
 #Drives forward at "flow" times its own speed and keeps its weave; pedestrians and riders sway across their row

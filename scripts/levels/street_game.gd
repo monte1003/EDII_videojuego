@@ -120,6 +120,8 @@ var _frozen := false
 #A tank was drawn but has not found room yet
 var _tank_pending := false
 var _next_speed_notice := 1
+#Obstacles placed so far: each sways from its own start, counted the same on every computer
+var _placed := 0
 var _hud_timer := 0.0
 
 @onready var _world: StreetWorld = $World
@@ -271,8 +273,9 @@ func _stop_belt() -> void:
 	_runner.external_velocity = Vector3.ZERO
 
 
+#The flow speeds up with the clock of the street, the same on every computer, and goes on when this runner is out of the round
 func _speed_scale() -> float:
-	return lerpf(start_speed_scale, end_speed_scale, clampf(elapsed / time_limit, 0.0, 1.0))
+	return lerpf(start_speed_scale, end_speed_scale, clampf((_clock - countdown_seconds) / time_limit, 0.0, 1.0))
 
 
 #The opening film of the street stays down between its buildings: a low flight up the street toward the runner and a crane from the
@@ -515,6 +518,8 @@ func _mark_spawned(lane: Lane, length: float) -> void:
 func _place(obstacle: StreetObstacle, z: float, height: float) -> void:
 	var from_x := walker_spawn_x if obstacle.kind == StreetObstacle.Kind.PEDESTRIAN else spawn_x
 	obstacle.position = Vector3(from_x, height, z)
+	_placed += 1
+	obstacle.set_sway_start(_placed * 2.4)
 	_obstacle_root.add_child(obstacle)
 	_obstacles.append(obstacle)
 
