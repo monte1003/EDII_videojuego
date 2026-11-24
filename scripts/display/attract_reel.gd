@@ -2,8 +2,8 @@ class_name AttractReel
 extends Node3D
 
 #The trailer of the fair screen, made inside the engine with the real pieces of the game (it is not a video): the night stage of the
-#podium, La Plaza, El Plató and SocialDrop, the four characters running, shoving, posing and dancing, the 3D letters of the title and
-#short lines of our own. Three acts cut on the bars of the game's music (the victory theme, the trend war theme and the end of the
+#podium, La Plaza, El Plató and SocialDrop, the four characters running, shoving, posing and dancing, the logo of the game and short
+#lines of our own set as the titles of a film (TitleCard). Three acts cut on the bars of the game's music (the victory theme, the trend war theme and the end of the
 #victory theme, about 70 s in all), and the loop fades to night and starts over without a cut
 
 #What the banner of the frame shows: who or what is on screen, the line over it and the seal of its crown (a ScoreSheet.Medal)
@@ -41,10 +41,6 @@ const BARS_CLOSE := 0.1
 #The ranking column covers the right quarter of the screen: every shot slides its subject to the middle of what is left, a share of
 #its distance to the camera (the tangent of half the horizontal view times a quarter of the screen)
 const FRAME_SHIFT := 0.23
-#Lines of text ride close in front of the camera (nothing of the scene, not even confetti, gets between): their distance and the height
-#of their letters
-const LINE_DISTANCE := 2.6
-const LINE_HEIGHT := 0.177
 const PLACES: Array[StringName] = [AttractSets.STAGE, AttractSets.PLAZA, AttractSets.PLATO, AttractSets.DROP]
 #The crown of each character's block on the stage, in the order of AttractSets.CHARACTERS (as on the podium: diamond for the first)
 const CROWNS: Array[ScoreSheet.Medal] = [ScoreSheet.Medal.DIAMOND, ScoreSheet.Medal.GOLD, ScoreSheet.Medal.SILVER, ScoreSheet.Medal.BRONZE]
@@ -64,8 +60,7 @@ var _track_from := 0.0
 var _track_at := 0
 var _players: Array[AudioStreamPlayer] = []
 var _clock := 0.0
-var _words: Array[Node3D] = []
-var _title: Array[Node3D] = []
+var _titles := TitleCard.new()
 var _rng := RandomNumberGenerator.new()
 var _veil := ColorRect.new()
 var _flash := ColorRect.new()
@@ -167,7 +162,6 @@ func stop() -> void:
 		player.stop()
 	_track = null
 	_clear_words()
-	_clear_title()
 	_hide_figures()
 	if active != null:
 		remove_child(active.root)
@@ -209,7 +203,7 @@ func celebrate(character: StringName, shown_name: String, points: int, lines: Ar
 	active.podium.crowd.set_excitement(2.6)
 	_fireworks = true
 	SynthSound.play(self, SynthSound.cheer(5.0), -8.0)
-	_say(lines, true)
+	_say(lines)
 	if not await _wait_real(0.6):
 		return
 	_pose(winner, DANCES[maxi(AttractSets.CHARACTERS.find(character), 0)])
@@ -245,8 +239,8 @@ func _begin() -> bool:
 	return true
 
 
-#Act one, on the start of the victory theme: the stage at night, the emblem on the first beat, the title dropping letter by letter and
-#the four characters landing one per bar
+#Act one, on the start of the victory theme: the stage at night, the logo slammed in on the first beat and the four characters landing
+#one per bar
 func _act_stage() -> void:
 	_show(AttractSets.STAGE)
 	_hide_figures()
@@ -265,10 +259,10 @@ func _act_stage() -> void:
 		return
 	_flash_screen(0.45)
 	_camera.shake(0.3)
-	_raise_title()
+	_titles.title("DEL FEED AL RING")
 	if not await _until(VICTORY_BEAT + 2.0 * VICTORY_BAR):
 		return
-	_clear_title(true)
+	_clear_words()
 	for index in _figures.size():
 		await _hero(index, VICTORY_BEAT + (3.0 + index) * VICTORY_BAR)
 		if not _running:
@@ -277,15 +271,15 @@ func _act_stage() -> void:
 	_shift(13.0)
 	_camera.place(Vector3(0.0, 2.6, 11.5), Vector3(0.0, 2.4, 0.0))
 	_camera.glide(Vector3(0.0, 3.6, 14.5), Vector3(0.0, 2.8, 0.0), VICTORY_BAR * 1.2)
-	_say(["AQUÍ NADIE TE", "DEJA EN VISTO."], true)
+	_say(["AQUÍ NADIE TE", "DEJA EN VISTO."])
 	if not await _until(VICTORY_BEAT + 7.0 * VICTORY_BAR):
 		return
 	_clear_words()
 	_flash_screen(0.8)
 
 
-#One character drops onto its block, lands with a bounce, its light comes on, its name stands next to it and it strikes its pose; the
-#camera pushes in from a low angle until "until"
+#One character drops onto its block, lands with a bounce, its light comes on, its name comes in at the bottom and it strikes its pose;
+#the camera pushes in from a low angle until "until"
 func _hero(index: int, until: float) -> void:
 	var figure := _figures[index]
 	var entry := AttractSets.entry_of(active, index)
@@ -307,7 +301,7 @@ func _hero(index: int, until: float) -> void:
 	_camera.shake(0.4)
 	active.podium.light_block(entry, 6.0, 0.3)
 	SynthSound.play(self, SynthSound.thump(0.3), -9.0)
-	_name_tag(figure, top + Vector3(-side * 1.9, 2.3, 0.4))
+	_titles.name_card(figure.data.display_name, "PERSONAJE %d DE %d" % [index + 1, _figures.size()], figure.data.accent_color)
 	if not await _wait(0.4):
 		return
 	_pose(figure, HERO_POSES[index])
@@ -331,7 +325,7 @@ func _act_maps() -> void:
 	_camera.glide(middle + Vector3(6.0, 9.0, 17.0), middle + Vector3(0.0, 1.0, 0.0), 3.0 * PLAZA_BAR, Tween.TRANS_CUBIC, Tween.EASE_OUT)
 	if not await _until(PLAZA_BAR):
 		return
-	_say(["ATRAPA LA TENDENCIA ANTES", "DE QUE PASE DE MODA."], false)
+	_say(["ATRAPA LA TENDENCIA ANTES", "DE QUE PASE DE MODA."])
 	if not await _until(2.0 * PLAZA_BAR):
 		return
 	_pose(_figures[3], 5)
@@ -385,7 +379,7 @@ func _race(until: float) -> void:
 	_pack_side = across
 	_pack_ahead = (finish - start).normalized()
 	_pack_center = start
-	_say(["EL FEED NO SE ACABA.", "ESTA CARRERA, SÍ."], false)
+	_say(["EL FEED NO SE ACABA.", "ESTA CARRERA, SÍ."])
 	if not await _until(until - RAMP):
 		return
 	_ramp(1.0)
@@ -437,7 +431,7 @@ func _shove(middle: Vector3, until: float) -> void:
 	SynthSound.play(self, SynthSound.thump(0.4), -6.0, 0.7)
 	_camera.punch(9.0, 2.2)
 	_camera.orbit(middle, 4.4, 0.9, 0.0, 38.0, 1.1, middle + Vector3(1.0, 1.0, 0.0))
-	_say(["LAS PELEAS, AQUÍ.", "NO EN LOS COMENTARIOS."], false)
+	_say(["LAS PELEAS, AQUÍ.", "NO EN LOS COMENTARIOS."])
 	var flight := create_tween()
 	flight.tween_method(_somersault.bind(target, victim, landing), 0.0, 1.0, 0.8)
 	flight.tween_callback(_landed.bind(target))
@@ -487,7 +481,7 @@ func _plato(until: float) -> void:
 	_camera.zoom_to(50.0, 0.01)
 	_shift(8.0)
 	_camera.orbit(hub, 8.5, 2.6, -28.0, 28.0, until - _now(), hub + Vector3(0.0, 1.0, 0.0))
-	_say(["LA SELFIE PERFECTA", "SALE SIN FILTRO."], false)
+	_say(["LA SELFIE PERFECTA", "SALE SIN FILTRO."])
 	_pose(_figures[2], 3)
 	if not await _until(_now() + 2.5 * PLAZA_BAR):
 		return
@@ -525,7 +519,7 @@ func _board(until: float) -> void:
 	_shift(14.0)
 	_camera.place(middle + Vector3(0.0, 34.0, 4.0), middle)
 	_camera.glide(middle + Vector3(0.0, 10.5, 10.5), middle + Vector3(0.0, 0.5, 0.0), 2.0 * PLAZA_BAR, Tween.TRANS_CUBIC, Tween.EASE_OUT)
-	_say(["NO TODAS LAS APPS", "TE SOSTIENEN."], true)
+	_say(["NO TODAS LAS APPS", "TE SOSTIENEN."])
 	if not await _until(_now() + 2.0 * PLAZA_BAR):
 		return
 	board.show_icons(false)
@@ -597,7 +591,7 @@ func _act_closing() -> void:
 	_camera.zoom_to(56.0, 0.01)
 	_shift(11.0)
 	_camera.orbit(Vector3(0.0, 0.0, 1.0), 11.0, 3.6, -30.0, 25.0, 3.0 * VICTORY_BAR, Vector3(0.0, 2.2, 0.0))
-	_say(["CUATRO JUGADORES.", "CERO NOTIFICACIONES."], true)
+	_say(["CUATRO JUGADORES.", "CERO NOTIFICACIONES."])
 	if not await _until(CLOSING_FROM + 3.0 * VICTORY_BAR):
 		return
 	_clear_words()
@@ -605,14 +599,9 @@ func _act_closing() -> void:
 	_shift(13.0)
 	_camera.place(Vector3(0.0, 8.0, 8.6), Vector3(0.0, 8.0, -5.9))
 	_camera.glide(Vector3(0.0, 7.9, 7.0), Vector3(0.0, 7.9, -5.9), CLOSING_END - _now())
-	_raise_title()
+	_titles.title("DEL FEED AL RING", "¡ACÉRCATE Y JUEGA!", VICTORY_BAR, VICTORY_BAR / 4.0)
 	if not await _until(_now() + VICTORY_BAR):
 		return
-	var call := PuffyWord.make(&"acercate", 0.9, &"gold", 0.1)
-	call.position = Vector3(0.0, 5.0, PodiumStage.BACK + 1.6)
-	add_child(call)
-	_title.append(call)
-	_pop_letters(call, 0.05)
 	SynthSound.play(self, SynthSound.cheer(3.0), -10.0)
 	if not await _until(CLOSING_END):
 		return
@@ -620,92 +609,13 @@ func _act_closing() -> void:
 	if not await _wait(1.4):
 		return
 	_fireworks = false
-	_clear_title()
 	_clear_words()
 	active.podium.crowd.set_excitement(1.0)
 
 
-#The emblem pops in over the stage and RUMBLE and NET drop letter by letter, as in the title of the game
-func _raise_title() -> void:
-	_clear_title()
-	var back := PodiumStage.BACK + 0.6
-	var mark := Sprite3D.new()
-	mark.texture = MARK
-	mark.pixel_size = 1.9 / MARK.get_width()
-	mark.shaded = false
-	mark.position = Vector3(0.0, 12.0, back)
-	mark.scale = Vector3.ZERO
-	add_child(mark)
-	_title.append(mark)
-	create_tween().tween_property(mark, "scale", Vector3.ONE, 0.6).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-	var rumble := PuffyWord.make(&"rumble", 2.0, &"title", 0.12)
-	rumble.position = Vector3(-0.3, 9.4, back)
-	add_child(rumble)
-	_title.append(rumble)
-	_drop_letters(rumble, 7.0, 0.09, 0.3)
-	var net := PuffyWord.make(&"net", 2.0, &"party", 0.12)
-	net.position = Vector3(0.7, 7.1, back + 0.5)
-	add_child(net)
-	_title.append(net)
-	_drop_letters(net, 7.0, 0.11, 1.0)
-
-
-func _drop_letters(word: Node3D, height: float, step: float, delay: float) -> void:
-	var letters := PuffyWord.letters(word)
-	for index in letters.size():
-		var letter := letters[index]
-		var rest := letter.position
-		letter.position = rest + Vector3(0.0, height / word.scale.y, 0.0)
-		var fall := create_tween()
-		fall.tween_interval(delay + step * index)
-		fall.tween_property(letter, "position", rest, 0.42).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
-		fall.tween_callback(SynthSound.play.bind(self, SynthSound.land(0.12), -15.0, 1.0 + 0.06 * index))
-
-
-func _pop_letters(word: Node3D, step: float) -> void:
-	for index in PuffyWord.letters(word).size():
-		var letter := PuffyWord.letters(word)[index]
-		letter.scale = Vector3.ZERO
-		create_tween().tween_property(letter, "scale", Vector3.ONE, 0.55).set_delay(step * index).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-
-
-#A line of our own in letters with volume, like the title card of a film: it rides in front of the camera in the middle of the free part of
-#the screen, a little turned so its coral sides show; the face is white over the night of the stage and ink over the light of the maps.
-#It rises into place instead of popping
-func _say(lines: Array[String], on_night: bool) -> void:
-	var camera := get_viewport().get_camera_3d()
-	if camera == null:
-		return
-	var holder := Node3D.new()
-	camera.add_child(holder)
-	var reach := LINE_DISTANCE * tan(deg_to_rad(camera.fov / 2.0))
-	var view := get_viewport().get_visible_rect().size
-	var across := reach * view.x / maxf(view.y, 1.0)
-	var rest := Vector3(camera.h_offset - 0.25 * across, reach * 0.42, -LINE_DISTANCE)
-	holder.position = rest - Vector3(0.0, LINE_HEIGHT * 0.8, 0.0)
-	holder.rotation = Vector3(deg_to_rad(5.0), deg_to_rad(-9.0), 0.0)
-	for index in lines.size():
-		var word := Word3D.make(lines[index], LINE_HEIGHT, across * 1.3, Palette.CORAL, LINE_HEIGHT * 0.32, Palette.PAPER if on_night else Palette.INK)
-		word.position = Vector3(0.0, -index * LINE_HEIGHT * 1.3, 0.0)
-		holder.add_child(word)
-	holder.scale = Vector3(1.0, 0.0, 1.0)
-	var rise := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	rise.tween_property(holder, "position", rest, 0.45)
-	rise.tween_property(holder, "scale", Vector3.ONE, 0.35)
-	_words.append(holder)
-
-
-#The name of a character standing next to it on the stage, in its colour
-func _name_tag(figure: Figure, at: Vector3) -> void:
-	var holder := Node3D.new()
-	add_child(holder)
-	holder.position = at
-	var toward := _camera.global_position - at
-	holder.rotation.y = atan2(toward.x, toward.z)
-	holder.add_child(Word3D.make(figure.data.display_name.to_upper(), 0.8, 6.0, figure.data.accent_color.darkened(0.35), 0.24, Palette.PAPER))
-	holder.scale = Vector3.ZERO
-	create_tween().tween_property(holder, "scale", Vector3.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_words.append(holder)
+#A line of our own, set over the picture as the title of a film
+func _say(lines: Array[String]) -> void:
+	_titles.say(lines)
 
 
 #Slides the subject of the shot to the middle of the free part of the screen, for a subject at "distance" from the camera
@@ -714,24 +624,7 @@ func _shift(distance: float) -> void:
 
 
 func _clear_words() -> void:
-	for word in _words:
-		if is_instance_valid(word):
-			word.queue_free()
-	_words.clear()
-
-
-#Takes the title away, at once or shrinking first
-func _clear_title(shrink := false) -> void:
-	for piece in _title:
-		if not is_instance_valid(piece):
-			continue
-		if shrink:
-			var out := create_tween()
-			out.tween_property(piece, "scale", Vector3.ZERO, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-			out.tween_callback(piece.queue_free)
-		else:
-			piece.queue_free()
-	_title.clear()
+	_titles.clear()
 
 
 #Puts one place in the scene and takes the one before out
@@ -892,6 +785,8 @@ func _build_overlay() -> void:
 		bar.offset_bottom = 0.0
 		layer.add_child(bar)
 		_bars.append(bar)
+	#The words go under the flash of the beats and the night of the fades, as they would in a film
+	layer.add_child(_titles)
 	for shade: ColorRect in [_flash, _veil]:
 		shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 		shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
