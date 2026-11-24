@@ -57,6 +57,9 @@ func _ready() -> void:
 	add_child(frame)
 	reel.focus_changed.connect(frame.show_focus)
 	watch.name = "Watch"
+	#Opened from the menu it watches the room picked there; with --feria, the one of feria.cfg
+	if FairMode.address != "":
+		watch.config_address = FairMode.address
 	add_child(watch)
 	watch.changed.connect(_refresh)
 	GameSession.net.watched.connect(_on_message)

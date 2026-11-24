@@ -1,12 +1,14 @@
 extends Node
 
 #The fair screen is this same game opened with --feria (from a shortcut): it goes straight to its own scene, with no menu for players.
-#Without the argument nothing changes
+#Without the argument nothing changes, unless somebody picks "Unirse como feria" on a room found from the menu
 
 const ARGUMENT := "--feria"
 const SCENE := "res://scenes/display/fair_screen.tscn"
 
 var active := false
+#The room picked from the menu; with --feria it stays empty and the screen reads feria.cfg
+var address := ""
 
 #Godot creates the main menu before any autoload can stop it: this hides it until the fair screen is on
 var _cover: CanvasLayer
@@ -33,3 +35,10 @@ func _on_scene_changed() -> void:
 		_cover.queue_free()
 		_cover = null
 		get_tree().scene_changed.disconnect(_on_scene_changed)
+
+
+#This computer becomes the fair screen of the room at "room_address", picked from the menu
+func open(room_address: String) -> void:
+	active = true
+	address = room_address
+	get_tree().change_scene_to_file(SCENE)
