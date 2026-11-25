@@ -7,6 +7,9 @@ const STAR_SIZE := 64
 const STAR_POINTS := 5
 const DUST_COLOR := Color("f1e6ff")
 
+#Whether a hard blow may freeze the game for a breath: not in a room, where the world of this computer would fall behind the others a
+#little with every blow and the cars and hazards would no longer be where the others see them. Each round sets it when it opens
+static var freeze_allowed := true
 static var _heart: ImageTexture
 static var _star: ImageTexture
 static var _fade: Curve
@@ -14,7 +17,7 @@ static var _fade: Curve
 
 #The game stops for a moment when something hits hard; it comes back by itself
 static func hit_stop(tree: SceneTree, seconds: float) -> void:
-	if Engine.time_scale < 1.0:
+	if Engine.time_scale < 1.0 or not freeze_allowed:
 		return
 	Engine.time_scale = 0.06
 	await tree.create_timer(seconds, true, false, true).timeout

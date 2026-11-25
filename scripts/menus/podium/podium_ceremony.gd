@@ -77,7 +77,8 @@ func _ready() -> void:
 	var standings := tree.standings()
 	var solo_medal := ScoreSheet.Medal.DIAMOND
 	if not _demo and standings.size() == 1:
-		solo_medal = GameSession.session_medal(standings[0].player_id)
+		#Alone, the crown of the medal of the game, and at least the bronze one: whoever played the whole game is crowned
+		solo_medal = maxi(GameSession.session_medal(standings[0].player_id), ScoreSheet.Medal.BRONZE) as ScoreSheet.Medal
 	_entries = PodiumPlan.build(tree, solo_medal)
 	_order = PodiumPlan.reveal_order(tree, _entries)
 	_stage = PodiumStage.new()

@@ -491,8 +491,8 @@ func _wall(zone: int, from: Vector2, to: Vector2) -> void:
 	add_wall(_at(zone, from.x, from.y), _at(zone, to.x, to.y), SCREEN_HEIGHT, zone, SCREEN_THICKNESS)
 
 
-#The tower: three round floors, each smaller and higher than the one under it. A trampoline on each floor throws onto the next one;
-#stepping off a floor drops to the one under it. Likes fall from above on every floor
+#The tower: three round floors, each smaller and higher than the one under it. Trampolines on every side of each floor throw onto the
+#next one, so the climb starts from wherever one is; stepping off a floor drops to the one under it. Likes fall from above on every floor
 func _build_tower() -> void:
 	var zone := Zone.TOWER
 	var centre := tower_center()
@@ -519,10 +519,14 @@ func _build_tower() -> void:
 	var first := _place_at(zone, "p0", _polar(zone, 12.2, 180.0, GROUND), 0.9)
 	link(gate, first)
 	_pad(first, _polar(zone, 7.4, 180.0, TOWER_TOPS[0]), rings[0][180.0], 1.1)
-	#A second one behind the tower, past the ground ring, for whoever fell on that side
+	#Three more past the ground ring, behind the tower and on both sides, for whoever comes or falls there
 	var back := _place_at(zone, "p0b", _polar(zone, 13.2, 0.0, GROUND), 0.9)
 	link(ground_ring[0.0], back)
 	_pad(back, _polar(zone, 7.4, 0.0, TOWER_TOPS[0]), rings[0][0.0], 1.25)
+	for degrees: float in [90.0, 270.0]:
+		var side := _place_at(zone, "p0_%d" % degrees, _polar(zone, 13.2, degrees, GROUND), 0.9)
+		link(ground_ring[degrees], side)
+		_pad(side, _polar(zone, 7.4, degrees, TOWER_TOPS[0]), rings[0][degrees], 1.25)
 	for level in 2:
 		for step in 8:
 			var degrees := 45.0 * step
@@ -534,14 +538,16 @@ func _build_tower() -> void:
 				link(rings[level][degrees], rings[0][degrees], DROP)
 	for degrees: float in [0.0, 90.0, 180.0, 270.0]:
 		link(top, rings[1][degrees], DROP)
-	#Two trampolines on each upper floor, on its outer edge, a short walk from where the one under it lands: a spiral up the front
-	for degrees: float in [140.0, 220.0]:
+	#Four trampolines on each upper floor, one per corner, on its outer edge and a short walk from where one under it lands: whoever
+	#climbs goes round the tower whichever side it started from
+	for degrees: float in [40.0, 140.0, 220.0, 320.0]:
+		var near := _nearest_step(degrees)
 		var pad := _place_at(zone, "p1_%d" % degrees, _polar(zone, 8.75, degrees, TOWER_TOPS[0]), 0.9)
-		link(rings[0][135.0 if degrees < 180.0 else 225.0], pad)
-		_pad(pad, _polar(zone, 4.4, degrees, TOWER_TOPS[1]), rings[1][135.0 if degrees < 180.0 else 225.0], 1.1)
-	for degrees: float in [100.0, 260.0]:
+		link(rings[0][near], pad)
+		_pad(pad, _polar(zone, 4.4, degrees, TOWER_TOPS[1]), rings[1][near], 1.1)
+	for degrees: float in [20.0, 100.0, 260.0, 340.0]:
 		var pad := _place_at(zone, "p2_%d" % degrees, _polar(zone, 5.6, degrees, TOWER_TOPS[1]), 0.9)
-		link(rings[1][90.0 if degrees < 180.0 else 270.0], pad)
+		link(rings[1][_nearest_step(degrees)], pad)
 		_pad(pad, _polar(zone, 1.2, degrees, TOWER_TOPS[2]), top, 1.1)
 	#The likes fall on each floor in turn, around it
 	like_spots = [[], [], []]
@@ -561,6 +567,11 @@ func _build_tower() -> void:
 
 
 #A trampoline that throws along an arc onto the floor above, in "seconds" of flight
+#The step of 45 degrees of a ring of the tower closest to "degrees"
+func _nearest_step(degrees: float) -> float:
+	return fposmod(45.0 * roundf(degrees / 45.0), 360.0)
+
+
 func _pad(place: StringName, to: Vector3, landing: StringName, seconds: float) -> void:
 	pads.append({"at": position_of(place), "to": to, "time": seconds, "from": 0})
 	link(place, landing, LAUNCH, 0.0, seconds + 0.3)

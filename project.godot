@@ -216,6 +216,7 @@ fair_ranking_reset={
 
 [physics]
 
+common/max_physics_steps_per_frame=24
 3d/physics_engine="Jolt Physics"
 
 [rendering]

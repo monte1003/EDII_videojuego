@@ -42,7 +42,7 @@ func _expect(condition: bool, label: String) -> void:
 func _check_layout() -> void:
 	var graph := Level01Layout.build_graph()
 	var fragile := Level01Layout.fragile_edges()
-	_expect(fragile.size() == 3, "hay tres puentes frágiles")
+	_expect(fragile.is_empty(), "no queda ningún puente frágil: desde el 24/11 los que caían son piso normal")
 	var exist := true
 	for edge in fragile:
 		exist = exist and graph.has_edge(edge[0], edge[1])
@@ -144,7 +144,8 @@ func _check_events() -> void:
 	var settings := Level01Settings.new()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
-	var events := Level01Events.new(settings, rng, Level01Layout.fragile_edges())
+	#The feed itself, on the three bridges it used to take down (today plain), so the mechanism stays checked
+	var events := Level01Events.new(settings, rng, [[&"C2", &"C3"], [&"A6", &"A7"], [&"C7", &"C8"]])
 	_log.clear()
 	events.warned.connect(func(a: StringName, b: StringName, seconds: float) -> void: _log.append("aviso %s-%s %.0f" % [a, b, seconds]))
 	events.closed.connect(func(a: StringName, b: StringName) -> void: _log.append("cae %s-%s" % [a, b]))

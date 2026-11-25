@@ -719,8 +719,12 @@ func _build_scenery() -> void:
 	for index in 14:
 		var angle := TAU * index / 14.0 + _rng.randf_range(-0.15, 0.15)
 		var distance := _rng.randf_range(95.0, 125.0)
-		sea.add_cloud(Vector3(cos(angle) * distance, _rng.randf_range(4.0, 16.0), sin(angle) * distance), _rng.randf_range(9.0, 14.0),
-			tones[index % tones.size()], _rng.randf_range(0.2, 0.4), _rng)
+		var at := Vector3(cos(angle) * distance, _rng.randf_range(4.0, 16.0), sin(angle) * distance)
+		var size := _rng.randf_range(9.0, 14.0)
+		#The ring on the horizon does not drift, or one of its clouds would cross the set sooner or later; its speed is still drawn so the
+		#rest of the set comes out as before
+		_rng.randf()
+		sea.add_cloud(at, size, tones[index % tones.size()], 0.0, _rng)
 	add_child(sea)
 	sea.commit()
 	add_child(PartyKit.sparkles(Vector3(42.0, 8.0, 24.0), 70))

@@ -26,10 +26,10 @@ De esa plaza bajan tres toboganes, Recarga, Cargando y Desliza, que solo se baja
 			"title": "Qué hay en cada camino",
 			"body": "Likes: cajas que lanzan likes desde los lados y barras que giran.
 Comentarios: el más corto, con hileras de comentarios que se balancean como hachas.
-Scroll: ruedas que ruedan hacia ti, un puente que cae y la cinta del scroll infinito.
+Scroll: ruedas que ruedan hacia ti y la cinta del scroll infinito.
 Algoritmo: bolas gigantes por carriles y una bola que cruza la salida.
 Viral: ventiladores que empujan de lado, hashtags que barren y barras.
-Historias: baldosas que se caen al pisarlas, barras, un comentario y un puente que cae.",
+Historias: baldosas que se caen al pisarlas, barras y un comentario.",
 		},
 		{
 			"title": "Comentarios y likes",
@@ -48,13 +48,6 @@ En Algoritmo las bolas son demasiado altas para saltar. Un carril se enciende ju
 			"body": "Los ventiladores de Viral giran más rápido y su aro parpadea antes de soplar. Mientras soplan te arrastran hacia el otro lado del puente, también en el aire: camina contra el viento.
 
 Las plataformas de Historias son baldosas: al pisar una, su anillo se vacía y se cae. Vuelve a los %d segundos. No te detengas encima." % int(Level01Layout.TILE_GONE),
-		},
-		{
-			"title": "El feed cambia",
-			"body": "Los puentes color coral son frágiles: cada cierto tiempo uno parpadea y %d segundos después cae por unos %d. Pasados %d segundos del inicio puede haber dos caídos a la vez. No elige un puente con alguien encima, pero si pisas uno marcado caes con él.
-
-Antes de caer, al puente le sale un letrero que dice SATURADA. Siempre queda otro camino." % [
-				int(settings.feed_warning), int(settings.feed_duration), int(settings.feed_first + settings.feed_extra_delay)],
 		},
 		{
 			"title": "Barras, bloques y cintas",

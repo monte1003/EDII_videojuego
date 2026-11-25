@@ -152,7 +152,8 @@ func _build_sky() -> void:
 	add_child(sun)
 
 
-#A sea of clouds under the board and a ring of big ones on the horizon
+#A sea of clouds under the board and a ring of big ones on the horizon. The ring does not drift: drifting along X, one of its clouds would
+#cross the board sooner or later (the clock of the drift counts from the start of the game, not of the round)
 func _build_clouds() -> void:
 	var sea := CloudField.new()
 	sea.setup(Vector2(SEA_AREA.position.x, SEA_AREA.end.x))
@@ -167,8 +168,11 @@ func _build_clouds() -> void:
 	for index in HORIZON_COUNT:
 		var angle := TAU * index / HORIZON_COUNT + _rng.randf_range(-0.15, 0.15)
 		var distance := _rng.randf_range(78.0, 105.0)
-		rim.add_cloud(Vector3(cos(angle) * distance, _rng.randf_range(-12.0, 2.0), sin(angle) * distance), _rng.randf_range(7.0, 11.0),
-			SEA_COLORS[index % SEA_COLORS.size()], _rng.randf_range(0.2, 0.5), _rng)
+		var at := Vector3(cos(angle) * distance, _rng.randf_range(-12.0, 2.0), sin(angle) * distance)
+		var size := _rng.randf_range(7.0, 11.0)
+		#The speed it had is still drawn, so the rest of the set comes out as before
+		_rng.randf()
+		rim.add_cloud(at, size, SEA_COLORS[index % SEA_COLORS.size()], 0.0, _rng)
 	add_child(rim)
 	rim.commit()
 

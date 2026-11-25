@@ -46,6 +46,7 @@ func run(scene_tree: SceneTree) -> int:
 	await _check_room_again()
 	await _check_full_room()
 	await _check_round_events()
+	await _check_early_server()
 	await _check_finder()
 	return _failures
 
@@ -425,6 +426,55 @@ func _check_round_events() -> void:
 	_expect(heard_on_server == [[2, "claim"]], "lo que pide un jugador llega solo al servidor, con su id; la pantalla no manda nada (%s)" % str(heard_on_server))
 	player.stop()
 	screen.queue_free()
+	room.close()
+	room.queue_free()
+	await _settle()
+
+
+#The players load a round before the server and the server's player is out of it first (it lost in La Calle): the results must wait for
+#the points of the players still in the round, in this game and in the next one of the same room
+func _check_early_server() -> void:
+	var room := NetRoom.new()
+	tree.root.add_child(room)
+	var opened := false
+	for attempt in 10:
+		opened = opened or room.host("ANFITRION", &"fire")
+		if not opened:
+			await _settle(300)
+	var links: Array[NetLink] = [_greet("J2"), _greet("J3")]
+	await _settle()
+	var verdicts: Array[String] = []
+	for game in 2:
+		room.begin_warmup()
+		room.start_game(PLAN, SEEDS)
+		for link in links:
+			link.send({"t": "loaded", "round": 0})
+		await _settle()
+		room.report_loaded(0)
+		await _settle()
+		for link in links:
+			link.take()
+		room.report_points(0, 120)
+		await _settle()
+		var early := false
+		for link in links:
+			for message in link.take():
+				early = early or message["t"] == "scores"
+		links[0].send({"t": "points", "round": 0, "points": 400})
+		await _settle()
+		var still_waiting := room._points_left >= 0.0
+		links[1].send({"t": "points", "round": 0, "points": 500})
+		await _settle()
+		var published := false
+		for message in links[0].take():
+			published = published or (message["t"] == "scores" and (message.get("points") as Dictionary).size() == 3)
+		verdicts.append("%s/%s/%s" % ["pronto" if early else "espera", "espera" if still_waiting else "pronto", "sale" if published else "no sale"])
+		room.reopen()
+		await _settle()
+	_expect(verdicts == ["espera/espera/sale", "espera/espera/sale"],
+		"los jugadores cargan antes que el servidor y el servidor pierde primero: el resultado espera a los que siguen jugando (%s)" % str(verdicts))
+	for link in links:
+		link.stop()
 	room.close()
 	room.queue_free()
 	await _settle()

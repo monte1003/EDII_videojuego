@@ -4,8 +4,6 @@ extends Node3D
 #What every round scene shares: who plays, how it ends, pause and help; it runs in a session or on its own
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
-#Seconds behind the players from which the fair screen skips the film to catch up with them (a little network delay never counts)
-const LATE_START := 0.3
 
 @export var default_character: CharacterData
 
@@ -169,6 +167,7 @@ func pose_state() -> int:
 func _open_film() -> void:
 	var info := MinigameCatalog.find(ScreenFlow.current) if ScreenFlow.current != &"" else null
 	var networked := GameSession.is_networked() and not GameSession.practice
+	ImpactFx.freeze_allowed = not networked
 	if networked:
 		add_child(NetPuppets.new())
 	var cover: LoadingCover = null
@@ -179,14 +178,10 @@ func _open_film() -> void:
 		add_child(cover)
 		cover.show_round(info, _step_text())
 		await _wait_for_everybody()
-	var films := films_enabled and info != null and _pose_player != null and DisplayServer.get_name() != "headless"
-	var shots: Array[RoundFilm.Shot] = []
-	if films:
-		shots = _film_shots()
-	#The fair screen never holds the players back: when it gets here after they were let go, it skips the film and catches up with them
-	var behind := _seconds_behind()
-	if behind > LATE_START:
-		var film_left := RoundFilm.length_of(shots) - behind
+	#The fair screen has no player of its own and shows no film: it starts the round when the players end theirs, and when it got here
+	#after they were let go it catches up with them
+	if GameSession.net.role == NetRoom.Role.WATCH:
+		var film_left := _players_film_length(info) - _seconds_behind()
 		if film_left > 0.0:
 			await get_tree().create_timer(film_left).timeout
 		filming = false
@@ -194,6 +189,10 @@ func _open_film() -> void:
 		if cover != null:
 			cover.lift()
 		return
+	var films := films_enabled and info != null and _pose_player != null and DisplayServer.get_name() != "headless"
+	var shots: Array[RoundFilm.Shot] = []
+	if films:
+		shots = _film_shots()
 	if cover != null:
 		cover.lift()
 	if not films:
@@ -227,6 +226,20 @@ func _step_text() -> String:
 	if GameSession.practice or GameSession.round_index < 0 or GameSession.plan.is_empty():
 		return ""
 	return "RONDA %d DE %d" % [GameSession.round_index + 1, GameSession.plan.size()]
+
+
+#How long the opening film of the players lasts: the fair screen has no player, so it measures the same film around the first one. Without
+#a window nobody sees a film, as in the players' own check
+func _players_film_length(info: MinigameInfo) -> float:
+	if not films_enabled or info == null or everyone.is_empty() or DisplayServer.get_name() == "headless":
+		return 0.0
+	var keep := _pose_player
+	if _pose_player == null:
+		var first: int = everyone.keys().min()
+		_pose_player = everyone[first]
+	var seconds := RoundFilm.length_of(_film_shots())
+	_pose_player = keep
+	return seconds
 
 
 #Seconds since the room let this round go, for the fair screen only: the players start together and are never behind

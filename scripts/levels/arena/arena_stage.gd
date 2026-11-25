@@ -95,7 +95,8 @@ func _build_sky(radius: float) -> void:
 	add_child(sun)
 
 
-#A sea of clouds far under the map and a ring of big ones on the horizon, never over the map
+#A sea of clouds far under the map and a ring of big ones on the horizon, never over the map: the ring does not drift, since drifting
+#along X one of its clouds would cross the map sooner or later
 func _build_clouds() -> void:
 	var rim := CloudField.new()
 	rim.setup(Vector2(-_radius * 3.2, _radius * 3.2))
@@ -107,8 +108,11 @@ func _build_clouds() -> void:
 	for index in 14:
 		var angle := TAU * index / 14.0 + _rng.randf_range(-0.15, 0.15)
 		var distance := _radius * _rng.randf_range(2.4, 3.0)
-		rim.add_cloud(Vector3(cos(angle) * distance, _rng.randf_range(7.0, 20.0), sin(angle) * distance), _rng.randf_range(8.0, 12.0),
-			SEA_COLORS[index % SEA_COLORS.size()], _rng.randf_range(0.2, 0.5), _rng)
+		var at := Vector3(cos(angle) * distance, _rng.randf_range(7.0, 20.0), sin(angle) * distance)
+		var size := _rng.randf_range(8.0, 12.0)
+		#The speed it had is still drawn, so the rest of the set comes out as before
+		_rng.randf()
+		rim.add_cloud(at, size, SEA_COLORS[index % SEA_COLORS.size()], 0.0, _rng)
 	add_child(rim)
 	rim.commit()
 

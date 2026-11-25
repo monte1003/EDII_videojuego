@@ -32,8 +32,9 @@ const CAPACITY := 4
 #A computer that says nothing for this long is gone: long enough for a Wi-Fi that stutters for a few seconds
 const SILENCE_LIMIT := 12000
 const ANNOUNCE_EVERY := 1000
-#How long the server waits for everybody at the start of a round and for the points at its end
-const GO_WAIT := 6.0
+#How long the server waits for everybody at the start of a round and for the points at its end. A computer that hangs is dropped after
+#SILENCE_LIMIT anyway, so the wait for a slow one can be long: whoever started late would play behind the others
+const GO_WAIT := 15.0
 #Players finish a round at different times (the others watch meanwhile); this only guards against a computer that never answers
 const POINTS_WAIT := 300.0
 #The fair screen gets the places of everybody together in one message this often (the players keep getting them one by one)
@@ -66,8 +67,10 @@ var _heard_rooms: Array[Dictionary] = []
 #Server: who has loaded the round, the seconds left to wait for them and the points of the round that came in
 var _loaded: Dictionary = {}
 var _wait_round := -1
-#Who is playing the round under way: the ones that loaded it; only their points are waited for
+#Who is playing the round under way: the ones that loaded it; only their points are waited for. The round they loaded is kept apart, so a
+#player that loads before the server is not forgotten when the server loads it
 var _round_members: Dictionary = {}
+var _members_round := -1
 var _go_left := -1.0
 var _points: Dictionary = {}
 var _points_left := -1.0
@@ -182,6 +185,7 @@ func close() -> void:
 	_go_left = -1.0
 	_loaded.clear()
 	_round_members.clear()
+	_members_round = -1
 	_points.clear()
 	_points_left = -1.0
 	_points_round = -1
@@ -262,7 +266,7 @@ func start_game(plan: Array[StringName], seeds: Array[int]) -> void:
 func report_loaded(round_index: int) -> void:
 	if role == Role.HOST:
 		_wait_round = round_index
-		_round_members = {1: true}
+		_join_round(round_index, 1)
 		_loaded[1] = true
 		_go_left = GO_WAIT
 		_check_go()
@@ -302,6 +306,12 @@ func report_points(round_index: int, points: int) -> void:
 func begin_warmup() -> void:
 	if role == Role.HOST:
 		started = true
+		#A new game counts its rounds from 0 again: nothing of who played or scored the last one may count in it
+		_round_members.clear()
+		_members_round = -1
+		_points.clear()
+		_points_round = -1
+		_points_left = -1.0
 		_send_all({"t": "warmup"})
 
 
@@ -548,7 +558,7 @@ func _apply_from_client(link: NetLink, message: Dictionary) -> void:
 		"profile":
 			_change_member(link.id, {"name": _clean_name(message.get("name")), "character": _clean_character(message.get("character"))})
 		"loaded":
-			_round_members[link.id] = true
+			_join_round(int(message.get("round", -1)), link.id)
 			if int(message.get("round", -1)) <= go_round:
 				link.send({"t": "go", "round": go_round})
 			else:
@@ -800,6 +810,15 @@ func _gather_points(round_index: int, player_id: int, points: int) -> void:
 	_check_points()
 
 
+#Whoever loaded "round_index" plays it; the first one of a newer round starts the list again
+func _join_round(round_index: int, player_id: int) -> void:
+	if round_index > _members_round:
+		_members_round = round_index
+		_round_members.clear()
+	if round_index == _members_round:
+		_round_members[player_id] = true
+
+
 func _check_points() -> void:
 	if _points_round < 0 or _points_left < 0.0:
 		return
@@ -808,7 +827,8 @@ func _check_points() -> void:
 		var here := id == 1
 		for link in _links:
 			here = here or link.id == id
-		var playing := (_round_members.is_empty() or _round_members.has(id)) and not bool(member.get("waiting", false))
+		var counted := _members_round == _points_round and not _round_members.is_empty()
+		var playing := (not counted or _round_members.has(id)) and not bool(member.get("waiting", false))
 		if here and playing and not _points.has(id):
 			return
 	_publish_points()

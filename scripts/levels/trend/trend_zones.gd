@@ -9,6 +9,7 @@ extends Node3D
 
 const GLASS_COLOR := Color(0.7, 0.92, 1.0, 0.3)
 const PAD_COLOR := Color("7ae6ff")
+#The splash of whoever falls in the sea of memes
 const WATER_COLOR := Color("4fa8ff")
 const ISLET_COLORS := {&"sink": Color("ff8f6b"), &"slide": Color("ffd166"), &"turn": Color("5fdcc0")}
 const SHUT_COLOR := Color("ff4d6d")
@@ -18,10 +19,16 @@ const LIKE_COLOR := Color("ff5fa2")
 const LIKE_RADIUS := 0.75
 const LIKE_POOL := 10
 const ISLET_THICKNESS := 0.6
-#The platforms of the sea of memes are app tiles: an icon of the social networks on top and a candy-striped column down to the water
-const ISLET_ICONS: Array[Texture2D] = [preload("res://assets/social_icons/me_gusta.png"), preload("res://assets/social_icons/chat.png"),
-	preload("res://assets/social_icons/video.png"), preload("res://assets/social_icons/foto.png"),
-	preload("res://assets/social_icons/historia.png"), preload("res://assets/social_icons/directo.png")]
+#The sea of memes: our own memes, small, on the platforms (round like a story on the round ones, with round corners on the others), the
+#water with light that wanders over it and a ring of foam around each column
+const MEMES: Array[Texture2D] = [preload("res://assets/textures/memes/meme_01.jpg"), preload("res://assets/textures/memes/meme_02.jpg"),
+	preload("res://assets/textures/memes/meme_03.jpg"), preload("res://assets/textures/memes/meme_04.jpg"),
+	preload("res://assets/textures/memes/meme_05.jpg"), preload("res://assets/textures/memes/meme_06.jpg"),
+	preload("res://assets/textures/memes/meme_07.jpg")]
+const PHOTO_SHADER: Shader = preload("res://assets/shaders/meme_photo.gdshader")
+const WATER_SHADER: Shader = preload("res://assets/shaders/meme_water.gdshader")
+#The two colors of the ring of a story around the memes of the round platforms
+const STORY_COLORS: Array[Color] = [Color("ff7a59"), Color("ff7fb2")]
 #How tall the beam over a zone is and how wide it opens
 const BUBBLE_SHADER: Shader = preload("res://assets/shaders/bubble.gdshader")
 const FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
@@ -37,6 +44,7 @@ var layout: TrendLayout
 var obstacles: TrendObstacles
 
 var _islets: Array[AnimatableBody3D] = []
+var _photo_paint: Dictionary = {}
 var _islet_paint: Array[StandardMaterial3D] = []
 var _screens: Array[AnimatableBody3D] = []
 var _screen_shapes: Array[CollisionShape3D] = []
@@ -351,7 +359,9 @@ func _build_islands() -> void:
 	var sheet := BoxMesh.new()
 	sheet.size = Vector3(TrendLayout.POND_HALF.y * 2.0, 0.06, TrendLayout.POND_HALF.x * 2.0)
 	water.mesh = sheet
-	water.material_override = PartyKit.paint(WATER_COLOR, 0.35, 0.12)
+	var waves := ShaderMaterial.new()
+	waves.shader = WATER_SHADER
+	water.material_override = waves
 	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	water.position = layout.zone_center(zone) + Vector3(0.0, 0.03, 0.0)
 	water.rotation.y = layout.zone_yaw(zone)
@@ -414,8 +424,9 @@ func _build_islands() -> void:
 		_islet_paint.append(paint)
 
 
-#What makes a platform look like an app tile, with no collision of its own: a white face with the icon of a social network (two on the
-#long ones) and a striped column that holds it from the water. It moves, turns and sinks with the platform
+#What makes a platform look like a tile of a feed, with no collision of its own: a white face with one of our memes in its middle, small
+#so the platform still reads (round like a story with its ring on the round ones, with round corners on the others), a striped column
+#that holds it from the water and a ring of foam where the column meets the water. It moves, turns and sinks with the platform
 func _dress_islet(body: Node3D, islet: Dictionary, index: int) -> void:
 	var size: Vector2 = islet["size"]
 	var color: Color = ISLET_COLORS[islet["kind"]]
@@ -433,27 +444,25 @@ func _dress_islet(body: Node3D, islet: Dictionary, index: int) -> void:
 		disc.position.y = 0.015
 		disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		body.add_child(disc)
-	#The icons lie on the face: one in the middle, or two along the platforms that are much longer than wide
-	var spots: Array[float] = [0.0]
-	var side := size.x * 1.2 if round_top else minf(size.x, size.y) * 0.78
-	if not round_top and size.y > size.x * 2.0:
-		spots = [-size.y * 0.25, size.y * 0.25]
-		side = minf(size.x * 0.78, size.y * 0.5 * 0.85)
-	var lift := 0.036 if round_top else 0.078
-	for spot in spots.size():
-		var quad := QuadMesh.new()
-		quad.size = Vector2(side, side)
-		var picture := StandardMaterial3D.new()
-		picture.albedo_texture = ISLET_ICONS[(index + spot) % ISLET_ICONS.size()]
-		picture.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
-		picture.roughness = 0.4
-		var icon := MeshInstance3D.new()
-		icon.mesh = quad
-		icon.material_override = picture
-		icon.rotation_degrees.x = -90.0
-		icon.position = Vector3(0.0, lift, spots[spot])
-		icon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		body.add_child(icon)
+	var side := size.x * 0.88 if round_top else minf(size.x, size.y) * 0.55
+	if round_top:
+		var ring := TorusMesh.new()
+		ring.inner_radius = side / 2.0 - 0.02
+		ring.outer_radius = side / 2.0 + 0.1
+		ring.rings = 32
+		ring.ring_segments = 6
+		var story := MeshInstance3D.new()
+		story.mesh = ring
+		story.material_override = PartyKit.candy(STORY_COLORS[0], STORY_COLORS[1], 10.0, 0.0, 0.3)
+		story.scale.y = 0.4
+		story.position.y = 0.03
+		story.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		body.add_child(story)
+	var photo := _photo_quad(MEMES[index % MEMES.size()], Vector2(side, side), side / 2.0 if round_top else side * 0.1)
+	#Upright for whoever comes from the dock
+	photo.rotation_degrees = Vector3(-90.0, 180.0, 0.0)
+	photo.position.y = 0.04 if round_top else 0.08
+	body.add_child(photo)
 	#The column goes from under the platform to the water, narrower than the platform so it reads as a pedestal
 	var reach := minf(size.x, size.y) * 0.5 if not round_top else size.x
 	var stem := CylinderMesh.new()
@@ -467,6 +476,41 @@ func _dress_islet(body: Node3D, islet: Dictionary, index: int) -> void:
 	column.material_override = PartyKit.candy(color, PartyKit.WHITE, 6.0, 0.0, 0.1)
 	column.position.y = -ISLET_THICKNESS - stem.height / 2.0 + 0.05
 	body.add_child(column)
+	var foam := TorusMesh.new()
+	foam.inner_radius = stem.bottom_radius + 0.05
+	foam.outer_radius = stem.bottom_radius + 0.3
+	foam.rings = 24
+	foam.ring_segments = 6
+	var ring := MeshInstance3D.new()
+	ring.mesh = foam
+	ring.material_override = PartyKit.paint(PartyKit.WHITE, 0.3, 0.6)
+	ring.scale.y = 0.35
+	ring.position.y = -TrendLayout.ISLE_TOP + 0.08
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	body.add_child(ring)
+
+
+#A quad with a photo and round corners, or a plain card of one color
+func _photo_quad(texture: Texture2D, size: Vector2, radius: float) -> MeshInstance3D:
+	var key := "%s_%s_%s" % [texture.resource_path, size, radius]
+	if not _photo_paint.has(key):
+		var paint := ShaderMaterial.new()
+		paint.shader = PHOTO_SHADER
+		paint.set_shader_parameter("picture", texture)
+		paint.set_shader_parameter("extent", size)
+		paint.set_shader_parameter("radius", radius)
+		_photo_paint[key] = paint
+	return _quad(_photo_paint[key], size)
+
+
+func _quad(material: Material, size: Vector2) -> MeshInstance3D:
+	var mesh := QuadMesh.new()
+	mesh.size = size
+	var quad := MeshInstance3D.new()
+	quad.mesh = mesh
+	quad.material_override = material
+	quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return quad
 
 
 #The screens of the maze: a body each that rises out of the floor and sinks back, red while it is up, and a strip on the floor

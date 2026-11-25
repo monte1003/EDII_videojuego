@@ -82,7 +82,8 @@ const WAY_NAMES := {
 const SLIDE_NAMES := {&"Bn": "RECARGA", &"h1": "CARGANDO", &"z1": "DESLIZA"}
 
 #Kinds of bridge: a plain one, a conveyor belt that flows from the first vertex to the second, a slide that goes downhill from the first vertex
-#to the second and never the other way, a fragile one that the feed takes down for a while, and a narrow one (none on this course)
+#to the second and never the other way, a fragile one that the feed takes down for a while and a narrow one (none of the last two on this
+#course: since 24/11/2026 the bridges that the feed took down are plain floor)
 const WALK := &"walk"
 const BELT := &"belt"
 const SLIDE := &"slide"
@@ -114,7 +115,7 @@ const EDGES := [
 	[&"B3", &"S", 2.0, 2.0, WALK],
 	[&"Ce", &"C1", 1.6, 1.6, WALK],
 	[&"C1", &"C2", 2.2, 2.2, WALK],
-	[&"C2", &"C3", 1.8, 1.8, FRAGILE],
+	[&"C2", &"C3", 1.8, 1.8, WALK],
 	[&"C3", &"C4", 2.2, 2.2, WALK],
 	[&"C4", &"Cx", 1.4, 3.6, BELT],
 	[&"Cx", &"S", 2.4, 2.4, WALK],
@@ -127,7 +128,7 @@ const EDGES := [
 	[&"z2", &"Cn", 1.0, ONE_WAY, SLIDE],
 	[&"An", &"A5", 1.9, 1.9, WALK],
 	[&"A5", &"A6", 2.6, 2.6, WALK],
-	[&"A6", &"A7", 1.7, 1.7, FRAGILE],
+	[&"A6", &"A7", 1.7, 1.7, WALK],
 	[&"A7", &"A8", 2.6, 2.6, WALK],
 	[&"A8", &"Ay", 1.9, 1.9, WALK],
 	[&"Ay", &"E", 2.6, 2.6, WALK],
@@ -139,7 +140,7 @@ const EDGES := [
 	[&"Cn", &"C5", 1.9, 1.9, WALK],
 	[&"C5", &"C6", 2.3, 2.3, WALK],
 	[&"C6", &"C7", 2.3, 2.3, WALK],
-	[&"C7", &"C8", 1.7, 1.7, FRAGILE],
+	[&"C7", &"C8", 1.7, 1.7, WALK],
 	[&"C8", &"Cy", 1.9, 1.9, WALK],
 	[&"Cy", &"E", 2.6, 2.6, WALK],
 	[&"E", &"M", 3.4, 3.4, WALK],

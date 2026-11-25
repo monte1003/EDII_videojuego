@@ -47,6 +47,8 @@ const CROWNS: Array[ScoreSheet.Medal] = [ScoreSheet.Medal.DIAMOND, ScoreSheet.Me
 #The pose each character strikes when it lands on its block, and the dance of each one at the end
 const HERO_POSES: Array[int] = [0, 1, 2, 4]
 const DANCES: Array[int] = [3, 5, 2, 4]
+#The card of the SocialDrop board that stays when the others fall
+const DROP_CARD := 3
 
 var places: Dictionary = {}
 var active: AttractSets.Place
@@ -500,7 +502,7 @@ func _board(until: float) -> void:
 	_show(AttractSets.DROP)
 	_hide_figures()
 	var board := active.board
-	var target := 3
+	var target := DROP_CARD
 	var deal_rng := RandomNumberGenerator.new()
 	deal_rng.seed = 7
 	board.restore()
@@ -511,9 +513,7 @@ func _board(until: float) -> void:
 	for spot in spots:
 		middle += spot / spots.size()
 	_board_middle = middle
-	for index in _figures.size():
-		var spot := board.cell_position(target, spots[index % spots.size()] * 3.0)
-		_stand(_figures[index], spot + Vector3((index % 2) * 0.5 - 0.25, 0.0, 0.0), middle + Vector3(0.0, 0.0, 8.0), 1.0)
+	_stand_on_card()
 	focus_changed.emit(_title_of(&"social_drop"), "MEMORIA", ScoreSheet.Medal.NONE)
 	_camera.zoom_to(56.0, 0.01)
 	_shift(14.0)
@@ -536,6 +536,15 @@ func _board(until: float) -> void:
 	_clear_words()
 
 
+#The four on the card of SocialDrop that never falls, looking at the front of the board
+func _stand_on_card() -> void:
+	var board := active.board
+	var spots := board.spawn_points()
+	for index in _figures.size():
+		var spot := board.cell_position(DROP_CARD, spots[index % spots.size()] * 3.0)
+		_stand(_figures[index], spot + Vector3((index % 2) * 0.5 - 0.25, 0.0, 0.0), _board_middle + Vector3(0.0, 0.0, 8.0), 1.0)
+
+
 #A pass over a whole map from high up, as the openings of the rounds circle it, with the four characters in the middle of it
 func _flyover(id: StringName, seconds: float) -> void:
 	_show(id)
@@ -546,6 +555,11 @@ func _flyover(id: StringName, seconds: float) -> void:
 		_gather(id, true)
 		center = active.layout.position_of(TrendLayout.CORE if id == AttractSets.PLAZA else SelfieLayout.HUB)
 		radius = 17.0
+	elif active.board != null:
+		#SocialDrop: the cards that fell come back up and the four stand again on the one that held them, not in the air where the
+		#last place left them
+		active.board.restore()
+		_stand_on_card()
 	var titles := {AttractSets.PLAZA: &"trend_war", AttractSets.PLATO: &"perfect_selfie", AttractSets.DROP: &"social_drop"}
 	focus_changed.emit(_title_of(titles.get(id, &"")), "DESDE ARRIBA", ScoreSheet.Medal.NONE)
 	_shift(radius * 1.2)

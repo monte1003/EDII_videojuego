@@ -33,6 +33,9 @@ func _init(config: Level01Settings, rng: RandomNumberGenerator, fragile: Array[A
 #"can_close" tells whether a bridge may go down now: it receives both ends and returns a bool; the optional "threat" receives
 #both ends and returns how far the bridge is from the nearest racer (the smaller, the likelier to go down)
 func tick(delta: float, can_close: Callable, threat := Callable()) -> void:
+	#With no fragile bridge on the course the feed never does anything
+	if _candidates.is_empty():
+		return
 	_timer -= delta
 	if _timer > 0.0:
 		return

@@ -49,7 +49,8 @@ const BELT_LIFT := 0.035
 #The padded block: across its way, high and along its way, which is what the hit test measures
 const BLOCK_SIZE := Vector3(ArenaHazards.BLOCK_ACROSS, 0.9, ArenaHazards.BLOCK_ALONG)
 const BAR_HEIGHT := 0.6
-const HOOPS := 2
+#How fast the arrows of a cannon light up one after the other
+const ARROW_CHASE := 1.4
 #Seconds before a turn in which a belt blinks
 const BELT_WARNING := 1.5
 #Seconds a piece takes to pop in when its stage starts
@@ -65,6 +66,8 @@ var _link_areas: Array[Array] = []
 var _spinners: Array[Node3D] = []
 var _blocks: Array[Dictionary] = []
 var _pads: Array[Dictionary] = []
+#The arrows of every cannon, by their order from the back to the front: the ones in the same place light up together
+var _arrow_paint: Array[StandardMaterial3D] = []
 var _belts: Array[Dictionary] = []
 var _bulb_spots: Array[Transform3D] = []
 var _bulb_colors: Array[Color] = []
@@ -140,6 +143,9 @@ func update(time: float) -> void:
 		var live := ArenaHazards.pad_live(entry["pad"], time)
 		skin.scale.y = lerpf(skin.scale.y, 1.0 if live else 0.25, 0.3)
 		(entry["material"] as StandardMaterial3D).emission_energy_multiplier = 1.1 if live else 0.05
+	for index in _arrow_paint.size():
+		var share := fposmod(time * ARROW_CHASE - float(index) / _arrow_paint.size(), 1.0)
+		_arrow_paint[index].emission_energy_multiplier = 0.25 + 1.6 * maxf(1.0 - share * 2.5, 0.0)
 	var warning := layout.belt_turn_in(time) < BELT_WARNING
 	for entry in _belts:
 		var belt: Dictionary = entry["belt"]
@@ -391,8 +397,8 @@ func _build_blocks() -> void:
 		_blocks.append({"node": holder, "rail": rail, "sweeper": sweeper})
 
 
-#A trampoline is a dark base, a pink ring and a yellow skin that glows; a cannon is a gold cushion with an arrow toward where
-#it throws, a row of hoops along its arc and a ring where it lands
+#A trampoline is a dark base, a pink ring and a yellow skin that glows. A cannon is a striped drum with a gold cushion, three arrows
+#that light up one after the other toward where it throws
 func _build_pads() -> void:
 	for pad in layout.pads:
 		var node := Node3D.new()
@@ -407,6 +413,9 @@ func _build_pads() -> void:
 		material.emission = color
 		material.emission_energy_multiplier = 1.1
 		_piece(node, _disc(ArenaHazards.PAD_REACH + 0.2, ArenaHazards.PAD_REACH + 0.3, 0.16), PartyKit.paint(PartyKit.INK, 0.0, 0.6), Vector3(0.0, 0.08, 0.0))
+		if cannon:
+			_piece(node, _disc(ArenaHazards.PAD_REACH + 0.16, ArenaHazards.PAD_REACH + 0.22, 0.22), PartyKit.candy(PartyKit.WHITE, PartyKit.ORANGE, 16.0),
+				Vector3(0.0, 0.11, 0.0))
 		var skin := _piece(node, _disc(ArenaHazards.PAD_REACH, ArenaHazards.PAD_REACH, 0.08), material, Vector3(0.0, 0.19, 0.0))
 		var ring := TorusMesh.new()
 		ring.outer_radius = ArenaHazards.PAD_REACH + 0.22
@@ -416,35 +425,27 @@ func _build_pads() -> void:
 		_piece(node, ring, PartyKit.candy(PartyKit.WHITE, PartyKit.ORANGE if cannon else PartyKit.PINK, 12.0, 0.0, 0.2), Vector3(0.0, 0.2, 0.0))
 		_pads.append({"node": node, "pad": pad, "skin": skin, "material": material})
 		if cannon:
-			_build_arc(node, pad)
+			_build_arrows(node, pad)
 
 
-#What tells where a cannon throws: an arrow on its skin, hoops along the flight and a ring on the floor where it ends
-func _build_arc(node: Node3D, pad: Dictionary) -> void:
+#What tells where a cannon throws: three arrows on its skin that light up one after the other toward there
+func _build_arrows(node: Node3D, pad: Dictionary) -> void:
 	var from: Vector3 = pad["at"]
 	var to: Vector3 = pad["to"]
 	var aim := Vector3(to.x - from.x, 0.0, to.z - from.z).normalized()
 	var arrow := PrismMesh.new()
-	arrow.size = Vector3(0.9, 0.9, 0.04)
-	var mark := _piece(node, arrow, PartyKit.paint(PartyKit.WHITE, 0.8, 0.3), Vector3(0.0, 0.25, 0.0))
-	mark.basis = Basis.looking_at(aim, Vector3.UP) * Basis(Vector3.RIGHT, -PI / 2.0)
-	var hoop := TorusMesh.new()
-	hoop.inner_radius = 1.0
-	hoop.outer_radius = 1.14
-	hoop.rings = 24
-	hoop.ring_segments = 6
-	var time: float = pad["time"]
-	for index in HOOPS:
-		var seconds := time * float(index + 1) / float(HOOPS + 1)
-		var heading := ArenaHazards.pad_launch(pad, _gravity) - Vector3(0.0, _gravity * seconds, 0.0)
-		var ring := _piece(self, hoop, PartyKit.paint(CANNON_COLOR, 1.3, 0.4), ArenaHazards.pad_arc(pad, seconds, _gravity) + Vector3(0.0, 0.9, 0.0))
-		ring.basis = Basis.looking_at(heading.normalized(), Vector3.UP) * Basis(Vector3.RIGHT, PI / 2.0)
-	var target := TorusMesh.new()
-	target.inner_radius = 1.5
-	target.outer_radius = 1.72
-	target.rings = 32
-	target.ring_segments = 6
-	_piece(self, target, PartyKit.paint(CANNON_COLOR, 1.2, 0.4), to + Vector3(0.0, 0.06, 0.0))
+	arrow.size = Vector3(0.5, 0.36, 0.05)
+	if _arrow_paint.is_empty():
+		for index in 3:
+			var paint := StandardMaterial3D.new()
+			paint.albedo_color = PartyKit.WHITE
+			paint.roughness = 0.3
+			paint.emission_enabled = true
+			paint.emission = PartyKit.WHITE
+			_arrow_paint.append(paint)
+	for index in 3:
+		var mark := _piece(node, arrow, _arrow_paint[index], Vector3(0.0, 0.26, 0.0) + aim * (0.34 * index - 0.36))
+		mark.basis = Basis.looking_at(aim, Vector3.UP) * Basis(Vector3.RIGHT, -PI / 2.0)
 
 
 #A belt is a strip with arrows lying on the floor it drags over
