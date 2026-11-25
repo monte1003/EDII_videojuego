@@ -1,7 +1,6 @@
 extends SceneTree
 
-#Checks the scoring: the curves, the medals, the balance between minigames and the book of best scores
-#run: godot --headless --path . --script res://scripts/tests/score_check.gd
+#Checks the scoring curves, medals, balance and score book; run headless with --script
 
 const SHEET: ScoreSheet = preload("res://resources/score_sheet.tres")
 const BOOK_PATH := "user://score_check_book.json"
@@ -36,7 +35,7 @@ func _check_medals() -> void:
 	_expect(score.points == 1000 and score.breakdown.size() == 3, "un puntaje se recorta a 1000 y a tres líneas")
 
 
-#Every curve grows (or never drops) with a better result, stays inside 0..1000 and never jumps much for one second or one step
+#Curves never drop with a better result, stay in 0..1000 and never jump
 func _check_curves() -> void:
 	var race := _series(func(step: int) -> int: return SHEET.race_points(true, 150.0 - step, 3, 1.0), 110)
 	_expect(_grows(race) and _bounded(race) and _max_jump(race) <= 12, "carrera: crece al bajar el tiempo, sin saltos (%d)" % _max_jump(race))
@@ -137,12 +136,12 @@ func _check_book() -> void:
 	DirAccess.remove_absolute(absolute)
 
 
-#Trend war points of a player that completes that share of the par of a round of 30 trends
+#Trend war points for a share of a 30-trend par
 func _trend(share: float) -> int:
 	return SHEET.trend_score(roundi(share * 30.0), 30.0)
 
 
-#Followers of a round: photos inside the frame, in the centre, posing and both at once, with "crowd" in every photo
+#Followers of a round with "crowd" in every photo
 func _selfie(inside: int, centered: int, posing: int, perfect: int, crowd: int) -> int:
 	var factor := SHEET.selfie_crowd[crowd - 1]
 	return roundi((inside * SHEET.selfie_inside + centered * SHEET.selfie_center + posing * SHEET.selfie_pose + perfect * SHEET.selfie_perfect) * factor)

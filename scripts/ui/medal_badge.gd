@@ -1,8 +1,7 @@
 class_name MedalBadge
 extends Control
 
-#The medal of a round, drawn here: a wavy seal with a check mark, like the badge of a verified account.
-#Each medal has its colour and its number of waves; gold and diamond shine, and no medal is an empty outline
+#Round medal as a wavy seal with a check mark, like a verified badge
 
 const SHINE: Shader = preload("res://assets/ui/shaders/medal_shine.gdshader")
 const FILL: Array[Color] = [Color("8f86ad"), Color("cf7f4c"), Color("b7c3d9"), Color("ffc531"), Color("5fd4f4")]
@@ -60,7 +59,7 @@ func _draw() -> void:
 		_sparkle(center + Vector2(-0.56, 0.44) * radius, radius * 0.12)
 
 
-#The outline of the seal: a circle whose radius goes in and out "waves" times
+#Circle whose radius waves "waves" times
 func _seal(center: Vector2, radius: float, waves: int) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	for step in STEPS:

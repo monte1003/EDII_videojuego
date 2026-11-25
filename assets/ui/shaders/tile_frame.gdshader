@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode unshaded, fog_disabled;
 
-// The glowing frame under a SocialDrop card: a rounded square cut like the platform it sits on, in one colour that changes smoothly.
-// "energy" above 1 makes it bloom
+//Glowing frame under a SocialDrop card; "energy" above 1 blooms
 uniform vec4 glow_color : source_color = vec4(1.0, 0.36, 0.54, 1.0);
 uniform float energy = 1.0;
 uniform float corner = 0.095;

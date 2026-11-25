@@ -1,13 +1,7 @@
 class_name NetRoom
 extends Node
 
-#The game on the local network, client-server over sockets. One computer opens a room (the server, which also plays) and up to three more
-#join it. Threads: the server has one that accepts connections and one that announces the room by UDP; every connection has its own
-#thread (NetLink). Those threads only move bytes into queues behind a Mutex; this node, on the main thread, is the only one that reads the
-#queues and changes the game, in one place (_apply), and it tells the rest with signals. The server decides the room, the order of the
-#rounds, their seeds, when each round starts and the points of everybody; each computer moves its own player and sends where it is.
-#The fair screen joins as a fifth computer that only watches (role WATCH): it takes no place in the room, the server keeps its link apart
-#from the players' ones and it can change nothing
+#Local network game, client-server over TCP; threads only move bytes, the main thread applies changes
 
 enum Role { OFFLINE, HOST, CLIENT, WATCH }
 
@@ -18,37 +12,36 @@ signal rooms_found
 signal state_received(player_id: int, state: Dictionary)
 signal hit_received(state: Dictionary)
 signal round_go
-#Somebody of the room lost its connection during the game: its player hides on every screen
+#A player lost its connection mid game: it hides on every screen
 signal player_left(player_id: int)
-#The server: somebody voted to start in the warm-up. A client: the clock and the votes of the warm-up as the server has them
+#Server: a warm-up vote. Client: the warm-up clock and votes
 signal vote_received(player_id: int)
 signal warm_received(seconds_left: float, votes: int, total: int)
-#The fair screen: every message about the game, so it keeps its own picture of it
+#Fair screen: every game message, to keep its own picture
 signal watched(message: Dictionary)
-#Something decided inside the round under way: from the server on the others ("from" 0), from a player on the server (its id)
+#Round decisions: server to players ("from" 0), player to server (its id)
 signal round_event(from: int, message: Dictionary)
 
 const CAPACITY := 4
-#A computer that says nothing for this long is gone: long enough for a Wi-Fi that stutters for a few seconds
+#Silence that means a computer is gone; tolerates a stuttering Wi-Fi
 const SILENCE_LIMIT := 12000
 const ANNOUNCE_EVERY := 1000
-#How long the server waits for everybody at the start of a round and for the points at its end. A computer that hangs is dropped after
-#SILENCE_LIMIT anyway, so the wait for a slow one can be long: whoever started late would play behind the others
+#Wait for everybody at round start and for points at the end
 const GO_WAIT := 15.0
-#Players finish a round at different times (the others watch meanwhile); this only guards against a computer that never answers
+#Guards only against a computer that never sends its points
 const POINTS_WAIT := 300.0
-#The fair screen gets the places of everybody together in one message this often (the players keep getting them one by one)
+#How often the fair screen gets every position in one message
 const WATCH_EVERY := 0.05
-#A screen that said nothing for this long gives its place to another one that asks to come in (its thread says "ping" every second)
+#A screen silent this long yields its place to a new one
 const WATCH_STALE := 3000
 
 var role := Role.OFFLINE
-#Everybody in the room: {"id", "name", "character", "ready"}, in the order they came in
+#{"id", "name", "character", "ready"} in arrival order
 var room: Array[Dictionary] = []
-#Rooms announced on the network: address -> {"name", "players", "seen"}
+#Announced rooms: address -> {"name", "players", "seen"}
 var rooms: Dictionary = {}
 var started := false
-#The last round every computer was let go in, and when it was let go here (ticks in ms; the fair screen catches up from it)
+#Last round released and when (ms), so the fair screen catches up
 var go_round := -1
 var go_at := 0
 
@@ -64,23 +57,22 @@ var _listening := false
 var _mutex := Mutex.new()
 var _accepted: Array[StreamPeerTCP] = []
 var _heard_rooms: Array[Dictionary] = []
-#Server: who has loaded the round, the seconds left to wait for them and the points of the round that came in
+#Server: who loaded the round, the wait left and the points received
 var _loaded: Dictionary = {}
 var _wait_round := -1
-#Who is playing the round under way: the ones that loaded it; only their points are waited for. The round they loaded is kept apart, so a
-#player that loads before the server is not forgotten when the server loads it
+#Players of the round under way, kept per round so an early loader is not lost
 var _round_members: Dictionary = {}
 var _members_round := -1
 var _go_left := -1.0
 var _points: Dictionary = {}
 var _points_left := -1.0
 var _points_round := -1
-#Server: the link of the fair screen, one at most. It is not among _links, so no list, count or wait of the players ever sees it
+#Server: the fair screen link, kept apart from the players' links
 var _watch_link: NetLink
-#Server: the last state of each player that came since the last message to the screen, and the time to the next one
+#Server: last state of each player and the time to the next screen message
 var _watch_states: Dictionary = {}
 var _watch_left := 0.0
-#Server: whether a fair screen is watching, told in the announcement so nobody else offers to be the screen (read by its thread)
+#Server: a screen is watching, said in the announcement (read by its thread)
 var _screen_on := false
 
 
@@ -92,7 +84,7 @@ func is_host() -> bool:
 	return role == Role.HOST
 
 
-#Opens a room on this computer; the one who opens it is player 1
+#Opens a room here; its creator is player 1
 func host(shown_name: String, character: StringName) -> bool:
 	close()
 	_server = TCPServer.new()
@@ -109,7 +101,7 @@ func host(shown_name: String, character: StringName) -> bool:
 	return true
 
 
-#Connects to the room at "address"; "joined" or "left" say how it went
+#Connects to the room at "address"; "joined" or "left" report the result
 func join(address: String, shown_name: String, character: StringName) -> bool:
 	close()
 	if not address.is_valid_ip_address():
@@ -126,7 +118,7 @@ func join(address: String, shown_name: String, character: StringName) -> bool:
 	return true
 
 
-#The fair screen watches the room at "address" without playing; "joined" (with the picture of the game in "watched") or "left" say how it went
+#Fair screen watches the room at "address"; "joined" or "left" report the result
 func watch(address: String) -> bool:
 	close()
 	if not address.is_valid_ip_address():
@@ -142,12 +134,12 @@ func watch(address: String) -> bool:
 	return true
 
 
-#Messages and bytes this computer exchanged with the server so far (a client or the fair screen)
+#Messages and bytes exchanged with the server
 func traffic() -> Dictionary:
 	return _host_link.traffic() if _host_link != null else {}
 
 
-#Leaves the room, stops every thread and waits for each one before going on
+#Leaves the room and waits for every thread to stop
 func close() -> void:
 	if (role == Role.CLIENT or role == Role.WATCH) and _host_link != null and _host_link.is_open():
 		_host_link.send({"t": "bye"})
@@ -181,7 +173,7 @@ func close() -> void:
 	go_round = -1
 	go_at = 0
 	_wait_round = -1
-	#Nothing of the waits of the last game may reach the next room: no stale clock, loaded player or points
+	#Nothing of the last game reaches the next room
 	_go_left = -1.0
 	_loaded.clear()
 	_round_members.clear()
@@ -193,7 +185,7 @@ func close() -> void:
 	room_changed.emit()
 
 
-#A new game in the same room: nobody is ready, whoever left during the last game frees its place and anybody can still come in
+#New game in the same room: nobody ready, dropped places freed
 func reopen() -> void:
 	if role != Role.HOST:
 		return
@@ -211,7 +203,6 @@ func reopen() -> void:
 	_tell_watcher(_snapshot())
 
 
-#Starts listening for rooms announced on the network
 func browse() -> void:
 	stop_browsing()
 	rooms.clear()
@@ -227,7 +218,7 @@ func stop_browsing() -> void:
 	_listen_thread = null
 
 
-#The IPv4 addresses of this computer on a local network, to tell the others where the room is
+#IPv4 addresses of this computer, to tell the others
 func local_addresses() -> Array[String]:
 	var found: Array[String] = []
 	for address in IP.get_local_addresses():
@@ -250,7 +241,7 @@ func set_profile(shown_name: String, character: StringName) -> void:
 		_host_link.send({"t": "profile", "name": shown_name, "character": String(character)})
 
 
-#The server starts the game: the order of the rounds and a seed for each, the same on every computer
+#Server starts the game: round order and seeds, the same everywhere
 func start_game(plan: Array[StringName], seeds: Array[int]) -> void:
 	if role != Role.HOST:
 		return
@@ -261,8 +252,7 @@ func start_game(plan: Array[StringName], seeds: Array[int]) -> void:
 	_send_all({"t": "start", "plan": ids, "seeds": seeds})
 
 
-#Every computer says when its round is loaded and its opening film is over; the server lets all of them go together (or after GO_WAIT
-#seconds without the late ones, who then go as soon as they arrive)
+#Each computer reports its round loaded; the server releases all together or after GO_WAIT
 func report_loaded(round_index: int) -> void:
 	if role == Role.HOST:
 		_wait_round = round_index
@@ -284,7 +274,7 @@ func send_state(state: Dictionary) -> void:
 		_host_link.send(state)
 
 
-#A blow to a player of another computer; the server takes it there
+#A blow to a player of another computer, through the server
 func send_hit(state: Dictionary) -> void:
 	state["t"] = "hit"
 	if role == Role.HOST:
@@ -294,7 +284,7 @@ func send_hit(state: Dictionary) -> void:
 		_host_link.send(state)
 
 
-#The points of this computer for a round; the server gathers everybody's and sends them back to all
+#This computer's round points; the server sends everybody's back
 func report_points(round_index: int, points: int) -> void:
 	if role == Role.HOST:
 		_gather_points(round_index, 1, points)
@@ -302,11 +292,11 @@ func report_points(round_index: int, points: int) -> void:
 		_host_link.send({"t": "points", "round": round_index, "points": points})
 
 
-#The server sends everybody to the warm-up once they are all ready in the lobby
+#Server sends everybody to the warm-up once all are ready
 func begin_warmup() -> void:
 	if role == Role.HOST:
 		started = true
-		#A new game counts its rounds from 0 again: nothing of who played or scored the last one may count in it
+		#A new game counts rounds from 0 again
 		_round_members.clear()
 		_members_round = -1
 		_points.clear()
@@ -315,7 +305,6 @@ func begin_warmup() -> void:
 		_send_all({"t": "warmup"})
 
 
-#A vote to start from the warm-up: the server counts it there
 func vote() -> void:
 	if role == Role.HOST:
 		vote_received.emit(1)
@@ -323,13 +312,12 @@ func vote() -> void:
 		_host_link.send({"t": "vote"})
 
 
-#The server tells everybody how long the warm-up has left and how many voted
+#Server sends the warm-up time left and the votes
 func send_warm(seconds_left: float, votes: int, total: int) -> void:
 	_send_all({"t": "warm", "left": snappedf(seconds_left, 0.01), "votes": votes, "total": total})
 
 
-#Something of the round under way: the server tells it to everybody (the screen too), a player tells it to the server; the screen sends
-#nothing. It carries the round, so a late message of another round is never taken
+#Round events: server to everybody, player to server; tagged with the round
 func send_round_event(message: Dictionary) -> void:
 	message["t"] = "rnd"
 	message["r"] = GameSession.round_index
@@ -339,7 +327,7 @@ func send_round_event(message: Dictionary) -> void:
 		_host_link.send(message)
 
 
-#A player coming back to a game under way: the one that left with the same name or, if there is only one gone, that one
+#Returning player: same name, or the only one gone
 func _returning_member(shown_name: String) -> Dictionary:
 	if not started:
 		return {}
@@ -352,8 +340,7 @@ func _returning_member(shown_name: String) -> Dictionary:
 	return gone[0] if gone.size() == 1 else {}
 
 
-#The player takes its place again and gets the game as it is: the order, the seeds, the round under way and the points so far. It plays
-#from the next round on
+#The player takes its place back with the game as it is; plays from the next round
 func _take_back(link: NetLink, member: Dictionary) -> void:
 	link.id = int(member["id"])
 	link.send({"t": "welcome", "id": link.id})
@@ -367,14 +354,13 @@ func _take_back(link: NetLink, member: Dictionary) -> void:
 			shared[str(id)] = result.points_by_player[id]
 		table.append(shared)
 	link.send({"t": "rejoin", "plan": order, "seeds": GameSession.seeds, "round": GameSession.round_index, "table": table})
-	#It waits out the round under way: nobody spawns its player until the server moves everybody to the next one, and its points of this
-	#round are not waited for
+	#It sits out the round under way
 	_round_members.erase(link.id)
 	_change_member(link.id, {"connected": true, "waiting": true})
 	_check_points()
 
 
-#Whoever comes in wears the first character nobody is wearing (with all of them taken, the first one in another colour)
+#First free character, or the first one in another colour
 func _free_character() -> StringName:
 	for id in GameSession.CHARACTER_IDS:
 		var taken := false
@@ -385,11 +371,10 @@ func _free_character() -> StringName:
 	return GameSession.CHARACTER_IDS[0]
 
 
-#The server moves everybody on from the results of a round
 func advance_all() -> void:
 	if role != Role.HOST:
 		return
-	#Whoever came back plays from this round on: the room says so before everybody loads it
+	#Returning players play from this round on
 	var changed := false
 	for member in room:
 		if bool(member.get("waiting", false)):
@@ -439,7 +424,7 @@ func _start_threads() -> void:
 	_announce_thread.start(_announce_loop)
 
 
-#Thread of the server: takes every new connection and leaves it in a queue for the main thread
+#Server thread: queues every new connection for the main thread
 func _accept_loop() -> void:
 	while _threads_on:
 		if _server.is_connection_available():
@@ -450,7 +435,7 @@ func _accept_loop() -> void:
 		OS.delay_msec(20)
 
 
-#Thread of the server: says once a second on the local network that the room is open
+#Server thread: announces the room by UDP once a second
 func _announce_loop() -> void:
 	var udp := PacketPeerUDP.new()
 	udp.set_broadcast_enabled(true)
@@ -460,7 +445,7 @@ func _announce_loop() -> void:
 		if Time.get_ticks_msec() - last >= ANNOUNCE_EVERY:
 			last = Time.get_ticks_msec()
 			_mutex.lock()
-			#Places of players that dropped during the game: they can still come back to them
+			#Places of dropped players, still theirs to take back
 			var gone := 0
 			for member in room:
 				gone += 0 if bool(member.get("connected", true)) else 1
@@ -472,7 +457,7 @@ func _announce_loop() -> void:
 	udp.close()
 
 
-#Thread of who looks for rooms: listens to the announcements and leaves them in a queue
+#Browser thread: queues the room announcements
 func _listen_loop() -> void:
 	var udp := PacketPeerUDP.new()
 	if udp.bind(NetProtocol.DISCOVERY_PORT) != OK:
@@ -521,7 +506,7 @@ func _adopt_connections() -> void:
 		link.start()
 
 
-#Every message from a client goes through here, on the main thread; anything out of place is ignored
+#Every client message on the main thread; anything out of place is ignored
 func _apply_from_client(link: NetLink, message: Dictionary) -> void:
 	var kind: String = message["t"]
 	if link.id == 0:
@@ -620,7 +605,7 @@ func _apply_from_host(message: Dictionary) -> void:
 			GameSession.advance_now()
 		"warmup":
 			started = true
-			#A new game: the rounds of the last one no longer count as started (the server does the same in reopen)
+			#A new game: the last rounds no longer count as started
 			go_round = -1
 			GameSession.enter_warmup()
 		"warm":
@@ -643,8 +628,7 @@ func _apply_from_host(message: Dictionary) -> void:
 			_lose_host("La sala se cerró")
 
 
-#The fair screen, on the main thread: what the server tells it about the game. It keeps the room, the start of each round and the places
-#of the players for whatever shows them, and passes every message on; it never touches the game of this computer
+#Fair screen on the main thread: keeps the room, round starts and positions; never touches this game
 func _apply_watch(message: Dictionary) -> void:
 	match String(message["t"]):
 		"snapshot":
@@ -654,7 +638,7 @@ func _apply_watch(message: Dictionary) -> void:
 			go_at = Time.get_ticks_msec() - int(_number(message.get("since")) * 1000.0)
 			joined.emit()
 		"welcome":
-			#A server from before the fair screen took it for a player: it leaves at once
+			#An old server took the screen for a player
 			_lose_host("La sala es de una versión anterior y no acepta la pantalla de feria")
 			return
 		"reject":
@@ -687,7 +671,7 @@ func _apply_watch(message: Dictionary) -> void:
 	watched.emit(message)
 
 
-#A round let go: the first time, the moment is kept
+#A round released: keep the first moment
 func _take_go(round_index: int) -> void:
 	if round_index > go_round:
 		go_at = Time.get_ticks_msec()
@@ -714,7 +698,7 @@ func _change_member(player_id: int, changes: Dictionary) -> void:
 	_publish_room()
 
 
-#The server tells everybody who is in the room and copies it into the lobby of its own game
+#Server publishes the room and copies it into its own lobby
 func _publish_room() -> void:
 	_send_all({"t": "room", "members": room})
 	GameSession.sync_lobby(room)
@@ -725,7 +709,7 @@ func _send_all(message: Dictionary, except: NetLink = null) -> void:
 	for link in _links:
 		if link.id != 0 and link != except:
 			link.send(message)
-	#The fair screen gets everything too, except the places one by one: it gets them all together in "sts"
+	#The screen gets positions only in the combined "sts"
 	if message["t"] != "st":
 		_tell_watcher(message)
 
@@ -740,7 +724,7 @@ func _deliver_hit(message: Dictionary) -> void:
 			link.send(message)
 
 
-#A client that left or went silent: out of the room before the game, frozen and with no points during it
+#A client left or went silent: out of the room before the game, frozen during it
 func _drop(link: NetLink) -> void:
 	link.stop()
 	_links.erase(link)
@@ -755,7 +739,7 @@ func _drop(link: NetLink) -> void:
 		_mutex.unlock()
 		_publish_room()
 	else:
-		#During the game its place is kept: it may come back with the same name; meanwhile its player hides on every screen
+		#During the game its place is kept for a return with the same name
 		_change_member(link.id, {"connected": false})
 		_send_all({"t": "left", "id": link.id})
 		player_left.emit(link.id)
@@ -810,7 +794,7 @@ func _gather_points(round_index: int, player_id: int, points: int) -> void:
 	_check_points()
 
 
-#Whoever loaded "round_index" plays it; the first one of a newer round starts the list again
+#Whoever loaded "round_index" plays it; a newer round restarts the list
 func _join_round(round_index: int, player_id: int) -> void:
 	if round_index > _members_round:
 		_members_round = round_index
@@ -864,8 +848,7 @@ func _clean_character(value: Variant) -> String:
 	return id if ResourceLoader.exists("res://resources/characters/%s.tres" % id) else "fire"
 
 
-#Server: a fair screen asks to watch. It needs the same version and there is room for one; one that went silent gives its place. It
-#leaves the players' links at once, so it never counts as one of them, and it gets the picture of the game to catch up
+#Server: a fair screen asks to watch; one at most, out of the players' links, with a snapshot
 func _take_watcher(link: NetLink, message: Dictionary) -> void:
 	if link == _watch_link:
 		return
@@ -894,7 +877,7 @@ func _set_screen(value: bool) -> void:
 	_mutex.unlock()
 
 
-#What the fair screen needs when it comes in at any moment: the room, where the game is, the order and the seeds, and the points so far
+#Everything a screen needs to join at any moment
 func _snapshot() -> Dictionary:
 	var order: Array[String] = []
 	for id in GameSession.plan:
@@ -911,7 +894,7 @@ func _snapshot() -> Dictionary:
 		"table": table}
 
 
-#Server, every frame: the screen is only listened to for its goodbye; it gets the places of everybody together
+#Server, every frame: sends the screen everybody's positions together
 func _tend_watcher(delta: float) -> void:
 	if _watch_link == null:
 		return
@@ -931,7 +914,7 @@ func _tend_watcher(delta: float) -> void:
 		_watch_states = {}
 
 
-#Server: the state of a player kept for the next message to the screen, rebuilt from its known fields (never trusting what came)
+#Server: rebuilds a player's state from known fields for the screen
 func _note_state(player_id: int, state: Dictionary) -> void:
 	var at: Variant = state.get("p")
 	if _watch_link == null or not (at is Array and (at as Array).size() == 3):
@@ -940,7 +923,7 @@ func _note_state(player_id: int, state: Dictionary) -> void:
 		"m": _flag(state.get("m")), "a": _flag(state.get("a")), "po": _flag(state.get("po")), "ps": int(_number(state.get("ps")))}
 
 
-#Server: a shove between two players, told to the screen apart (it only shows it; the one who gets it is the only one who applies it)
+#Server: tells the screen about a shove (only the hit player applies it)
 func _show_hit(by: int, message: Dictionary) -> void:
 	_tell_watcher({"t": "struck", "by": by, "to": int(_number(message.get("to")))})
 
@@ -950,7 +933,7 @@ func _tell_watcher(message: Dictionary) -> void:
 		_watch_link.send(message)
 
 
-#The end of the game for the screen: the total and the best round of everybody in the room, as the server counted them
+#End of game for the screen: totals and best rounds as the server counted
 func _final_message() -> Dictionary:
 	var totals: Array[Dictionary] = []
 	for member in room:

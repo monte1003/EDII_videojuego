@@ -1,10 +1,7 @@
 class_name SelfieRules
 extends RefCounted
 
-#The rules of the perfect selfie with no nodes and by player id: a drone takes its photos on the sets of the studio, all of them,
-#never the same one twice in a row and each within reach on foot of the one before. Whoever is inside the frame at the shot gets followers: more in the
-#centre, more while posing and more the fewer are in the photo. Inside counts in the air too, up to a jump and a meter over the
-#floor of the set. It also keeps the power-ups. Every change is told with a signal
+#Perfect selfie rules with no nodes: photo order, frame, followers, poses and power-ups
 
 enum Phase { WAITING, TRAVEL, FRAME, LOCK, REVEAL, DONE }
 enum Power { JUMP, SPEED, SHIELD }
@@ -13,17 +10,17 @@ signal photo_announced(index: int, spot: StringName)
 signal frame_shown(index: int)
 signal frame_locked(index: int, seconds: float)
 signal photo_taken(index: int, shots: Dictionary)
-#"style" says which pose or dance it is: one at random each time, never the same twice in a row
+#"style" picks the pose or dance, never the same twice in a row
 signal pose_changed(player_id: int, posing: bool, style: int)
 signal power_taken(player_id: int, pedestal: int, kind: int, seconds: float)
 signal power_returned(pedestal: int, kind: int)
 signal finished
 
 const POWER_COUNT := 3
-#Seconds the frame takes to glide to where a feint sends it
+#Seconds the frame glides to a feint
 const FEINT_GLIDE := 0.35
 
-#How one player came out in one photo, and where it was when the shot was taken
+#How one player came out in one photo
 class Shot:
 	var inside := false
 	var centered := false
@@ -40,7 +37,6 @@ class PlayerState:
 	var photos := 0
 	var poses := 0
 	var best := 0
-	#Where it is, as the scene reports it
 	var position := Vector3.ZERO
 	var grounded := true
 	var out := false
@@ -58,22 +54,22 @@ var settings: SelfieSettings
 var sheet: ScoreSheet
 var layout: SelfieLayout
 var players: Dictionary = {}
-#How high the feet of a player rise in a jump; the scene measures it from its players
+#Jump height of a player, measured by the scene
 var jump_height := 1.03
-#Feet of everybody who came out in the last photo (players and bots), as the shot saw them
+#Feet of everybody in the last photo, bots included
 var photo_feet: Array[Vector3] = []
 var phase := Phase.WAITING
 var photo_index := -1
-#The spots in the order of the photos
+#Spots in photo order
 var order: Array[StringName] = []
 var time_left := 0.0
-#Where the bots stand, as the scene reports it: they count as somebody else in the photo
+#Bot positions, counted as others in the photo
 var extras: Array[Vector3] = []
-#Kind of the power-up on each pedestal (-1 while it is gone) and the seconds until it comes back
+#Power-up kind per pedestal (-1 gone) and seconds until it returns
 var pedestal_kinds: Array[int] = []
 
 var _rng := RandomNumberGenerator.new()
-#The style of a pose comes from other dice: posing on one computer must not change where the frame goes on the others
+#Pose styles use their own dice so the frame stays the same on every computer
 var _style_rng := RandomNumberGenerator.new()
 var _phase_total := 1.0
 var _wander := Vector2.ZERO
@@ -97,15 +93,14 @@ func _init(round_settings: SelfieSettings, score_sheet: ScoreSheet, map: SelfieL
 		_pedestal_left.append(0.0)
 
 
-#How high the feet rise in a plain jump of "jump_velocity": the steps of the physics add half a step of speed to the curve of the
-#jump (1.07 m for 4.5 m/s, as measured with a body)
+#Plain jump height including the physics half step (1.07 m for 4.5 m/s)
 static func jump_height_of(jump_velocity: float) -> float:
 	var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 	var step := 1.0 / Engine.physics_ticks_per_second
 	return jump_velocity * jump_velocity / (2.0 * gravity) + jump_velocity * step / 2.0
 
 
-#Every spot once, in a random order: the bag is only refilled when it is empty
+#Every spot once in random order, refilled when empty
 static func shuffled_spots(spots: Array[StringName], rng: RandomNumberGenerator) -> Array[StringName]:
 	var bag: Array[StringName] = spots.duplicate()
 	for index in range(bag.size() - 1, 0, -1):
@@ -116,9 +111,7 @@ static func shuffled_spots(spots: Array[StringName], rng: RandomNumberGenerator)
 	return bag
 
 
-#The sets of the photos in an order that can be walked: a random walk from set to set where every leg takes at most "reach"
-#seconds on foot, never stays on the same set and passes by no set more than twice. The first walk that goes through every set with
-#no leg too long wins; with none, the one that went through most sets with the fewest long legs
+#Walkable photo order: random walk with legs under "reach" seconds, no repeats in a row
 static func photo_order(spots: Array[StringName], count: int, table: Dictionary, origin: StringName, reach: float, rng: RandomNumberGenerator) -> Array[StringName]:
 	var best: Array[StringName] = []
 	var best_score := -INF
@@ -138,8 +131,7 @@ static func photo_order(spots: Array[StringName], count: int, table: Dictionary,
 	return best
 
 
-#Every round has a photo in the troll zone: when the walk left it out, it takes the place of the photo "wanted" or, if the way there or
-#on from there is too long, of the first other one where both ways are short
+#Puts a troll zone photo in every round where both ways stay short
 static func with_troll(walk: Array[StringName], table: Dictionary, origin: StringName, reach: float, wanted: int) -> void:
 	if walk.has(&"Z") or not table.has(&"Z") or walk.is_empty():
 		return
@@ -238,7 +230,7 @@ func tick(delta: float) -> void:
 				_announce(photo_index + 1)
 
 
-#The scene says where a player is (its feet), whether it stands on the floor and whether it fell off the map
+#The scene reports feet, floor contact and falls
 func place(player_id: int, position: Vector3, grounded: bool, out: bool) -> void:
 	var state := state_of(player_id)
 	if state == null:
@@ -250,7 +242,7 @@ func place(player_id: int, position: Vector3, grounded: bool, out: bool) -> void
 		_set_pose(state, false)
 
 
-#A player starts or stops posing; it can only pose standing on the floor
+#Poses only standing on the floor
 func set_posing(player_id: int, on: bool) -> bool:
 	var state := state_of(player_id)
 	if state == null or phase == Phase.WAITING or phase == Phase.DONE:
@@ -261,7 +253,7 @@ func set_posing(player_id: int, on: bool) -> bool:
 	return true
 
 
-#A player of another computer poses or not as its computer says; here it only counts for the photo
+#A remote pose only counts for the photo
 func set_remote_pose(player_id: int, on: bool) -> void:
 	var state := state_of(player_id)
 	if state != null and state.posing != on:
@@ -269,7 +261,6 @@ func set_remote_pose(player_id: int, on: bool) -> void:
 		state.pose_time = 0.0
 
 
-#One press starts the pose and the next one ends it
 func toggle_pose(player_id: int) -> bool:
 	return set_posing(player_id, not is_posing(player_id))
 
@@ -290,12 +281,12 @@ func spot() -> StringName:
 	return order[photo_index % order.size()] if photo_index >= 0 else &""
 
 
-#Share of the way from the first photo to the last, from 0 to 1
+#Share from the first photo to the last
 func progress_of(index: int) -> float:
 	return clampf(float(index) / maxf(photo_count() - 1, 1.0), 0.0, 1.0)
 
 
-#Side of the frame of a photo once it is fixed
+#Frame side once fixed
 func final_size(index: int) -> float:
 	return lerpf(settings.frame_start, settings.frame_end, progress_of(index))
 
@@ -304,12 +295,11 @@ func lock_seconds_of(index: int) -> float:
 	return lerpf(settings.lock_seconds, settings.lock_end, progress_of(index))
 
 
-#Whether the frame is on the floor right now
 func frame_visible() -> bool:
 	return phase == Phase.FRAME or phase == Phase.LOCK
 
 
-#Side of the frame right now: it starts a little bigger, breathes while it moves and ends at its final size
+#Frame side now: starts bigger, breathes while moving, ends at its size
 func frame_size() -> float:
 	var size := final_size(photo_index)
 	if phase != Phase.FRAME:
@@ -319,7 +309,7 @@ func frame_size() -> float:
 	return size * lerpf(1.22, 1.0, settle) * (1.0 + 0.04 * sin(elapsed * 3.0) * (1.0 - settle))
 
 
-#Middle of the frame right now, on the floor of its island
+#Frame middle now on its island floor
 func frame_center() -> Vector3:
 	var offset := _locked
 	if phase == Phase.FRAME:
@@ -329,29 +319,27 @@ func frame_center() -> Vector3:
 	return layout.position_of(spot()) + Vector3(offset.x, 0.0, offset.y)
 
 
-#How far the fixed frame is from its shot, from 0 to 1
+#How close the fixed frame is to its shot, 0 to 1
 func lock_share() -> float:
 	return 1.0 - clampf(time_left / _phase_total, 0.0, 1.0) if phase == Phase.LOCK else 0.0
 
 
-#Whether some feet are inside the frame as it is now
 func is_inside(point: Vector3) -> bool:
 	return in_frame(point, frame_center(), frame_size())
 
 
-#Inside a frame: over its square on the ground and, in height, from a little under the floor of its set up to a jump and a meter
-#more over it, so a jump at the shot still comes out
+#Inside: over the square and from under the floor up to a jump and a meter
 func in_frame(point: Vector3, centre: Vector3, size: float) -> bool:
 	var rise := point.y - centre.y
 	return absf(point.x - centre.x) <= size / 2.0 and absf(point.z - centre.z) <= size / 2.0 		and rise >= -settings.below_floor and rise <= ceiling()
 
 
-#How high over the floor of the set somebody still comes out in the photo
+#Highest point over the set floor that still comes out
 func ceiling() -> float:
 	return jump_height + settings.air_room
 
 
-#Takes the power-up of a pedestal; false when it is gone. Jump and speed are kept here, the shield goes to whoever keeps the blows
+#Takes a pedestal power-up; the shield goes to whoever keeps the blows
 func take_power(player_id: int, pedestal: int) -> bool:
 	var state := state_of(player_id)
 	if state == null or pedestal < 0 or pedestal >= pedestal_kinds.size() or pedestal_kinds[pedestal] < 0:
@@ -370,7 +358,7 @@ func take_power(player_id: int, pedestal: int) -> bool:
 	return true
 
 
-#With several players, the one with the fewest followers (alone nobody is last)
+#With several players, the one with fewest followers
 func is_last(player_id: int) -> bool:
 	if players.size() < 2:
 		return false
@@ -383,7 +371,7 @@ func is_last(player_id: int) -> bool:
 	return someone_ahead
 
 
-#How much higher this player jumps and how much faster it runs right now
+#Current jump and run scale
 func jump_scale(player_id: int) -> float:
 	var state := state_of(player_id)
 	return sqrt(settings.jump_scale) if state != null and state.jump_left > 0.0 else 1.0
@@ -426,7 +414,7 @@ func _enter(next: Phase, seconds: float) -> void:
 	time_left = _phase_total
 
 
-#Where the middle of the frame is, from the middle of its island, "elapsed" seconds after it showed up
+#Frame offset from its island middle after "elapsed"
 func _offset_at(elapsed: float) -> Vector2:
 	var reach := _wander.x
 	var slide := Vector2(sin(elapsed * 1.15 + _wander.y), sin(elapsed * 0.8 + _wander.y * 1.7)) * reach
@@ -472,7 +460,7 @@ func _shoot() -> void:
 	photo_taken.emit(photo_index, shots)
 
 
-#A photo in the air adds a small share of what a pose gives, as crowded as the photo is
+#A photo in the air adds a small share of a pose, by crowd
 func air_bonus(airborne: bool, crowd: int) -> int:
 	if not airborne:
 		return 0

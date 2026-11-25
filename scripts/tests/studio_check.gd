@@ -1,14 +1,10 @@
 extends SceneTree
 
-#Checks "El Estudio" of the perfect selfie with real bodies: the collisions match the plan with no hole, nobody leaves the studio
-#jumping and diving at its walls, every way of the graph is walked for real at a fifth less than full speed, both trampolines put a
-#body on the podium, the pit is left by its ramp and not with a jump, the tricks of the floor move real bodies, a real jump rises as
-#the rules count it, and in the round itself a jump right at the shot comes out, at the edge and in the middle of the frame.
-#Run: godot --headless --fixed-fps 60 --path . --script res://scripts/tests/studio_check.gd
+#Checks El Estudio with real bodies: collisions, walls, ways, trampolines and the round
 
 const GRID := 1.5
 const SHARE := 0.8
-#Seconds a walker gets for a way on top of what the graph says it costs at a fifth less speed
+#Extra seconds a walker gets per way
 const WALK_SLACK := 2.5
 const STEP := 1.0 / 60.0
 
@@ -57,7 +53,7 @@ func _run() -> void:
 	quit(1 if _failures > 0 else 0)
 
 
-#Capsules dropped all over the studio land exactly where the plan says the floor is, on top of everything and under the catwalk
+#Capsules dropped all over land where the plan says
 func _check_rain() -> void:
 	var drops: Array[Dictionary] = []
 	var x := -SelfieLayout.HALF.x
@@ -96,7 +92,7 @@ func _drop(x: float, z: float, floor_height: float) -> Dictionary:
 	return {"body": body, "floor": floor_height}
 
 
-#The edge of a piece is where a capsule may rest half on it: those spots are left out of the rain
+#Capsules resting half on an edge are skipped
 func _clear_of_edges(x: float, z: float, ceiling: float) -> bool:
 	var here := _layout.height_at(x, z, ceiling)
 	for offset: Vector2 in [Vector2(0.45, 0.0), Vector2(-0.45, 0.0), Vector2(0.0, 0.45), Vector2(0.0, -0.45), Vector2(0.32, 0.32), Vector2(-0.32, 0.32), Vector2(0.32, -0.32), Vector2(-0.32, -0.32)]:
@@ -112,8 +108,7 @@ func _near_pillar(x: float, z: float) -> bool:
 	return false
 
 
-#Players run at the walls from the inside all around the studio and from the top of the podium, the runway, the live stage and
-#the dance floor, jumping and diving: none gets out, none ends under the floor
+#Players running and diving at the walls never get out or under the floor
 func _check_walls() -> void:
 	var runners: Array[Player] = []
 	var count := _layout.outline.size()
@@ -158,8 +153,7 @@ func _runner(at: Vector3, heading: Vector2) -> Player:
 	return player
 
 
-#Every way of the graph walked for real, both ways, at a fifth less than full speed: a body that goes straight from one place to the
-#other arrives in time
+#Every way walked for real both ways at a fifth less speed
 func _check_links() -> void:
 	var walkers: Array[Dictionary] = []
 	for entry in _layout.links:
@@ -203,8 +197,7 @@ func _walker(a: StringName, b: StringName, seconds: float) -> Dictionary:
 		"limit": seconds / SHARE + WALK_SLACK, "done": false}
 
 
-#From the trampoline, running at a fifth less toward the podium, a body ends on top of it; the cannon throws whoever steps on it onto
-#the runway with no help
+#Trampoline to podium and cannon to runway with real bodies
 func _check_trampolines() -> void:
 	var jumpers: Array[Dictionary] = []
 	for pad in _layout.pads:
@@ -332,7 +325,7 @@ func _check_tricks() -> void:
 	await _frames(3)
 
 
-#As the round does it: the drag or the slide of the floor, the slow carpet and the bounce of the mattress
+#Floor effects as the round applies them
 func _apply_floor(player: Player) -> void:
 	var rig := player.get_node("CameraRig") as PlayerCamera
 	var base_speed := 5.0
@@ -344,8 +337,7 @@ func _apply_floor(player: Player) -> void:
 		player.apply_push(Vector3(player.push_velocity.x, effect.bounce, player.push_velocity.z))
 
 
-#A spot "reach" meters from the middle of the frame (or the nearest one farther out), on its plain floor and clear of the pads of a
-#set by the width of a body
+#Spot "reach" from the frame middle on plain floor, clear of pads
 func _clear_spot(layout: SelfieLayout, centre: Vector3, reach: float) -> Vector3:
 	for ring: float in [reach, reach + 0.6, reach + 1.2, reach + 1.8, reach + 2.4]:
 		for turn in 16:
@@ -360,8 +352,7 @@ func _clear_spot(layout: SelfieLayout, centre: Vector3, reach: float) -> Vector3
 	return centre + Vector3(reach, 0.05, 0.13)
 
 
-#The round itself: a jump right at the shot, at the edge of the frame and then in its middle, comes out in the photo, where the
-#photo sees the player is where the rules saw it, and the photo comes out at its size
+#A jump at the shot comes out in the photo where the rules saw it
 func _check_round() -> void:
 	root.get_node("GameState").select_character(1, load("res://resources/characters/fire.tres") as CharacterData)
 	var scene: Variant = (load("res://scenes/levels/perfect_selfie.tscn") as PackedScene).instantiate()

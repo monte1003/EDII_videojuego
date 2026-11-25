@@ -1,33 +1,32 @@
 class_name BotRole
 extends RefCounted
 
-#How a bot picks its target vertex on the graph. Like the ghosts of Pac-Man, every role is one way of
-#hunting: they share the walking, the push and the perception of ChaserBot and only differ here.
+#How a bot picks its target vertex; like Pac-Man ghosts, each role is one way of hunting
 
 enum Kind { CHASE, AMBUSH, GUARD, FLANK }
 
 
-#Roles that already know where the players are (a guard knows its zone) do not need to see them
+#Roles that already know where the players are need no sight
 func needs_sight() -> bool:
 	return true
 
 
-#The vertex this bot should go to, given the player it is paying attention to
+#Target vertex for the watched player
 func pick_target(bot: ChaserBot, ctx: ChaseContext, target: ChaseTarget) -> StringName:
 	return direct_target(bot, ctx, target)
 
 
-#Seconds after the round starts at which this bot is released; "head_start" is the base of the level
+#Release delay after the round starts; "head_start" is the level base
 func release_delay(head_start: float) -> float:
 	return head_start
 
 
-#Where this role starts a round; "free" are the spawn vertices nobody took yet, in the level's order
+#Start vertex; "free" are the spawn vertices still free
 func spawn_vertex(free: Array[StringName], _ctx: ChaseContext) -> StringName:
 	return free[0]
 
 
-#The player's platform, or the end of its bridge that makes the bot cross it
+#Player platform, or the end of its bridge that makes the bot cross
 func direct_target(bot: ChaserBot, ctx: ChaseContext, target: ChaseTarget) -> StringName:
 	var candidates := target.locator.chase_candidates()
 	if candidates.size() == 1:

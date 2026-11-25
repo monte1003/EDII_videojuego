@@ -1,7 +1,7 @@
 class_name BalloonField
 extends Node3D
 
-#Balloons tied to the ground that sway in the wind: one draw call for the balloons and one for the strings of each stretch of the course
+#Swaying balloons: one draw call for balloons and one for strings per stretch
 
 const STRING_RADIUS := 0.014
 const SWAY := 0.9
@@ -11,7 +11,7 @@ var _cells: Array[Dictionary] = []
 var _clock := 0.0
 
 
-#A balloon tied at "base", its string "length" long, "size" times the normal balloon
+#Balloon tied at "base" with a string "length" long
 func add(base: Vector3, length: float, size: float, color: Color, phase: float) -> void:
 	_ties.append({"base": base, "length": length, "size": size, "color": color, "phase": phase})
 
@@ -71,7 +71,7 @@ func _multi(mesh: Mesh, colors: bool, count: int) -> MultiMesh:
 	return multi
 
 
-#The balloon floats over its tie and leans with the wind; the string goes from the tie to the knot
+#Floats over its tie and leans with the wind
 func _place(entry: Dictionary) -> void:
 	var balloons: MultiMesh = entry["balloons"]
 	var strings: MultiMesh = entry["strings"]

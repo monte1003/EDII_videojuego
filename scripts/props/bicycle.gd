@@ -1,8 +1,7 @@
 class_name Bicycle
 extends Node3D
 
-#A chunky toy bicycle for the cyclists of the street, built to the size of a Citizen (about 1 m tall): it rolls toward +Z, its wheels
-#spin with its speed and its frame has one bright colour
+#Toy bicycle for street cyclists, Citizen-sized; rolls toward +Z
 
 const WHEEL_RADIUS := 0.27
 const TIRE_THICKNESS := 0.05
@@ -86,7 +85,7 @@ func _wheel(centre: Vector3, accent: Color) -> Node3D:
 	tire.material_override = _material(TIRE_COLOR, 0.85)
 	tire.rotation_degrees = Vector3(0.0, 0.0, 90.0)
 	wheel.add_child(tire)
-	#Three bars crossing at the hub, so the spin can be seen
+	#Three crossing bars so the spin shows
 	for angle in [0.0, 60.0, 120.0]:
 		var spoke := MeshInstance3D.new()
 		var box := BoxMesh.new()
@@ -119,7 +118,7 @@ func _tube(from: Vector3, to: Vector3, radius: float, material: Material) -> voi
 	tube.material_override = material
 	add_child(tube)
 	tube.position = (from + to) / 2.0
-	#A capsule stands on Y: its axis is turned to point from one end to the other
+	#Points a Y capsule from one end to the other
 	var axis := (to - from) / maxf(length, 0.0001)
 	tube.basis = Basis(Quaternion(Vector3.UP, axis))
 

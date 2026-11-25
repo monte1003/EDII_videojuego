@@ -1,10 +1,7 @@
 class_name NetPanel
 extends VBoxContainer
 
-#The room on the local network, at the bottom left of the lobby: one line that says how this computer plays (alone, with its room open
-#and the address the others must use, or inside the room of another) and the links to open a room, join one or leave it. Joining opens a
-#list of the rooms found on the network and a field for the address of the server, checked before trying; each room can be joined as a
-#player (four at most) or as its fair screen (one at most), which turns this computer into the screen that watches the game
+#Local network room line in the lobby: how this computer plays and the links to open, join or leave
 
 var _status: Label
 var _open_link: TextButton
@@ -17,7 +14,7 @@ var _note: Label
 var _cancel_link: TextButton
 
 
-#The character this computer picked, as the room names it
+#Character this computer picked, as the room names it
 static func local_character() -> StringName:
 	var character := GameState.get_character(GameState.PLAYER_ONE)
 	return character.id if character != null else &"fire"
@@ -48,7 +45,6 @@ func is_picking() -> bool:
 	return _picker.visible
 
 
-#A short message in the line of the room
 func say(text: String) -> void:
 	_status.text = text
 	_status.add_theme_color_override("font_color", Palette.CORAL)
@@ -109,7 +105,7 @@ func _connect_to(address: String) -> void:
 		say("No se pudo conectar con %s" % clean)
 
 
-#This computer becomes the fair screen of that room: it watches the game and plays nothing
+#This computer becomes the fair screen of that room
 func _watch_room(address: String) -> void:
 	var clean := address.strip_edges()
 	if not clean.is_valid_ip_address():
@@ -122,7 +118,7 @@ func _watch_room(address: String) -> void:
 func _fill_rooms() -> void:
 	if _list == null or not _picker.visible:
 		return
-	#The list is made again every time a room speaks: with the pad the selection stays on the same choice of the same room
+	#The list is rebuilt when a room speaks; the pad keeps its selection
 	var focused := get_viewport().gui_get_focus_owner()
 	var kept := str(focused.get_meta("choice", "")) if focused != null and _list.is_ancestor_of(focused) else ""
 	var follow := InputHints.uses_pad() and (kept != "" or focused == _cancel_link or focused == null)
@@ -135,7 +131,7 @@ func _fill_rooms() -> void:
 		var info: Dictionary = rooms[address]
 		var players := int(info.get("players", 0))
 		var open := bool(info.get("open", true)) and players < NetRoom.CAPACITY
-		#During a game, whoever dropped can still take its place back
+		#During a game a dropped player can take its place back
 		var back := not bool(info.get("open", true)) and int(info.get("gone", 0)) > 0
 		var screen_free := not bool(info.get("screen", false))
 		var entry := VBoxContainer.new()

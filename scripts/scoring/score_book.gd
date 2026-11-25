@@ -1,7 +1,7 @@
 class_name ScoreBook
 extends RefCounted
 
-#The best scores of this computer: one per minigame and the best whole game. A missing or broken file is the same as an empty book
+#Best scores of this computer per minigame and per game; a broken file is an empty book
 
 const DEFAULT_PATH := "user://scores.json"
 
@@ -24,7 +24,7 @@ func best_session() -> int:
 	return _session
 
 
-#Keeps the points of a round when they beat the best ones; true when they did
+#Keeps the round points when they beat the best; true if they did
 func submit_round(id: StringName, points: int) -> bool:
 	if points <= best_round(id):
 		return false
@@ -41,7 +41,7 @@ func submit_session(total: int) -> bool:
 	return true
 
 
-#Anything that is not what the game wrote is dropped piece by piece, so one bad value never takes the rest with it
+#Drops anything invalid piece by piece, keeping the rest
 func _read() -> void:
 	_rounds.clear()
 	_session = 0
@@ -63,7 +63,7 @@ func _read() -> void:
 				_rounds[key] = clampi(int(rounds[key]), 0, ScoreSheet.MAX_POINTS)
 
 
-#The only place that writes the file: first to a temporary one that then replaces it, so a cut in the middle never breaks the records
+#Writes a temporary file that then replaces the real one
 func _write() -> void:
 	var temporary := path + ".tmp"
 	var file := FileAccess.open(temporary, FileAccess.WRITE)

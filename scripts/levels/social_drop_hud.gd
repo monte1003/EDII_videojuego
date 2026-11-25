@@ -1,7 +1,7 @@
 class_name SocialDropHud
 extends RoundHud
 
-#The SocialDrop screen: the clock and, when the screens stop, the icon to stand on
+#SocialDrop screen: clock and the target icon when the screens stop
 
 const ICON_SIZE := 68.0
 
@@ -38,7 +38,7 @@ func _ready() -> void:
 	_top.move_child(_stage_label, 1)
 
 
-#The icon that stays, shown from the moment the screens stop until the tiles fall
+#Target icon from the stop until the drop
 func show_target(texture: Texture2D, shown_name: String) -> void:
 	_target_icon.texture = texture
 	_target_name.text = shown_name.to_upper()
@@ -54,7 +54,7 @@ func hide_target() -> void:
 	create_tween().tween_property(_target, "modulate:a", 0.0, 0.25)
 
 
-#The stage of the round, from 1 to "count": it grows as the rounds get harder
+#Round stage from 1 to "count"
 func show_stage(number: int, count: int) -> void:
 	_stage_label.text = "ETAPA %d / %d" % [number, count]
 	_stage_label.pivot_offset = _stage_label.size / 2.0

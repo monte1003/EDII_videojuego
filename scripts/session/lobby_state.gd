@@ -1,7 +1,7 @@
 class_name LobbyState
 extends RefCounted
 
-#The places of the lobby and who is ready; the screen only draws what is here
+#Lobby places and who is ready; the screen only draws this
 
 signal changed
 
@@ -51,7 +51,7 @@ func ready_count() -> int:
 	return total
 
 
-#The game starts when there is somebody and everybody is ready
+#Starts when somebody is there and everybody is ready
 func all_ready() -> bool:
 	return not slots.is_empty() and ready_count() == slots.size()
 

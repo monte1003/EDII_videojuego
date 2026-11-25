@@ -5,10 +5,9 @@ signal screen_changed(id: StringName)
 var tree := ScreenTree.new()
 
 var current: StringName = &""
-#The music of the screens
 var music := MusicBox.new()
 
-#The screen being loaded and the last one asked for meanwhile; it opens when the wipe ends
+#Screen being loaded and the last one asked for meanwhile
 var _heading: StringName = &""
 var _pending: ScreenTree.ScreenNode
 
@@ -26,7 +25,7 @@ func _ready() -> void:
 	tree.add_screen(&"lobby", &"podium", "Podio", "res://scenes/menus/podium.tscn")
 	tree.add_screen(&"lobby", &"rejoin", "De vuelta en la partida", "res://scenes/menus/rejoin_wait.tscn")
 	tree.add_screen(&"lobby", &"session_results", "Fin de la partida", "res://scenes/menus/session_results.tscn")
-	#Test menu of the main menu: opens any minigame straight away, outside a session
+	#Test menu: opens any minigame outside a session
 	tree.add_screen(&"main_menu", &"test_games", "Test", "res://scenes/menus/test_menu.tscn")
 	tree.add_screen(&"test_games", &"rumble_lab", "Vibración", "res://scenes/menus/rumble_lab.tscn")
 	tree.add_screen(&"main_menu", &"options", "Opciones", "res://scenes/menus/options_menu.tscn")
@@ -38,11 +37,11 @@ func _ready() -> void:
 	add_child(music)
 	screen_changed.connect(music.play_for)
 	music.play_for.call_deferred(current)
-	#ScreenFader is the last autoload: connect once all of them exist
+	#ScreenFader is the last autoload
 	_connect_fader.call_deferred()
 
 
-#Each screen says who it is when it loads, so running a scene on its own also works
+#Each screen registers itself, so a scene run alone also works
 func mark_current(id: StringName) -> void:
 	if not tree.has(id):
 		push_error("ScreenFlow: la pantalla %s no está en el árbol" % id)
@@ -59,7 +58,7 @@ func open(id: StringName) -> void:
 	_change_to(node)
 
 
-#Going back is the parent link, so no screen needs to know where it came from
+#Back follows the parent link
 func back() -> void:
 	var node := tree.find(current)
 	if node == null or node.parent == null:
@@ -71,7 +70,7 @@ func go_to_root() -> void:
 	_change_to(tree.root)
 
 
-#Loads the current screen again, for the restart of a minigame that runs on its own
+#Reloads the current screen, to restart a minigame run alone
 func reload_current() -> void:
 	var node := tree.find(current)
 	if node != null:
@@ -83,7 +82,7 @@ func children_of(id: StringName) -> Array[ScreenTree.ScreenNode]:
 	return node.children if node != null else [] as Array[ScreenTree.ScreenNode]
 
 
-#Root to screen, the trail each screen shows at the top
+#Trail from the root shown at the top of each screen
 func trail(id: StringName) -> String:
 	var names := PackedStringArray()
 	for node in tree.path_to(id):
@@ -96,7 +95,7 @@ func title_of(id: StringName) -> String:
 	return node.title if node != null else ""
 
 
-#During a wipe the last request is kept, except a repeat of the screen being loaded (a double click)
+#During a wipe the last request wins, except a repeat (double click)
 func _change_to(node: ScreenTree.ScreenNode) -> void:
 	if ScreenFader.busy:
 		if node.id != _heading:

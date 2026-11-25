@@ -1,7 +1,7 @@
 class_name FerrisWheel
 extends Node3D
 
-#A big wheel in the distance that turns slowly while its cabins stay upright; it faces +Z and stands on its base point
+#Distant wheel turning slowly with upright cabins; faces +Z
 
 const SPOKES := 12
 const CABINS := 12
@@ -48,7 +48,7 @@ func _process(delta: float) -> void:
 	_place_cabins()
 
 
-#Spokes on both faces of the wheel, one draw call
+#Spokes on both faces, one draw call
 func _spokes() -> MultiMeshInstance3D:
 	var bar := BoxMesh.new()
 	bar.size = Vector3(1.0, 0.3, 0.3)
@@ -89,7 +89,7 @@ func _cabin_field(colors: Array[Color]) -> MultiMesh:
 	return multi
 
 
-#The cabins hang from the rim and never turn over
+#Cabins never turn over
 func _place_cabins() -> void:
 	for index in CABINS:
 		var angle := _turn + TAU * index / CABINS
@@ -97,7 +97,7 @@ func _place_cabins() -> void:
 		_cabins.set_instance_transform(index, Transform3D(Basis.IDENTITY, at))
 
 
-#Two A-frames, one on each face
+#Two A-frames
 func _legs() -> void:
 	var leg := BoxMesh.new()
 	leg.size = Vector3(0.7, 1.0, 0.7)

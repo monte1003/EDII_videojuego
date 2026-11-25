@@ -1,16 +1,14 @@
 class_name AttractSets
 extends RefCounted
 
-#The places of the fair screen's trailer, built once from the real pieces of the game: the night stage of the podium, La Plaza of the
-#trend war, El Plató of the selfie and the SocialDrop board, each with its own sky and light. Only one is in the scene at a time: the
-#others wait out of the tree, so they cost nothing to draw or to update
+#Trailer places built once from real game pieces; only one in the scene at a time
 
 const STAGE := &"stage"
 const PLAZA := &"plaza"
 const PLATO := &"plato"
 const DROP := &"drop"
 const CHARACTERS: Array[StringName] = [&"fire", &"water", &"plant", &"lightning"]
-#The made-up standings of the stage: each character on its own block, the first one in the middle
+#Made-up standings for the stage, the first in the middle
 const STAGE_POINTS: Array[int] = [3920, 3310, 2740, 2105]
 const ICONS: Array[String] = ["chat", "foto", "video", "me_gusta", "historia", "directo"]
 
@@ -18,7 +16,7 @@ const ICONS: Array[String] = ["chat", "foto", "video", "me_gusta", "historia", "
 class Place:
 	var id: StringName
 	var root := Node3D.new()
-	#What moves with the clock (bars, blocks, belts), the layout of an arena map and the board of SocialDrop
+	#What moves with the clock, the arena layout and the SocialDrop board
 	var ground: ArenaGround
 	var layout: ArenaLayout
 	var board: SocialDropWorld
@@ -26,8 +24,7 @@ class Place:
 	var entries: Array[PodiumPlan.Entry] = []
 
 
-#Builds one place under "holder" (which must be in the tree) and takes it out again; one place per call, so the screen can breathe
-#between them
+#Builds one place under "holder" and takes it out again; one per call
 static func build(id: StringName, holder: Node3D) -> Place:
 	var place := Place.new()
 	place.id = id
@@ -70,7 +67,7 @@ static func build(id: StringName, holder: Node3D) -> Place:
 	return place
 
 
-#The entry of the stage for one of the characters, in the order of CHARACTERS
+#Stage entry of a character, in the order of CHARACTERS
 static func entry_of(place: Place, index: int) -> PodiumPlan.Entry:
 	for entry in place.entries:
 		if entry.player_id == index + 1:
@@ -78,8 +75,7 @@ static func entry_of(place: Place, index: int) -> PodiumPlan.Entry:
 	return place.entries[0]
 
 
-#A path through La Plaza on foot: from a neighbour of the middle, through the middle, to the neighbour most across from it, every
-#point on the ground (bridges included)
+#Walk through La Plaza from one neighbour of the middle to the opposite one
 static func plaza_run(layout: ArenaLayout) -> Array[Vector3]:
 	var middle := layout.position_of(TrendLayout.CORE)
 	var neighbours: Array[Vector3] = []

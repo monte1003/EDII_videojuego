@@ -1,93 +1,81 @@
 class_name TrendLayout
 extends ArenaLayout
 
-#"La Plaza": one big round island floating over a sea of clouds, flat and all joined: the plaza in the middle holds the giant screen,
-#and around it, close and open to each other like petals, five zones with their own shape, colour and obstacle: the jump challenge (a
-#bar that sweeps a round floor), airplane mode (a glass cylinder where the gravity turns over), the sea of memes (platforms over a pond),
-#the locked screen (a maze of screens that rise and sink by turns) and the rain of likes (a stepped tower with trampolines). Each round
-#of the game is played in one zone and its bubbles are only born on the points that zone lists. Every zone is written in its own frame:
-#"u" goes from the middle of the map outward through the middle of the zone and "v" across it
+#La Plaza: round island with the big screen in the middle and five zones around it
 
 enum Zone { ROLLER, GRAVITY, ISLANDS, MAZE, TOWER, PLAZA }
 
 const CORE := &"C"
 const ZONE_COUNT := 5
-#Direction of each zone (degrees from +X toward +Z), how far its middle is from the middle of the map and how far the zone reaches
+#Zone direction in degrees, distance of its middle and reach
 const ANGLES: Array[float] = [-90.0, -18.0, 54.0, 126.0, 198.0]
 const DISTANCES: Array[float] = [27.0, 24.0, 33.0, 27.0, 28.0]
 const SPANS: Array[float] = [12.5, 9.5, 15.0, 13.5, 13.0]
 const PREFIX: Array[String] = ["ro", "gv", "ar", "mz", "tw"]
-#The name of each zone, from the language of the social networks: a challenge everybody copies, the mode that makes you float, a pond of
-#memes, a screen that will not unlock and the likes that rain on whoever climbs
+#Zone names from social media language
 const LABELS: Array[String] = ["RETO DEL SALTO", "MODO AVIÓN", "MAR DE MEMES", "PANTALLA BLOQUEADA", "LLUVIA DE LIKES"]
 const FENCE_RADIUS := 48.0
 const FENCE_SIDES := 10
-#The whole map is one round island this wide; the plaza in its middle is this wide and its middle place this wide
+#Island radius, plaza radius and middle place radius
 const BASE_RADIUS := 48.0
 const HUB_RADIUS := 12.0
 const CORE_RADIUS := 6.0
-#The carpet of each zone, in its own frame: a disc of this radius, or a box ([middle u, length along u, width across v]) for the
-#sea of memes and the locked screen
+#Zone carpet in its own frame: a disc radius, or a box for the meme sea and locked screen
 const ISLAND_RADII: Array[float] = [13.0, 10.5, 0.0, 0.0, 14.0]
 const ISLAND_BOXES := {2: [-4.0, 33.0, 24.0], 3: [-1.5, 22.0, 21.0]}
-#How high over its floor a bubble floats
+#Bubble height over its floor
 const BUBBLE_LIFT := 1.2
 
-#The roller: a bar as long as the floor is wide that turns around a post, faster and slower by turns
+#Roller bar as long as the floor is wide, turning faster and slower
 const ROLLER_ARM := 10.5
 const ROLLER_SPEED := 0.8
 const ROLLER_SURGE := {"rate": 0.7, "depth": 0.55}
 const ROLLER_POST := 0.75
-#The gravity zone: a glass cylinder, the height of its glass, how weak the pull is inside and how big its pads are. The glass is on
-#its own collision layer: the players stand on it but the arm of their camera goes through
+#Gravity zone: glass cylinder, glass height, weak pull and pad size; the camera arm passes the glass
 const GRAVITY_RADIUS := 8.0
 const GRAVITY_CEILING := 7.0
 const GRAVITY_SCALE := 0.35
 const GRAVITY_PAD := 1.1
 const GLASS_THICKNESS := 0.3
 const GLASS_BIT := 2
-#The archipelago: the pond (half its depth along u and across v), the height of its platforms and dock and of the walls around it
+#Pond half size, platform and dock height, and wall height
 const POND_HALF := Vector2(10.0, 8.0)
 const ISLE_TOP := 1.6
 const POND_WALL := 3.5
-#The sea of memes: how far the side columns are from the middle, the radius of a story, the side of a post and the size of a bar
+#Meme sea: column spacing, story radius, post side and bar size
 const COLUMN := 5.0
 const STORY := 1.6
 const POST := 3.0
 const BAR := Vector2(2.0, 5.0)
-#The maze: cells, height of its walls and screens (too high to jump) and how thick they are
+#Maze cells, wall height (too high to jump) and thickness
 const CELL := 4.5
 const MAZE_SIZE := 4
 const SCREEN_HEIGHT := 2.2
 const SCREEN_THICKNESS := 0.5
-#The tower: radius and height of each of its three floors over the ground
+#Tower floor radii and heights
 const TOWER_RADII: Array[float] = [9.5, 6.2, 3.2]
 const TOWER_TOPS: Array[float] = [2.0, 4.0, 6.0]
-#How far from the middle the trampolines of the ground and of the two floors stand: inside the rail of their floor and clear of the wall
-#of the next one
+#Trampoline distance per floor, inside its rail and clear of the next wall
 const PAD_RADII: Array[float] = [12.2, 7.9, 4.7]
 
-#One entry per zone: {"center": Vector3, "entry": StringName, "span": float}
+#Per zone: {"center", "entry", "span"}
 var zones: Array[Dictionary] = []
-#Where a bubble can be born: {"zone": int, "position": Vector3 (the middle of the bubble), "floor": float (the floor under it)}
+#Bubble spots: {"zone", "position", "floor"}
 var slots: Array[Dictionary] = []
-#The crossings on the way from the plaza to each zone and the mouths of the zones
+#Crossings from the plaza and zone mouths
 var common_places: Array[StringName] = []
-#Gravity: the pads on the floor and under the glass
 var floor_pads: Array[Vector3] = []
 var ceiling_pads: Array[Vector3] = []
-#Archipelago: {"kind": SINK, SLIDE or TURN, "at": Vector3 (middle of its top at rest), "round": bool, "size": Vector2 (across, deep)
-#or the radius in x, "yaw", "to": Vector3 and "period", "phase" when it slides, "spin" (rad/s) when it turns}
+#Meme sea platforms: kind (SINK, SLIDE or TURN), position, shape and motion
 var islets: Array[Dictionary] = []
-#Where somebody that falls in the pond comes back: points along the dock
+#Pond respawn points along the dock
 var docks: Array[Vector3] = []
-#Maze: {"from": Vector3, "to": Vector3, "group": 0 or 1}, the middle of each cell, the borders that can be crossed
-#([cell, cell, screen index or -1 when always open]) and the cells that open to the outside
+#Maze screens with their group, cell middles, crossable borders and outer cells
 var screens: Array[Dictionary] = []
 var maze_cells: Array[Vector3] = []
 var maze_links: Array[Array] = []
 var maze_mouths: Array[int] = []
-#Tower: where the likes fall on each floor
+#Like spots per tower floor
 var like_spots: Array[Array] = []
 
 var _table: Dictionary = {}
@@ -112,7 +100,7 @@ func _init() -> void:
 	_table = travel_table(build_graph())
 
 
-#The order in which the five trends use the zones: each zone once, shuffled by the seed
+#Zone order of the five rounds, shuffled by the seed
 static func draw_zones(seed_value: int) -> Array[int]:
 	var picker := RandomNumberGenerator.new()
 	picker.seed = seed_value
@@ -135,13 +123,13 @@ func zone_entry(zone: int) -> StringName:
 	return zones[zone]["entry"]
 
 
-#Whether a point of the ground belongs to a zone, "margin" meters inside its edge
+#Inside a zone with "margin"
 func in_zone(zone: int, point: Vector3, margin := 0.0) -> bool:
 	var centre := zone_center(zone)
 	return Vector2(point.x - centre.x, point.z - centre.z).length() <= float(SPANS[zone]) - margin
 
 
-#The zone a point belongs to, or the plaza when it is in none
+#Zone of a point, or the plaza
 func zone_at(point: Vector3) -> int:
 	for zone in ZONE_COUNT:
 		if in_zone(zone, point):
@@ -149,7 +137,7 @@ func zone_at(point: Vector3) -> int:
 	return Zone.PLAZA
 
 
-#The points of a zone where its bubbles are born
+#Bubble points of a zone
 func zone_slots(zone: int) -> Array[int]:
 	var found: Array[int] = []
 	for index in slots.size():
@@ -158,17 +146,17 @@ func zone_slots(zone: int) -> Array[int]:
 	return found
 
 
-#A point of a zone in its own frame, on the ground of the map
+#Zone frame point on the ground
 func zone_spot(zone: int, u: float, v: float) -> Vector3:
 	return _at3(zone, u, v, GROUND)
 
 
-#How far the frame of a zone is turned around the vertical
+#Zone frame turn around the vertical
 func zone_yaw(zone: int) -> float:
 	return _yaw(zone)
 
 
-#A point of the map in the frame of a zone: (u, v)
+#Map point in a zone frame: (u, v)
 func to_zone(zone: int, point: Vector3) -> Vector2:
 	var centre := zone_center(zone)
 	var offset := Vector2(point.x - centre.x, point.z - centre.z)
@@ -176,7 +164,7 @@ func to_zone(zone: int, point: Vector3) -> Vector2:
 	return Vector2(offset.dot(out), offset.dot(Vector2(out.y, -out.x)))
 
 
-#The middle of the tower, and the floor of the tower a point stands on: 0 for the ground, then 1 to 3
+#Tower middle and the floor a point stands on (0 ground, then 1 to 3)
 func tower_center() -> Vector3:
 	return zone_center(Zone.TOWER)
 
@@ -191,12 +179,12 @@ func tower_level(point: Vector3) -> int:
 	return level
 
 
-#Where the play of a zone starts: its mouth, or the dock of the archipelago, which is up a ramp from it
+#Where a zone's play starts: its mouth, or the meme sea dock
 func zone_start(zone: int) -> StringName:
 	return &"ar_dock" if zone == Zone.ISLANDS else zone_entry(zone)
 
 
-#Seconds on foot from the middle of the plaza to where the play of a zone starts, by the routes of the map
+#Walking seconds from the plaza to a zone start
 func approach_seconds(zone: int) -> float:
 	return _table[CORE][zone_start(zone)]
 
@@ -205,7 +193,7 @@ func seconds_by_route(from: StringName, to: StringName) -> float:
 	return _table[from][to]
 
 
-#Where an item knocked out of a player stays floating: a little over the floor, and under the glass inside the gravity zone
+#Float height of a dropped item; under the glass in the gravity zone
 func float_height(point: Vector3) -> float:
 	var centre := zone_center(Zone.GRAVITY)
 	if Vector2(point.x - centre.x, point.z - centre.z).length() <= GRAVITY_RADIUS:
@@ -213,12 +201,7 @@ func float_height(point: Vector3) -> float:
 	return point.y + BUBBLE_LIFT
 
 
-#Everything a check from outside needs to measure the map without nodes. A piece is {"id", "top"} and one of "rect" {"center":
-#Vector2, "size": Vector2, "yaw": degrees}, where a point is on it when (point - center).rotated(yaw) is within half its size, "disc"
-#{"center", "radius"} or "poly" (the corners). "floors" holds every floor (the platforms that move once per moment, with "time"; the
-#ones that sink with the seconds they hold, "holds"); "walls" what cannot be crossed, the screens of the maze with their group.
-#"links" holds the trampolines (where, where to, the push and its seconds), the ramps (slope in degrees, width and length), the pads
-#of the gravity and the way back from the pond. Then the plaza, every zone, every bubble and the volume of the gravity
+#The map in plain numbers with no nodes, for outside checks
 func describe() -> Dictionary:
 	var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 	var obstacles := TrendObstacles.new(self)
@@ -304,7 +287,7 @@ func describe() -> Dictionary:
 		"roller": {"center": zone_center(Zone.ROLLER), "arm": ROLLER_ARM, "bar_height": Level01Hazards.BAR_HEIGHT, "reach": Level01Hazards.BAR_REACH}}
 
 
-#The way out of a zone on the ground, and the way across it
+#Way out of a zone and way across it
 func _out(zone: int) -> Vector2:
 	var angle := deg_to_rad(ANGLES[zone])
 	return Vector2(cos(angle), sin(angle))
@@ -320,7 +303,7 @@ func _at3(zone: int, u: float, v: float, y: float) -> Vector3:
 	return Vector3(spot.x, y, spot.y)
 
 
-#A point at "radius" from the middle of a zone, "degrees" from its u axis toward its v axis
+#Point at "radius" and "degrees" from a zone middle
 func _polar(zone: int, radius: float, degrees: float, y: float) -> Vector3:
 	var angle := deg_to_rad(degrees)
 	return _at3(zone, radius * cos(angle), radius * sin(angle), y)
@@ -348,15 +331,14 @@ func _slot(zone: int, spot: Vector3, floor_height: float) -> void:
 	slots.append({"zone": zone, "position": spot, "floor": floor_height})
 
 
-#The mouth of a zone: the place on the ground where it is entered from the ring
+#Zone mouth on the ground
 func _entry(zone: int, u: float) -> StringName:
 	var gate := _place_at(zone, "in", _at3(zone, u, 0.0, GROUND), 2.4)
 	zones[zone]["entry"] = gate
 	return gate
 
 
-#The roller: a round floor with a post in the middle and a long bar that sweeps it all, faster and slower by turns. The bubbles wait
-#on the inner rings, where the bar is slowest
+#Roller: round floor with a sweeping bar; bubbles on the inner rings where it is slowest
 func _build_roller() -> void:
 	var zone := Zone.ROLLER
 	var centre := zone_center(zone)
@@ -373,8 +355,7 @@ func _build_roller() -> void:
 		_slot(zone, _polar(zone, 4.6, degrees, BUBBLE_LIFT), GROUND)
 
 
-#The gravity zone: a cylinder of glass. Its floor and the underside of its glass hold pads; a pad turns the pull over and throws the
-#player to the other side. The middle pads are one over the other, so a player can bounce up and down without stopping
+#Gravity zone: glass cylinder with pads on the floor and under the glass that flip the pull
 func _build_gravity() -> void:
 	var zone := Zone.GRAVITY
 	_entry(zone, -10.5)
@@ -383,7 +364,7 @@ func _build_gravity() -> void:
 	for step in 3:
 		floor_pads.append(_polar(zone, 4.6, 60.0 + 120.0 * step, GROUND))
 		ceiling_pads.append(_polar(zone, 4.6, 120.0 * step, GRAVITY_CEILING))
-	#Near the column of the middle pads, over the outer floor pads, along the glass and low enough for a jump from the floor
+	#Bubbles near the middle pads, over the outer pads, along the glass and within a jump
 	_slot(zone, _polar(zone, 1.8, 90.0, 3.6), GROUND)
 	_slot(zone, _polar(zone, 1.8, 270.0, 5.2), GROUND)
 	for step in 3:
@@ -395,8 +376,7 @@ func _build_gravity() -> void:
 		_slot(zone, _polar(zone, 3.2, degrees, 3.8), GROUND)
 
 
-#The archipelago: a dock at the height of the platforms, a pond walled on the other three sides and three lanes of platforms over it.
-#One lane sinks under whoever steps on it, one slides back and forth and turns, and one turns
+#Meme sea: a dock and a walled pond with platforms that sink, slide or turn
 func _build_islands() -> void:
 	var zone := Zone.ISLANDS
 	var gate := _entry(zone, -20.5)
@@ -409,9 +389,7 @@ func _build_islands() -> void:
 	link(gate, dock)
 	for v: float in [-6.0, -3.0, 0.0, 3.0, 6.0]:
 		docks.append(_at3(zone, -11.2, v, ISLE_TOP))
-	#Laid out like a grid of a feed, the same on both sides: a row of three stories in front of the dock, then on each side a bar that
-	#turns and another story, and down the middle a platform that slides, a bar that turns and, at the back, one that swipes from side to
-	#side. Every hop between them is short and nothing runs into anything
+	#Feed grid, mirrored on both sides
 	for v: float in [-COLUMN, 0.0, COLUMN]:
 		_islet(zone, {"kind": &"sink", "at": _at3(zone, -6.5, v, ISLE_TOP), "round": true, "size": Vector2(STORY, STORY)})
 	for v: float in [-COLUMN, COLUMN]:
@@ -422,13 +400,13 @@ func _build_islands() -> void:
 	_islet(zone, {"kind": &"turn", "at": _at3(zone, 3.8, 0.0, ISLE_TOP), "round": false, "size": BAR, "spin": 0.65})
 	_islet(zone, {"kind": &"slide", "at": _at3(zone, 8.3, -4.5, ISLE_TOP), "to": _at3(zone, 8.3, 4.5, ISLE_TOP), "round": false,
 		"size": Vector2(POST, POST), "period": 6.0, "phase": 1.3})
-	#A bubble over every platform: over the middle of the way of the ones that slide, so the platform passes under it
+	#A bubble over every platform; over the middle of a slider's way
 	for islet in islets:
 		var at: Vector3 = islet["at"]
 		if islet["kind"] == &"slide":
 			at = (at + (islet["to"] as Vector3)) / 2.0
 		_slot(zone, at + Vector3(0.0, BUBBLE_LIFT, 0.0), ISLE_TOP)
-	#And between the stories of the first row, reached from the edge of either
+	#Between the first row stories
 	for v: float in [-2.4, 2.4]:
 		_slot(zone, _at3(zone, -6.5, v, ISLE_TOP + 1.4), ISLE_TOP)
 
@@ -440,20 +418,18 @@ func _islet(zone: int, islet: Dictionary) -> void:
 	islets.append(islet)
 
 
-#The pond in the frame of its zone: whether a point is over it
+#Whether a point is over the pond
 func over_pond(point: Vector3, margin := 0.0) -> bool:
 	var local := to_zone(Zone.ISLANDS, point)
 	return absf(local.x) <= POND_HALF.x - margin and absf(local.y) <= POND_HALF.y - margin
 
 
-#The maze: 4 by 4 cells with walls too high to jump. Some borders are always open, some always shut, and the screens of two groups
-#take turns: while one group is up the other is down. With either group up every cell can be reached from the two mouths
+#Maze 4 x 4: open borders, walls and two screen groups taking turns; always solvable
 func _build_maze() -> void:
 	var zone := Zone.MAZE
 	var half := CELL * MAZE_SIZE / 2.0
 	_entry(zone, -half - 2.5)
-	#Kind of each inner border: "o" open, "w" wall, "a" and "b" the two groups of screens. Along u: [i, j] is the border between
-	#cell (i, j) and (i + 1, j); across: between (i, j) and (i, j + 1)
+	#Inner border kinds: o open, w wall, a and b screen groups
 	var along: Array[String] = ["a", "o", "w", "b", "w", "b", "a", "o", "o", "w", "b", "a"]
 	var across: Array[String] = ["o", "w", "o", "b", "o", "a", "a", "o", "b", "o", "o", "o"]
 	for i in MAZE_SIZE:
@@ -469,7 +445,7 @@ func _build_maze() -> void:
 			var v := -half + CELL * (j + 1)
 			_border(zone, across[i * (MAZE_SIZE - 1) + j], i * MAZE_SIZE + j, i * MAZE_SIZE + j + 1,
 				Vector2(-half + CELL * i, v), Vector2(-half + CELL * (i + 1), v))
-	#The outer walls, with the two mouths in the middle of the front
+	#Outer walls with two mouths at the front
 	for j in MAZE_SIZE:
 		if j == 1 or j == 2:
 			maze_mouths.append(j)
@@ -478,7 +454,7 @@ func _build_maze() -> void:
 	_wall(zone, Vector2(half, -half), Vector2(half, half))
 	_wall(zone, Vector2(-half, -half), Vector2(half, -half))
 	_wall(zone, Vector2(-half, half), Vector2(half, half))
-	#A post at every inner corner, so the screens fit between them
+	#A post at every inner corner
 	for i in range(1, MAZE_SIZE):
 		for j in range(1, MAZE_SIZE):
 			_block(zone, -half + CELL * i, -half + CELL * j, SCREEN_THICKNESS, SCREEN_THICKNESS, SCREEN_HEIGHT)
@@ -501,15 +477,14 @@ func _wall(zone: int, from: Vector2, to: Vector2) -> void:
 	add_wall(_at(zone, from.x, from.y), _at(zone, to.x, to.y), SCREEN_HEIGHT, zone, SCREEN_THICKNESS)
 
 
-#The tower: three round floors, each smaller and higher than the one under it. Trampolines on every side of each floor throw onto the
-#next one, so the climb starts from wherever one is; stepping off a floor drops to the one under it. Likes fall from above on every floor
+#Tower: three smaller and higher floors climbed by trampolines on every side; likes fall on them
 func _build_tower() -> void:
 	var zone := Zone.TOWER
 	var centre := tower_center()
 	for index in TOWER_TOPS.size():
 		add_drum(Vector2(centre.x, centre.z), TOWER_RADII[index], TOWER_TOPS[index], zone)
 	var gate := _entry(zone, -14.5)
-	#The ground around it, a ring of each floor and the top
+	#Ground ring, floor rings and the top
 	var ground_ring: Dictionary = {}
 	for degrees: float in [0.0, 45.0, 90.0, 135.0, 225.0, 270.0, 315.0]:
 		ground_ring[degrees] = _place_at(zone, "g%d" % degrees, _polar(zone, 12.0, degrees, GROUND), 1.4)
@@ -520,7 +495,7 @@ func _build_tower() -> void:
 			var degrees := 45.0 * step
 			rings[level][degrees] = _place_at(zone, "%d_%d" % [level + 1, degrees], _polar(zone, ring_radii[level], degrees, TOWER_TOPS[level]), 1.2)
 	var top := _place_at(zone, "top", _polar(zone, 0.0, 0.0, TOWER_TOPS[2]), 2.4)
-	#The ground: around both sides from the mouth, with the trampoline right in front of it
+	#Ground pads around both sides from the mouth
 	var order: Array[float] = [135.0, 90.0, 45.0, 0.0, 315.0, 270.0, 225.0]
 	link(gate, ground_ring[135.0])
 	link(gate, ground_ring[225.0])
@@ -529,7 +504,7 @@ func _build_tower() -> void:
 	var first := _place_at(zone, "p0", _polar(zone, PAD_RADII[0], 180.0, GROUND), 0.9)
 	link(gate, first)
 	_pad(first, _polar(zone, 7.4, 180.0, TOWER_TOPS[0]), rings[0][180.0], 1.1)
-	#Three more on the ground ring, behind the tower and on both sides, for whoever comes or falls there
+	#Three more on the ground ring, behind and on both sides
 	var back := _place_at(zone, "p0b", _polar(zone, PAD_RADII[0], 0.0, GROUND), 0.9)
 	link(ground_ring[0.0], back)
 	_pad(back, _polar(zone, 7.4, 0.0, TOWER_TOPS[0]), rings[0][0.0], 1.1)
@@ -548,9 +523,7 @@ func _build_tower() -> void:
 				link(rings[level][degrees], rings[0][degrees], DROP)
 	for degrees: float in [0.0, 90.0, 180.0, 270.0]:
 		link(top, rings[1][degrees], DROP)
-	#Four trampolines on each upper floor, clear of its rail and of the wall of the next floor, an eighth of a turn from where the ones
-	#under it land: the ground throws onto the sides, the first floor from its corners and the second from its sides again, so whoever
-	#climbs goes round the tower whichever side it started from and never lands on a trampoline
+	#Four pads per upper floor, inside the rail and 45 degrees from where the lower ones land
 	for degrees: float in [45.0, 135.0, 225.0, 315.0]:
 		var pad := _place_at(zone, "p1_%d" % degrees, _polar(zone, PAD_RADII[1], degrees, TOWER_TOPS[0]), 0.9)
 		link(rings[0][degrees], pad)
@@ -559,7 +532,7 @@ func _build_tower() -> void:
 		var pad := _place_at(zone, "p2_%d" % degrees, _polar(zone, PAD_RADII[2], degrees, TOWER_TOPS[1]), 0.9)
 		link(rings[1][degrees], pad)
 		_pad(pad, _polar(zone, 1.2, degrees, TOWER_TOPS[2]), top, 1.1)
-	#The likes fall on each floor in turn, around it and away from the trampolines: on the second floor, where the ones of the first land
+	#Likes fall on each floor in turn, away from the trampolines
 	like_spots = [[], [], []]
 	for step in 8:
 		like_spots[0].append(_polar(zone, 7.9, 22.5 + 45.0 * step, TOWER_TOPS[0]))
@@ -576,18 +549,18 @@ func _build_tower() -> void:
 	_slot(zone, _polar(zone, 0.0, 0.0, TOWER_TOPS[2] + BUBBLE_LIFT), TOWER_TOPS[2])
 
 
-#A trampoline that throws along an arc onto the floor above, in "seconds" of flight
+#Trampoline arc onto the floor above in "seconds"
 func _pad(place: StringName, to: Vector3, landing: StringName, seconds: float) -> void:
 	pads.append({"at": position_of(place), "to": to, "time": seconds, "from": 0})
 	link(place, landing, LAUNCH, 0.0, seconds + 0.3)
 
 
-#The map is one island: the plaza and the five zones stand on the same floor, with no void between them
+#One island: plaza and zones share the floor
 func _build_base() -> void:
 	add_island(CandyTerrain.circle(Vector2.ZERO, BASE_RADIUS, 96), GROUND, Zone.PLAZA, Color("ff8fc7"))
 
 
-#The outline of the carpet of a zone on the ground: the floor where its play is, drawn in its colour
+#Zone carpet outline on the ground
 func zone_outline(zone: int) -> PackedVector2Array:
 	var shape := PackedVector2Array()
 	if ISLAND_BOXES.has(zone):
@@ -599,7 +572,7 @@ func zone_outline(zone: int) -> PackedVector2Array:
 	return CandyTerrain.circle(Vector2(center.x, center.z), ISLAND_RADII[zone], 56)
 
 
-#The plaza: the middle of the map and a crossing on the way from it to the mouth of each zone
+#Plaza middle and a crossing toward each zone mouth
 func _build_plaza() -> void:
 	add_place(CORE, 0.0, 0.0, CORE_RADIUS, Zone.PLAZA)
 	for zone in ZONE_COUNT:

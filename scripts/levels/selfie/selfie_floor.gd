@@ -1,24 +1,20 @@
 class_name SelfieFloor
 extends RefCounted
 
-#What the floor of each set does to whoever stands on it, with no nodes and by player id: the turntable drags along its turn,
-#the dance floor lets the run slide on (a shove too), the carpet slows the run and the jump, the bouncy floor of the pool throws
-#back up whoever falls on it, the stage of the live set thumps to the beat and lifts whoever stands on it, and a gift box of the
-#unboxing throws up and away whoever stands on it when it pops. The belts and the trampolines are the ones the arena already knows.
-#The round applies the answer and moves "clock"
+#Floor tricks per player with no nodes: turntable, wax, carpet, mattress, boxes and live stage
 
-#A waxed floor: how fast the run catches up with what the keys ask (m/s each second) and how slowly a shove fades on it
+#Wax grip and slow shove fade
 const WAX_GRIP := 11.0
 const WAX_PUSH_DECAY := 11.0
-#Off the wax the slide is gone almost at once
+#Off the wax the slide ends almost at once
 const DRY_GRIP := 60.0
 const CARPET_SPEED := 0.55
 const CARPET_JUMP := 0.75
-#A fall onto the mattress faster than this bounces back up with this share of its speed, never faster than the last number
+#Mattress bounce threshold, share and cap
 const BOUNCE_FROM := 3.0
 const BOUNCE_SHARE := 0.55
 const BOUNCE_MAX := 5.5
-#The thump of the live stage: how fast it lifts
+#Live stage lift speed
 const BEAT_LIFT := 3.6
 
 #What the floor does to one player in one step
@@ -26,24 +22,24 @@ class Effect:
 	var drift := Vector3.ZERO
 	var speed_scale := 1.0
 	var jump_scale := 1.0
-	#How fast a shove fades on this floor; negative keeps the usual one
+	#Shove fade on this floor; negative keeps the usual one
 	var push_decay := -1.0
-	#Speed up of a bounce of the mattress, or 0
+	#Mattress bounce speed, or 0
 	var bounce := 0.0
-	#The throw of a gift box that pops, or zero
+	#Gift box throw, or zero
 	var throw := Vector3.ZERO
 	var trick := SelfieLayout.Trick.NONE
 
 
 var layout: SelfieLayout
-#Seconds of the round, for the beat of the live stage
+#Round seconds for the live stage beat
 var clock := 0.0
 
-#Player id -> the speed the slide carries; player id -> the fastest fall since it left the floor
+#Per player slide speed and fastest fall since leaving the floor
 var _slide: Dictionary = {}
 var _fall: Dictionary = {}
 var _beats: Dictionary = {}
-#Player id -> the last pop of a box that threw it, so one pop throws once
+#Last box pop that threw each player, so one pop throws once
 var _popped: Dictionary = {}
 
 
@@ -51,7 +47,7 @@ func _init(map: SelfieLayout) -> void:
 	layout = map
 
 
-#One step of a player: where its feet are, whether it stands on the floor, the speed its keys ask on the ground and its speed up
+#One player step: feet, grounded, wanted ground speed and vertical speed
 func step(player_id: int, at: Vector3, grounded: bool, wanted: Vector3, vertical: float, delta: float) -> Effect:
 	var effect := Effect.new()
 	var trick := layout.trick_at(at) if grounded else SelfieLayout.Trick.NONE
@@ -97,7 +93,7 @@ func step(player_id: int, at: Vector3, grounded: bool, wanted: Vector3, vertical
 	return effect
 
 
-#The player was put somewhere else: nothing of its slide or its fall is left
+#Player moved elsewhere: forget its slide and fall
 func forget(player_id: int) -> void:
 	_slide.erase(player_id)
 	_fall.erase(player_id)

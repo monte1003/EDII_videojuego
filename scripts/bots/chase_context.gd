@@ -1,25 +1,22 @@
 class_name ChaseContext
 extends RefCounted
 
-#What a bot knows about the level, filled by the level and only read by the bots
+#What a bot knows about the level, filled by the level
 
-#Extra cost of entering a vertex another bot stands on or is heading to
+#Extra cost of a vertex another bot is on or heading to
 const TRAFFIC_COST := 2.0
 
 var graph: WeightedGraph
-#Vertex id -> centre of its platform
 var positions: Dictionary = {}
-#Vertex id -> radius of its platform
 var radii: Dictionary = {}
 #Vertices the bots may never enter (the goal)
 var forbidden: Array[StringName] = []
-#Where the players want to get to; the ambushers and the guard think around it
+#Where the players want to go; ambusher and guard think around it
 var goal: StringName = &""
 var targets: Array[ChaseTarget] = []
 var bots: Array[ChaserBot] = []
 
 
-#The racer that is closest to the goal
 func leader() -> ChaseTarget:
 	var best: ChaseTarget = null
 	for target in targets:
@@ -35,7 +32,7 @@ func target_of(player_id: int) -> ChaseTarget:
 	return null
 
 
-#The platform of the player, or the end of its bridge that is closer to the goal
+#Platform of the player, or the end of its bridge closer to the goal
 func player_anchor(target: ChaseTarget) -> StringName:
 	var candidates := target.locator.chase_candidates()
 	if candidates.size() == 1:
@@ -50,13 +47,13 @@ func player_anchor(target: ChaseTarget) -> StringName:
 	return best
 
 
-#Cost of the shortest route the bots can take; INF when there is none
+#Shortest route cost for the bots; INF when there is none
 func cost(from: StringName, to: StringName) -> float:
 	var route := graph.shortest_path(from, to, forbidden)
 	return route.cost if route.found else INF
 
 
-#Open neighbours of the goal: the doors the players have to go through
+#Open neighbours of the goal: the doors the players must cross
 func goal_doors() -> Array[StringName]:
 	var doors: Array[StringName] = []
 	for neighbor in graph.neighbors(goal, true):
@@ -65,7 +62,7 @@ func goal_doors() -> Array[StringName]:
 	return doors
 
 
-#The first other bot with the given role, for the roles that work with a partner
+#First other bot with the given role, for partner roles
 func partner_of(bot: ChaserBot, role_kind: int) -> ChaserBot:
 	for other in bots:
 		if other != bot and other.role_kind() == role_kind:
@@ -73,7 +70,7 @@ func partner_of(bot: ChaserBot, role_kind: int) -> ChaserBot:
 	return null
 
 
-#Penalties for the vertices other bots stand on or head to; the bot's own destination is never penalized
+#Penalties for vertices other bots use; never the bot's own destination
 func traffic_for(bot: ChaserBot) -> Dictionary:
 	var penalties: Dictionary = {}
 	for other in bots:

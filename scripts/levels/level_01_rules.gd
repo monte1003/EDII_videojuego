@@ -1,7 +1,7 @@
 class_name Level01Rules
 extends RefCounted
 
-#The rules of level 1 with no nodes: a race of up to four racers, time, attempts and the end, with one state per id
+#Level 1 rules with no nodes: up to four racers, time, attempts and the end, one state per id
 
 signal player_fell(player_id: int, attempts_left: int)
 signal racer_finished(player_id: int, place: int)
@@ -12,16 +12,15 @@ signal outcome_decided(outcome: int)
 enum Outcome { RUNNING, WON, LOST_TIME, LOST_ATTEMPTS }
 
 
-#What belongs to one racer
 class PlayerState:
 	var id: int
 	var attempts_left: int
 	var checkpoint: StringName
-	#1 for the first to arrive, and so on; 0 while it has not arrived
+	#1 for the first to arrive; 0 while racing
 	var place := 0
 	var finish_time := 0.0
 	var eliminated := false
-	#How far it is from the goal (lower is closer); the level keeps it up to date
+	#Distance to the goal, kept by the level
 	var progress := INF
 	var respawn_left := 0.0
 	var hit_immunity_left := 0.0
@@ -41,9 +40,8 @@ class PlayerState:
 var settings: Level01Settings
 var outcome := Outcome.RUNNING
 var time_left := 0.0
-#Seconds since the round started
 var elapsed := 0.0
-#Seconds left for the rest to arrive once somebody did; negative while nobody has
+#Seconds left once someone arrived; negative before
 var window_left := -1.0
 var players: Dictionary = {}
 
@@ -65,7 +63,7 @@ func is_running() -> bool:
 	return outcome == Outcome.RUNNING
 
 
-#Advances the round; it does nothing once the round is decided
+#Advances the round until it is decided
 func tick(delta: float) -> void:
 	if not is_running():
 		return
@@ -91,7 +89,7 @@ func is_protected(player_id: int) -> bool:
 	return state != null and state.respawn_left > 0.0
 
 
-#A racer fell into the void: it loses an attempt and comes back protected. False when none are left.
+#Fell into the void: loses an attempt and returns protected; false when none left
 func fall(player_id: int) -> bool:
 	var state := state_of(player_id)
 	if state == null or not is_running() or not state.is_racing():
@@ -107,7 +105,7 @@ func fall(player_id: int) -> bool:
 	return true
 
 
-#A racer whose computer left the game: out of the race, so the others do not wait for it at the goal
+#Racer whose computer left: out of the race
 func withdraw(player_id: int) -> void:
 	var state := state_of(player_id)
 	if state == null or not state.is_racing():
@@ -117,7 +115,7 @@ func withdraw(player_id: int) -> void:
 	_check_end()
 
 
-#A blow only lands when the racer is not protected nor still recovering from the last one
+#Lands only outside protection and recovery
 func register_hit(player_id: int) -> bool:
 	var state := state_of(player_id)
 	if state == null or not is_running() or is_protected(player_id) or state.hit_immunity_left > 0.0:
@@ -126,7 +124,7 @@ func register_hit(player_id: int) -> bool:
 	return true
 
 
-#True the first time the racer passes through that vertex, which becomes its checkpoint
+#True the first time through a checkpoint vertex
 func reach_checkpoint(player_id: int, vertex: StringName) -> bool:
 	var state := state_of(player_id)
 	if state == null or state.checkpoint == vertex:
@@ -135,7 +133,7 @@ func reach_checkpoint(player_id: int, vertex: StringName) -> bool:
 	return true
 
 
-#The racer arrives: it gets the next place and the first one to arrive opens the window for the rest
+#Arrival: next place; the first opens the window for the rest
 func reach_goal(player_id: int) -> void:
 	var state := state_of(player_id)
 	if state == null or not is_running() or not state.is_racing():
@@ -154,7 +152,7 @@ func racers_in_race() -> int:
 	return players.size()
 
 
-#Ids from first to last: the ones that arrived in order, then the rest by how close they are, the eliminated at the end
+#Ids first to last: arrivals, then by distance, eliminated last
 func standings() -> Array[int]:
 	var ids: Array[int] = []
 	for id: int in players:
@@ -163,7 +161,7 @@ func standings() -> Array[int]:
 	return ids
 
 
-#The place the racer would take now: its final place once it arrived, else its position in the standings
+#Final place, or current position in the standings
 func place_of(player_id: int) -> int:
 	return standings().find(player_id) + 1
 
@@ -182,7 +180,7 @@ func _ahead(a: int, b: int) -> bool:
 	return a < b
 
 
-#The round is over when no player is still racing: every one arrived or was eliminated
+#Over when nobody is still racing
 func _check_end() -> void:
 	if not is_running():
 		return
@@ -202,7 +200,7 @@ func _all_arrived() -> bool:
 	return true
 
 
-#Time or the window ran out: whoever is still racing is left out
+#Time or window over: the rest are left out
 func _close_race(reason: int) -> void:
 	for state: PlayerState in players.values():
 		if state.reached_goal():

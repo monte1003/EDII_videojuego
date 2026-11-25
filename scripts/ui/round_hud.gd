@@ -1,12 +1,11 @@
 class_name RoundHud
 extends CanvasLayer
 
-#Shared base of the in-round screens. The 3D stays in view: white text with a dark outline instead of cards, a small clock,
-#a mission line that fades after a few seconds, one short notice at a time, an edge glow and a one-line end of the round
+#Base of the in-round screens: outlined text, small clock, fading mission, notices and edge glow
 
 signal retry_requested
 signal menu_requested
-#Each number of the countdown as it shows, and 0 for "YA"
+#Each countdown number as it shows, 0 for "YA"
 signal counted(number: int)
 
 const GLOW_SHADER: Shader = preload("res://assets/ui/shaders/edge_glow.gdshader")
@@ -14,7 +13,7 @@ const OUTLINE := Color(Palette.NIGHT, 0.88)
 const SHADOW := Color(Palette.NIGHT, 0.45)
 const CLOCK_SIZE := 30
 const LOW_CLOCK_SIZE := 44
-#How far above the centre of the screen the countdown number sits
+#Countdown height above the centre
 const COUNTDOWN_LIFT := 150.0
 
 var toast_hold := 2.4
@@ -45,7 +44,7 @@ var _flash := 0.0
 var _flash_tween: Tween
 var _last_whole := -1
 var _count_shown := -1
-#The rounds that turn it on get a soft beat with every one of the last seconds
+#Soft beat on each of the last seconds
 var low_time_beat := false
 var _end: Control
 var _end_title: Label
@@ -86,7 +85,7 @@ func _process(_delta: float) -> void:
 	_glow_material.set_shader_parameter("amount", maxf(_danger, _flash))
 
 
-#The start every round shares: "3", "2", "1" in the middle of the screen, each with its beep; call it with the seconds left
+#Shared start: "3", "2", "1" with beeps; pass the seconds left
 func tick_countdown(left: float) -> void:
 	var shown := ceili(left)
 	if shown == _count_shown or shown <= 0:
@@ -97,7 +96,7 @@ func tick_countdown(left: float) -> void:
 	SynthSound.play(self, SynthSound.tone(523.0, 0.14, 0.0, 0.4), -9.0)
 
 
-#"YA": the round is on; it leaves by itself
+#"YA": the round is on
 func show_go() -> void:
 	_count_shown = 0
 	show_countdown("YA")
@@ -110,7 +109,7 @@ func show_go() -> void:
 	leave.tween_callback(hide_countdown)
 
 
-#A number in the middle of the screen that pops in
+#Number popping in the middle
 func show_countdown(text: String) -> void:
 	_countdown.text = text
 	_countdown.modulate.a = 1.0
@@ -125,7 +124,7 @@ func hide_countdown() -> void:
 	_countdown.hide()
 
 
-#The clock: small and quiet until the last seconds, then it grows, turns warm and beats once a second
+#Clock quiet until the last seconds, then it grows and beats
 func set_time(seconds: float) -> void:
 	var whole := int(ceil(maxf(seconds, 0.0)))
 	_timer_label.text = "%d:%02d" % [floori(whole / 60.0), whole % 60]
@@ -143,7 +142,7 @@ func hide_timer() -> void:
 	_timer_label.hide()
 
 
-#What to do, in one line, and the keys for it; it fades by itself so the screen stays clear
+#One-line goal with its keys; fades by itself
 func show_mission(text: String, keys: Array[String] = [], hold := 3.6) -> void:
 	_mission_text.text = text
 	for child in _mission_keys.get_children():
@@ -173,7 +172,7 @@ func hide_mission() -> void:
 	_mission.modulate.a = 0.0
 
 
-#An occasional line under the clock; use it sparingly
+#Occasional line under the clock
 func toast(text: String) -> void:
 	_toast_label.text = text
 	if _toast_tween != null and _toast_tween.is_valid():
@@ -185,7 +184,7 @@ func toast(text: String) -> void:
 	_toast_tween.tween_property(_toast_label, "modulate:a", 0.0, toast_fade)
 
 
-#A flash of up to three words in the middle of the screen
+#Up to three words flashed in the middle
 func warn(text: String) -> void:
 	_warning.text = text
 	if _warn_tween != null and _warn_tween.is_valid():
@@ -198,7 +197,7 @@ func warn(text: String) -> void:
 	_warn_tween.tween_property(_warning, "modulate:a", 0.0, warn_fade).set_delay(warn_delay)
 
 
-#The edge of the screen glows: a steady danger level (0 to 1) and a quick flash that fades
+#Edge glow: steady danger level (0 to 1) and a quick flash
 func set_danger(amount: float, color := Palette.CORAL) -> void:
 	_danger = clampf(amount, 0.0, 1.0)
 	_glow_material.set_shader_parameter("glow_color", color)
@@ -213,7 +212,7 @@ func flash(color: Color, amount := 0.8, seconds := 0.5) -> void:
 	_flash_tween.tween_property(self, "_flash", 0.0, seconds).set_ease(Tween.EASE_OUT)
 
 
-#The end of the round in one line and one fact; inside a session the results screen follows by itself
+#End of round in one line and one fact
 func show_banner(title: String, detail: String, color := Palette.PAPER) -> void:
 	_end_title.text = title
 	_end_title.add_theme_color_override("font_color", color)
@@ -228,14 +227,14 @@ func show_banner(title: String, detail: String, color := Palette.PAPER) -> void:
 	tween.tween_property(_end_title, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-#The same banner with its two choices, for a round that is played on its own
+#Same banner with two choices, for a round played alone
 func show_end(title: String, message: String, victory: bool) -> void:
 	show_banner(title, message, Palette.PAPER if victory else Palette.GOLD)
 	_end_buttons.show()
 	_end_first_button.grab_focus()
 
 
-#Fades the play screen out, for a close-up
+#Fades the play screen out for a close-up
 func hide_play_ui() -> void:
 	create_tween().tween_property(_root, "modulate:a", 0.0, 0.3)
 
@@ -250,7 +249,7 @@ func _make_root(margin: int) -> MarginContainer:
 	return root
 
 
-#Text that reads on any background: white with a thin dark outline and a soft shadow
+#White text with a thin outline and a soft shadow
 func _text(text: String, font: Font, size: int, color := Palette.PAPER) -> Label:
 	var label := UiKit.label(text, font, size, color)
 	label.add_theme_color_override("font_outline_color", OUTLINE)
@@ -293,7 +292,7 @@ func _build_mission() -> void:
 	_mission_keys.alignment = BoxContainer.ALIGNMENT_CENTER
 	_mission_keys.add_theme_constant_override("separation", 8)
 	_mission.add_child(_mission_keys)
-	#Raised a little so it never sits on the very edge of the screen
+	#Raised a little off the edge
 	var lift := Control.new()
 	lift.custom_minimum_size = Vector2(0, 34)
 	lift.mouse_filter = Control.MOUSE_FILTER_IGNORE

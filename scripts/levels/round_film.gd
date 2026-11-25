@@ -1,15 +1,14 @@
 class_name RoundFilm
 extends Node3D
 
-#The opening of a round, like a broadcast: black bars come in, a film camera flies over the map in a few shots while the name of the
-#minigame slides in, and then it swoops down to the camera of the player, where the countdown takes over. Enter skips it
+#Round opening like a broadcast: film bars, a flight over the map and a swoop down to the player
 
 signal finished
 
 const BAR_SHARE := 0.1
 const HANDOFF_TIME := 1.4
 
-#A shot: where the camera starts and what it looks at, where it ends and what it looks at then, and how long it takes
+#Shot: start and end positions with their look points, and duration
 class Shot:
 	var from_at: Vector3
 	var from_look: Vector3
@@ -30,15 +29,14 @@ var _overlay: CanvasLayer
 var _bars: Array[ColorRect] = []
 var _card: VBoxContainer
 var _hint: Control
-#In a room the film cannot be skipped: it plays at once on every computer and the countdown starts after it on all of them
+#In a room the film cannot be skipped and plays everywhere at once
 var skippable := true
 var _skipped := false
 var _over := false
 var _timer: Timer
 
 
-#Plays the shots, shows the title and lands on "handoff"
-#Seconds a film of these shots takes when nobody skips it: every shot and the flight down to the player
+#Unskipped length of the shots plus the flight down
 static func length_of(shots: Array[Shot]) -> float:
 	if shots.is_empty():
 		return 0.0
@@ -96,7 +94,7 @@ func _end(handoff: Camera3D) -> void:
 	finished.emit()
 
 
-#Waits on a timer of the film (Enter ends it early); true when Enter asked to skip. A wait still running when the round closes never ends
+#Waits on a film timer; true when Enter skipped
 func _hold(seconds: float) -> bool:
 	if _skipped:
 		return true
@@ -164,7 +162,7 @@ func _letterbox(on: bool, seconds: float) -> void:
 		tween.tween_property(_hint, "modulate:a", 0.0, seconds)
 
 
-#The name of the minigame slides up at the bottom left after a moment
+#Minigame name slides up at the bottom left
 func _show_card(delay: float) -> void:
 	_card.position.y += 40.0
 	var tween := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)

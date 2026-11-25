@@ -1,17 +1,15 @@
 class_name MeshMerger
 extends RefCounted
 
-#Joins many static pieces into one mesh per stretch of the course and per material: the very same picture with far fewer draw calls.
-#Nothing is ever hidden because of its distance; a stretch is only skipped when it is out of the view of a camera, which the engine decides for each camera on its own
+#Joins static pieces into one mesh per stretch and material; nothing is hidden by distance
 
-#Meters of the course that each stretch covers
 const CELL := 60.0
 
-#"stretch|name" -> {"tool": SurfaceTool, "material": Material, "shadow": bool}
+#"stretch|name" -> {"tool", "material", "shadow"}
 var _parts: Dictionary = {}
 
 
-#Groups positions in stretches along Z: stretch number -> the indices of the points inside it
+#Positions grouped in stretches along Z
 static func cells(points: Array[Vector3], size := CELL) -> Dictionary:
 	var found: Dictionary = {}
 	for index in points.size():
@@ -22,8 +20,7 @@ static func cells(points: Array[Vector3], size := CELL) -> Dictionary:
 	return found
 
 
-#Adds a copy of "mesh" placed by "place" and painted with "color" (the material reads the colour of each vertex); "uv_scale" stretches its UV.
-#A mesh already drawn in place tells the z of its middle in "cell_z", so it joins the stretch where it really is
+#Adds a placed and coloured copy of "mesh"; "cell_z" puts a mesh drawn in place in its real stretch
 func add(name: StringName, material: Material, shadow: bool, mesh: Mesh, place: Transform3D, color: Color, uv_scale := Vector2.ONE, cell_z := NAN) -> void:
 	var key := "%d|%s" % [floori((place.origin.z if is_nan(cell_z) else cell_z) / CELL), name]
 	if not _parts.has(key):
@@ -48,7 +45,7 @@ func add(name: StringName, material: Material, shadow: bool, mesh: Mesh, place: 
 			tool.add_vertex(place * vertices[index])
 
 
-#One mesh instance per stretch and material, added under "parent"
+#One mesh per stretch and material under "parent"
 func commit(parent: Node3D) -> void:
 	for key: String in _parts:
 		var part: Dictionary = _parts[key]

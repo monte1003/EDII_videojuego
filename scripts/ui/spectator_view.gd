@@ -1,9 +1,7 @@
 class_name SpectatorView
 extends Node3D
 
-#After its own player is done (it reached the goal, the street took it or it fell for good), a computer of a room watches the others until
-#the round is over: a camera that follows one of them from behind and above, and at the bottom of the screen who it is with the keys to
-#go to the previous or the next one
+#After its player is done, a room computer watches the others until the round ends
 
 const DISTANCE := 7.5
 const HEIGHT := 4.2
@@ -57,7 +55,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_show_name()
 
 
-#The players of the other computers that are still on the screen
+#Other computers' players still on screen
 func _collect() -> void:
 	_targets.clear()
 	for id: int in _round.everyone:

@@ -1,7 +1,7 @@
 shader_type spatial;
 render_mode blend_add, unshaded, cull_disabled, depth_draw_never, fog_disabled;
 
-//A spotlight beam: it starts at its narrow bottom end, fades going up and softens toward its sides
+//Spotlight beam that fades upward and toward its sides
 uniform vec4 beam_color : source_color = vec4(1.0, 0.9, 0.6, 1.0);
 uniform float strength = 0.4;
 uniform float beam_length = 40.0;

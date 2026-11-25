@@ -1,6 +1,6 @@
 extends SceneTree
 
-#Checks the decision tree of rounds, the planner and the lobby; run: godot --headless --path . --script res://scripts/tests/session_check.gd
+#Checks the round decision tree, the planner and the lobby; run headless with --script
 
 const ROUNDS := 5
 
@@ -135,7 +135,7 @@ func _check_lobby() -> void:
 	_expect(lobby.slots.is_empty() and not lobby.all_ready(), "al limpiar la sala queda vacía")
 
 
-#The AVL tree of the standings: a key made of points, tie-break and player id, so ties never lose anybody
+#AVL standings key: points, tie-break and id, so ties never lose anybody
 func _check_standings() -> void:
 	var tree := AVLTree.new()
 	for entry: Array in [[2400, 1, 900], [3100, 2, 950], [2400, 3, 700], [2400, 4, 900], [1800, 5, 600], [3100, 6, 990], [500, 7, 300]]:

@@ -1,9 +1,7 @@
 class_name PodiumStage
 extends Node3D
 
-#The stage of the end of the game at night: a round candy floor with its bulbs, a block per player in the colour of its crown with its place
-#in big round numbers, a rainbow and an arch of bulbs behind, two stands of cheering fans, beams that sweep the sky, a spotlight over each
-#block that lights up when its player arrives, confetti cannons and fireworks. The light of the whole stage can dim for the big reveal
+#Night stage of the end of the game: candy floor, a block per player, fans, beams and fireworks
 
 const FLOOR_RADIUS := 12.0
 const BLOCK_SIZE := Vector2(2.5, 2.1)
@@ -12,7 +10,7 @@ const BACK := -6.5
 const NIGHT := Color("140c2e")
 const FLOOR_COLOR := Color("4a3590")
 const RIM_COLOR := Color("ff7eb6")
-#Colour of each crown, for its block, its light and its sparkles (by ScoreSheet.Medal)
+#Colour of each crown by ScoreSheet.Medal
 const CROWN_COLORS: Array[Color] = [Color("8c7fb8"), Color("e08a4a"), Color("c9d4e6"), Color("ffc93a"), Color("7fe6ff")]
 const WORD_COLOURS: Array[StringName] = [&"title", &"bronze", &"silver", &"gold", &"diamond"]
 const FIREWORK_COLORS: Array[Color] = [Color("ff5c8a"), Color("ffd23f"), Color("3fd3ea"), Color("8a63f5"), Color("5fdc9c")]
@@ -29,7 +27,6 @@ var _clock := 0.0
 var _rng := RandomNumberGenerator.new()
 
 
-#Builds everything for these entries (from PodiumPlan)
 func build(entries: Array[PodiumPlan.Entry]) -> void:
 	_rng.seed = 5
 	_build_environment()
@@ -57,12 +54,12 @@ func _process(delta: float) -> void:
 		beam.rotation.x = -0.25 + cos(_clock * 0.4 + index * 0.9) * 0.15
 
 
-#The top of the block of a slot, where its player lands
+#Where the player of a slot lands
 func top_of(entry: PodiumPlan.Entry) -> Vector3:
 	return Vector3(PodiumPlan.slot_x(entry.slot), entry.height, 0.0)
 
 
-#The spotlight of a block goes on in the colour of its crown
+#Block spotlight in its crown colour
 func light_block(entry: PodiumPlan.Entry, energy := 7.0, seconds := 0.35) -> void:
 	var spot: SpotLight3D = _spots.get(entry.slot)
 	if spot == null:
@@ -71,7 +68,7 @@ func light_block(entry: PodiumPlan.Entry, energy := 7.0, seconds := 0.35) -> voi
 	create_tween().tween_property(spot, "light_energy", energy, seconds)
 
 
-#The whole stage goes dark (1) or back to its light (0)
+#Darkens the stage (1) or restores it (0)
 func dim(amount: float, seconds: float) -> void:
 	var tween := create_tween().set_parallel()
 	tween.tween_property(environment, "ambient_light_energy", lerpf(0.55, 0.08, amount), seconds)
@@ -87,7 +84,7 @@ func confetti() -> void:
 		ImpactFx.confetti(self, muzzle.global_position, 120, 40.0, 13.0)
 
 
-#A rocket bursts into a ball of sparks somewhere over the back of the stage
+#A firework over the back of the stage
 func firework() -> void:
 	var at := Vector3(_rng.randf_range(-11.0, 11.0), _rng.randf_range(9.0, 14.0), BACK - _rng.randf_range(4.0, 10.0))
 	var sparks := CPUParticles3D.new()
@@ -170,7 +167,7 @@ func _build_environment() -> void:
 	_key.light_color = Color("c9c2ff")
 	_key.shadow_enabled = true
 	add_child(_key)
-	#A warm light from the front so faces read
+	#Warm front light so faces read
 	var front := OmniLight3D.new()
 	front.position = Vector3(0.0, 5.0, 9.0)
 	front.omni_range = 18.0
@@ -179,7 +176,7 @@ func _build_environment() -> void:
 	add_child(front)
 
 
-#A round block in the colour of its crown with its place in big round numbers on its front and a spotlight that waits over it
+#Block in its crown colour with its place number and a waiting spotlight
 func _build_block(entry: PodiumPlan.Entry) -> void:
 	var x := PodiumPlan.slot_x(entry.slot)
 	var color := CROWN_COLORS[entry.crown]
@@ -198,7 +195,7 @@ func _build_block(entry: PodiumPlan.Entry) -> void:
 	_spots[entry.slot] = spot
 
 
-#Behind the blocks: a rainbow, two candy pillars and an arch of bulbs between them
+#Rainbow, candy pillars and an arch of bulbs behind the blocks
 func _build_backdrop() -> void:
 	var rainbow := PartyKit.rainbow(9.5, 0.75, [PartyKit.PINK, PartyKit.ORANGE, PartyKit.YELLOW, PartyKit.GREEN, PartyKit.CYAN, PartyKit.VIOLET])
 	rainbow.position = Vector3(0.0, 0.0, BACK - 1.5)
@@ -216,7 +213,6 @@ func _build_backdrop() -> void:
 	_terrain.commit()
 
 
-#Two stands of fans on the sides, turned toward the blocks
 func _build_stands() -> void:
 	crowd = CrowdField.new()
 	add_child(crowd)
@@ -226,7 +222,7 @@ func _build_stands() -> void:
 	crowd.commit()
 
 
-#Beams from the floor behind the stage that sweep the sky
+#Beams that sweep the sky
 func _build_beams() -> void:
 	for index in 6:
 		var holder := Node3D.new()

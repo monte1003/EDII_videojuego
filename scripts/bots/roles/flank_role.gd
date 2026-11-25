@@ -1,10 +1,9 @@
 class_name FlankRole
 extends BotRole
 
-#The flanker (Mirror): works with the direct hunter. It goes to the platform next to the player that is
-#farthest from the hunter, so the player is caught between the two.
+#Flanker (Mirror): takes the platform next to the player farthest from the hunter
 
-#Within this cost of the player the pincer is closed and it chases directly
+#Within this cost of the player it chases directly
 const ENGAGE_COST := 2.0
 
 

@@ -1,17 +1,17 @@
 class_name RoundResult
 extends RefCounted
 
-#How a round ended, in what the screens need to show it
+#How a round ended, for the screens
 
 var minigame_id: StringName
 var won := false
 var headline := ""
 var detail := ""
-#Lines like ["Tiempo", "1:12"] for the round summary
+#Summary lines like ["Tiempo", "1:12"]
 var stats: Array[Array] = []
-#Points and medal of the player of this screen
+#Points and medal of this screen's player
 var score: RoundScore
-#Points of every player of the round, by player id
+#Points of every player by id
 var points_by_player: Dictionary = {}
 
 
@@ -25,7 +25,7 @@ static func make(id: StringName, victory: bool, title: String, message: String, 
 	return result
 
 
-#Adds the score of the player of this screen and the points of everybody
+#Adds this screen's score and everybody's points
 func with_score(local_score: RoundScore, everybody: Dictionary) -> RoundResult:
 	score = local_score
 	points_by_player = everybody

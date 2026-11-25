@@ -1,10 +1,10 @@
 class_name PropKit
 extends RefCounted
 
-#The decorative models of the game: each one is fitted to a size in meters, centred and with its base at y = 0
+#Decorative models fitted to a size in meters, centred with base at y = 0
 
 const FOLDER := "res://assets/props/%s/%s.glb"
-#Where the windows of each car start, as a share of its height (the headlights sit just below them)
+#Window start of each car as a share of its height
 const GLASS_LOW := {&"car_hatch": 0.53, &"van": 0.5}
 
 const GLASS_SHADER: Shader = preload("res://assets/shaders/car_glass.gdshader")
@@ -14,7 +14,7 @@ static var _bounds: Dictionary = {}
 static var _tints: Dictionary = {}
 
 
-#"size" has the target size per axis; an axis left at 0 follows the average scale of the others
+#Target size per axis; 0 follows the other axes
 static func make(id: StringName, size: Vector3, tint := Color.WHITE, casts_shadow := true) -> Node3D:
 	var model := _scene(id).instantiate() as Node3D
 	var box := _box(id, model)
@@ -42,7 +42,7 @@ static func make(id: StringName, size: Vector3, tint := Color.WHITE, casts_shado
 	return root
 
 
-#Fitted by one measure only: the height, the length (X) or the width (Z)
+#Fitted by height, length (X) or width (Z) only
 static func make_tall(id: StringName, height: float, tint := Color.WHITE, casts_shadow := true) -> Node3D:
 	return make(id, Vector3(0.0, height, 0.0), tint, casts_shadow)
 
@@ -51,7 +51,7 @@ static func make_long(id: StringName, length: float, tint := Color.WHITE, casts_
 	return make(id, Vector3(length, 0.0, 0.0), tint, casts_shadow)
 
 
-#A car with open glass: the dark window pixels of its texture let the people inside show through; "tint" colours the body
+#Car with see-through windows; "tint" colours the body
 static func make_car(id: StringName, length: float, tint: Color, roof_tint := Color.TRANSPARENT) -> Node3D:
 	var root := make(id, Vector3(length, 0.0, 0.0))
 	var box := _bounds[id] as AABB
@@ -64,12 +64,12 @@ static func make_car(id: StringName, length: float, tint: Color, roof_tint := Co
 	return root
 
 
-#Box of a model already made by make, in the space of the root it returned: its real size on screen, for hit boxes
+#Box of a made model in its root space, for hit boxes
 static func measure(root: Node3D) -> AABB:
 	return _measure(root)
 
 
-#Size of the model as it comes, to know the proportions before placing it
+#Model size as it comes
 static func base_size(id: StringName) -> Vector3:
 	if not _bounds.has(id):
 		var model := _scene(id).instantiate() as Node3D
@@ -78,7 +78,7 @@ static func base_size(id: StringName) -> Vector3:
 	return (_bounds[id] as AABB).size
 
 
-#Gives the model its own materials and returns them, so the caller can make it glow or change colour later
+#Own materials so the caller can change them later
 static func own_materials(model: Node3D) -> Array[StandardMaterial3D]:
 	var owned: Array[StandardMaterial3D] = []
 	for node in model.find_children("*", "MeshInstance3D", true, false):
@@ -122,7 +122,7 @@ static func _scene(id: StringName) -> PackedScene:
 	return _scenes[id]
 
 
-#Size of the meshes of a model in its own space; it is the same for every copy, so it is kept
+#Cached mesh box of a model
 static func _box(id: StringName, model: Node3D) -> AABB:
 	if not _bounds.has(id):
 		_bounds[id] = _measure(model)

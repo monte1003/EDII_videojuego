@@ -1,23 +1,21 @@
 class_name IsoFrame
 extends RefCounted
 
-#An isometric shot: an orthogonal camera tilted down and turned 45 degrees from the frame, placed so that a patch of ground and
-#every body in it fit with some room around. No nodes: it only works out where the camera goes and how much it sees
+#Isometric shot: orthogonal camera fit to a patch of ground and its bodies
 
 const DEFAULT_PITCH := 32.0
 const DEFAULT_TURN := 45.0
-#How tall a body is counted, how far the camera stands back along its view and the room left around everything
+#Body height, camera distance and margin
 const BODY_HEIGHT := 1.1
 const DISTANCE := 40.0
 const MARGIN := 1.15
 
-#Where the camera stands and looks, and how tall the view is in meters (the "size" of an orthogonal Camera3D that keeps its height)
+#Camera transform and view height in meters
 var transform := Transform3D.IDENTITY
 var size := 1.0
 
 
-#Frames the patch "frame_size" (meters on the ground, turned "frame_yaw" radians) around "center" together with the bodies whose feet
-#are at "feet". "aspect" is width / height of the picture. The view looks down "pitch_degrees" and turns "turn_degrees" from the frame
+#Fits the patch and the bodies at "feet"; "aspect" is width / height
 static func fit(center: Vector3, frame_size: Vector2, feet: Array[Vector3], aspect: float, frame_yaw := 0.0,
 		pitch_degrees := DEFAULT_PITCH, turn_degrees := DEFAULT_TURN, margin := MARGIN) -> IsoFrame:
 	var shot := IsoFrame.new()
@@ -46,7 +44,7 @@ static func fit(center: Vector3, frame_size: Vector2, feet: Array[Vector3], aspe
 	return shot
 
 
-#Turns "camera" into this shot: orthogonal, keeping its height, with room in front and behind for the whole set
+#Applies this shot to "camera"
 func apply(camera: Camera3D) -> void:
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.keep_aspect = Camera3D.KEEP_HEIGHT
@@ -56,7 +54,7 @@ func apply(camera: Camera3D) -> void:
 	camera.global_transform = transform
 
 
-#How tall a body of "height" meters looks in the picture, as a share of its height
+#Share of the picture a body of "height" takes
 func body_share(height := 1.0) -> float:
 	var pitch := absf(transform.basis.z.angle_to(Vector3(transform.basis.z.x, 0.0, transform.basis.z.z)))
 	return height * cos(pitch) / size

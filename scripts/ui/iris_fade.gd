@@ -1,10 +1,9 @@
 class_name IrisFade
 extends CanvasLayer
 
-#Hides a jump of the camera, as when a player falls off the map and comes back: the picture closes into a circle toward the middle of the
-#screen, stays dark a moment and opens again where the player is now
+#Hides a camera jump: the picture closes to a circle and opens where the player is now
 
-#The picture starts closing: the player of this screen fell
+#Starts closing: this screen's player fell
 signal closing
 
 const SHADER: Shader = preload("res://assets/ui/shaders/iris.gdshader")

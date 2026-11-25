@@ -1,17 +1,15 @@
 class_name PerfectSelfie
 extends ArenaRound
 
-#"La Selfie Perfecta": a drone takes eight photos on the six sets of the studio, each set with a trick of its floor. Whoever is inside
-#the frame at the shot, standing or in the air, gets followers: more in the centre, more while posing (still and easy to shove)
-#and more the fewer are in the photo. The photo is drawn by the camera of the drone and kept for the roll of the round
+#"La Selfie Perfecta": a drone takes eight photos; whoever is in the frame at the shot gets followers
 
 const MINIGAME_ID := &"perfect_selfie"
 const SHELL: Shader = preload("res://assets/shaders/bubble.gdshader")
 const BOOST_COLORS: Array[Color] = [Color("4fd38a"), Color("ffc928")]
-#The arrow hides when the photo is closer than this, or when the camera looks at it within this cosine
+#The arrow hides near the photo or when the camera already looks at it
 const GUIDE_NEAR := 4.0
 const GUIDE_VIEW := 0.8
-#How high over the set the badge of the next photo floats, and the colour of the ring under a player that is in the frame
+#Badge height over the set and colour of the in-frame ring
 const MARKER_LIFT := 3.0
 const INSIDE_COLOR := Color("4fd38a")
 
@@ -28,25 +26,23 @@ var _floor: SelfieFloor
 var _base_speed := 5.0
 var _base_jump := 4.5
 var _base_decay := 18.0
-#Per player: the shield bubble, the ring of a boost and the sparkles of a pose
+#Per player: shield bubble, boost ring and pose sparkles
 var _shields: Dictionary = {}
 var _rings: Dictionary = {}
 var _glitter: Dictionary = {}
 var _blinks := 0
-#The first photo teaches the shove once; the chips are drawn from these
+#The first photo teaches the shove once
 var _shove_taught := false
-#Per player: the arrow on the floor that points to the photo while its camera looks somewhere else, the ring under its feet while
-#there is a frame (green when it is in) and the arrow over its head that only the live picture shows, to find itself there
+#Per player: floor arrow to the photo, ring under the feet and arrow over the head
 var _guides: Dictionary = {}
 var _spots: Dictionary = {}
 var _pointers: Dictionary = {}
 var _spot_paints: Array[StandardMaterial3D] = []
-#The photos of the round and what each one gave the player of this screen (-1 when it was not in it); the shots that wait for
-#their photo to come out
+#Photos of the round, what each gave this player (-1 if out) and shots waiting to develop
 var _photos: Array[Texture2D] = []
 var _numbers: Array[int] = []
 var _waiting: Dictionary = {}
-#Per player: the move keys were down when its pose started, seconds left of a pose key pressed in the air, seconds off the floor
+#Per player: move keys held at pose start, air press timer and air time
 var _pose_held: Dictionary = {}
 var _pose_wanted: Dictionary = {}
 var _air: Dictionary = {}
@@ -101,7 +97,7 @@ func _ready() -> void:
 		"move=%s|mover" % InputHints.move_label(), "interact=%s|posar" % InputHints.key_label(&"interact"), "shove=%s|empujar" % InputHints.key_label(&"shove")], 4.5)
 
 
-#The studio brings its own sky, light and audience: there is no contest set around it
+#The studio brings its own sky, light and audience
 func _make_set() -> ArenaStage:
 	return null
 
@@ -110,7 +106,7 @@ func cheer(power: float) -> void:
 	(world as SelfieStage).cheer(power)
 
 
-#A player starts or stops its pose; the rules decide whether it can
+#The rules decide whether a pose can start
 func request_pose(player_id: int, on: bool) -> void:
 	if phase != Phase.RUNNING or not players.has(player_id):
 		return
@@ -119,11 +115,11 @@ func request_pose(player_id: int, on: bool) -> void:
 		return
 	_pose_wanted.erase(player_id)
 	if not rules.set_posing(player_id, on) and on and not player.is_on_floor():
-		#Pressed in the air: the pose waits a moment for the landing
+		#Pressed in the air: the pose waits for the landing
 		_pose_wanted[player_id] = PoseKeeper.PRESS_BUFFER
 
 
-#The pose of the photo is kept by the rules, not by the keeper of the other rounds: the key and the dock go to them
+#The rules keep the photo pose, so the key and the dock go to them
 func add_poser(player: Player, local: bool) -> void:
 	everyone[player.player_id] = player
 	if local:
@@ -145,8 +141,7 @@ func pose_state() -> int:
 	return PoseDock.State.READY if free and rules.phase != SelfieRules.Phase.WAITING else PoseDock.State.BLOCKED
 
 
-#The chip of the shove: over the rival in reach, or near
-#the player while there are rivals in the frame, with its recharge. They hide when the local player cannot act
+#Shove chip over the rival in reach or near the player; hidden when it cannot act
 func _tick_chips() -> void:
 	var player := local_player()
 	var camera := player.view_camera()
@@ -173,7 +168,7 @@ func _tick_chips() -> void:
 	_selfie_hud.set_shove_chip(show_shove, charge, anchor)
 
 
-#Whether somebody else (a player or a bot) is inside the frame
+#Whether a player or bot is in the frame
 func _rival_in_frame() -> bool:
 	for id: int in players:
 		if id != local_id and rules.is_inside((players[id] as Player).global_position):
@@ -184,12 +179,11 @@ func _rival_in_frame() -> bool:
 	return false
 
 
-#One press of the key strikes the pose and the next one drops it
 func toggle_pose(player_id: int) -> void:
 	request_pose(player_id, not rules.is_posing(player_id))
 
 
-#Shoving drops the pose first: nobody shoves from a pose
+#Shoving drops the pose first
 func request_shove(player_id: int) -> bool:
 	if rules != null and rules.is_posing(player_id):
 		rules.set_posing(player_id, false)
@@ -208,12 +202,12 @@ func _tick_round(delta: float) -> void:
 	for id: int in players:
 		var player: Player = players[id]
 		if player.remote:
-			#A player of another computer: where it is, whether it flies and whether it poses come from there
+			#A remote player's position, flight and pose come from its computer
 			rules.place(id, player.global_position, not player.remote_airborne(), false)
 			rules.set_remote_pose(id, player.posing)
 			continue
 		_air[id] = 0.0 if player.is_on_floor() else float(_air.get(id, 0.0)) + delta
-		#A new press of the move keys or a jump drops the pose; keys held down since it started do not
+		#A new move press or jump drops the pose; keys held since its start do not
 		if rules.is_posing(id) and (PoseKeeper.moves(_pose_held, id, player.move_input, settings.pose_break_input) or player.jump_requested):
 			rules.set_posing(id, false)
 		if _pose_wanted.has(id):
@@ -223,10 +217,10 @@ func _tick_round(delta: float) -> void:
 			if float(_pose_wanted.get(id, 0.0)) <= 0.0:
 				_pose_wanted.erase(id)
 		_apply_floor(id, player, delta)
-		#A floor that bumps the player for a frame does not count as leaving it
+		#A one-frame bump does not count as leaving the floor
 		rules.place(id, player.global_position, float(_air[id]) < PoseKeeper.AIR_GRACE, is_falling(id))
 	rules.extras.clear()
-	#Bots move on their own on each computer, so in a room they do not count in the photo: everybody gets the same crowd
+	#Bots move on their own on each computer, so in a room they do not count in the photo
 	if not _networked_round():
 		for bot in bots:
 			rules.extras.append(bot.global_position)
@@ -253,8 +247,7 @@ func _tick_round(delta: float) -> void:
 				rules.take_power(id, index)
 
 
-#What the floor under a player does to it this step: the drag of the turntable or the slide of the wax, the slow carpet, the bounce
-#of the mattress; the power-ups scale its run and its jump on top
+#Floor effect this step plus power-up scales
 func _apply_floor(player_id: int, player: Player, delta: float) -> void:
 	var grounded := player.is_on_floor() and not is_falling(player_id)
 	var effect := _floor.step(player_id, player.global_position, grounded, _wanted_run(player), player.velocity.y, delta)
@@ -271,7 +264,7 @@ func _apply_floor(player_id: int, player: Player, delta: float) -> void:
 		SynthSound.play(self, SynthSound.tone(180.0, 0.3, 520.0, 0.5), -8.0, rng.randf_range(0.9, 1.1))
 
 
-#The speed the keys of a player ask along the ground, as the player itself works it out; none while it cannot run
+#Ground speed the keys ask; none while it cannot run
 func _wanted_run(player: Player) -> Vector3:
 	if player.posing or player.is_dazed() or player.is_down() or player.is_diving():
 		return Vector3.ZERO
@@ -279,7 +272,7 @@ func _wanted_run(player: Player) -> Vector3:
 	return rig.get_yaw_basis() * Vector3(player.move_input.x, 0.0, player.move_input.y) * player.move_speed
 
 
-#The live picture looks at the frame while it is on the floor, and at the set before that
+#The live picture aims at the frame, or the set before it lands
 func _aim_camera() -> void:
 	var spot := rules.spot()
 	if rules.frame_visible():
@@ -300,7 +293,7 @@ func _on_struck(player_id: int, _by_rival: bool, _push: Vector3) -> void:
 	rules.strike(player_id)
 
 
-#The trolls of the troll zone: more with more players, spread over its floor, and they never leave it
+#Troll zone bots, more with more players, never leaving it
 func _spawn_trolls() -> void:
 	if not bots_enabled or bot_looks.is_empty():
 		return
@@ -321,7 +314,7 @@ func _spawn_trolls() -> void:
 		bots.append(bot)
 
 
-#While a photo is taken in the troll zone, its trolls run into the frame to spoil it
+#During a troll zone photo the trolls run into the frame
 func _tick_trolls() -> void:
 	var here := rules.frame_visible() and rules.spot() == &"Z"
 	for index in bots.size():
@@ -335,7 +328,7 @@ func _tick_trolls() -> void:
 			bot.frame_point = Vector3.ZERO
 
 
-#The drone leaves for the next set; its beam tells where from afar, and its live picture shows the set in the corner
+#The drone leaves for the next set; its beam marks where
 func _on_photo_announced(index: int, spot: StringName) -> void:
 	set_stage(index)
 	context.goal = spot
@@ -353,7 +346,7 @@ func _on_frame_locked(_index: int, _seconds: float) -> void:
 	_blinks = 0
 
 
-#Three ticks, each one higher, while the fixed frame blinks
+#Three rising ticks while the frame blinks
 func _tick_blinks() -> void:
 	if rules.phase != SelfieRules.Phase.LOCK:
 		return
@@ -363,8 +356,7 @@ func _tick_blinks() -> void:
 		SynthSound.play(self, SynthSound.tone(880.0, 0.08, 0.0, 0.4), -9.0, 1.0 + 0.2 * _blinks)
 
 
-#The shot: shutter, a white blink of a tenth of a second and a breath of freeze. The camera draws the photo once, with everybody
-#where the rules saw them; the followers float over the heads once the photo is out
+#Shot: shutter, white blink and a brief freeze; the photo is drawn once
 func _on_photo_taken(index: int, shots: Dictionary) -> void:
 	_camera.set_live(false)
 	_waiting[index] = shots
@@ -382,7 +374,7 @@ func _on_photo_taken(index: int, shots: Dictionary) -> void:
 	get_tree().create_timer(settings.reveal_seconds * 0.7).timeout.connect(_drone.hide_frame)
 
 
-#The photo is out: it shows on the screen and goes to the roll, and whoever came out in it gets its number over the head
+#Photo out: shown, added to the roll, numbers over the heads
 func _on_developed(index: int, photo: Texture2D) -> void:
 	var shots: Dictionary = _waiting.get(index, {})
 	_waiting.erase(index)
@@ -415,7 +407,7 @@ func _on_pose_changed(player_id: int, posing: bool, style: int) -> void:
 			SynthSound.play(self, SynthSound.tone(988.0, 0.18, 200.0, 0.35), -11.0)
 
 
-#Whoever poses turns to the camera of the set in a quarter of a second, so the photo shows its face and not its back
+#Posers turn to the camera so the photo shows their face
 func _face_camera(player: Player) -> void:
 	var pivot := player.get_node("ModelPivot") as Node3D
 	var from := pivot.rotation.y
@@ -457,7 +449,7 @@ func _on_finished() -> void:
 	end_round(result, "%d SEGUIDORES" % state.followers, "%d de %d fotos" % [state.photos, count], won)
 
 
-#What shows on a player: a bubble while the shield lasts, a ring under the feet while a boost does, and sparkles while it poses
+#Shield bubble, boost ring and pose sparkles on a player
 func _dress_player(player: Player) -> void:
 	var ball := SphereMesh.new()
 	ball.radius = 0.78
@@ -525,7 +517,7 @@ func _dress_player(player: Player) -> void:
 	_pointers[player.player_id] = pointer
 
 
-#A flat colour that ignores the light, so a mark reads the same on any floor
+#Unshaded colour so a mark reads on any floor
 func _glow_paint(color: Color) -> StandardMaterial3D:
 	var paint := StandardMaterial3D.new()
 	paint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -533,7 +525,7 @@ func _glow_paint(color: Color) -> StandardMaterial3D:
 	return paint
 
 
-#A flat gold arrow that lies on the floor and points along +Z
+#Flat gold floor arrow along +Z
 func _make_guide() -> Node3D:
 	var guide := Node3D.new()
 	guide.hide()
@@ -556,8 +548,7 @@ func _make_guide() -> Node3D:
 	return guide
 
 
-#The arrow of a player: it shows only while there is a photo to go to, the player is still far from it and its camera is not
-#already looking that way. Each player has its own, and this screen only draws the one of its player
+#Per player arrow shown only while far from the photo and not looking at it
 func _refresh_guide(player_id: int, player: Player) -> void:
 	var guide: Node3D = _guides[player_id]
 	var heading := rules.phase == SelfieRules.Phase.TRAVEL or rules.frame_visible()
@@ -578,8 +569,7 @@ func _refresh_guide(player_id: int, player: Player) -> void:
 	guide.rotation.y = atan2(way.x, way.z)
 
 
-#The badge of the next photo on this screen: over the set while the drone flies there, over the frame once it is on the floor, gold
-#while the frame blinks; it fades out while its player is already in the frame
+#Next photo badge: over the set, then the frame; gold while blinking, faded when inside
 func _tick_marker() -> void:
 	var player := local_player()
 	var heading := rules.phase == SelfieRules.Phase.TRAVEL or rules.frame_visible()
@@ -593,8 +583,7 @@ func _tick_marker() -> void:
 	_selfie_hud.marker.point_at(camera.unproject_position(target), camera.is_position_behind(target), meters, rules.phase == SelfieRules.Phase.LOCK)
 
 
-#The ring under the feet of a player while there is a frame, green while it is in, and the arrow over its head while the live
-#picture is on. Each player has its own, and this screen only draws the ones of its player
+#Per player ring under the feet (green inside) and arrow over the head
 func _refresh_spot(player_id: int, player: Player) -> void:
 	var spot: MeshInstance3D = _spots[player_id]
 	var pointer: MeshInstance3D = _pointers[player_id]

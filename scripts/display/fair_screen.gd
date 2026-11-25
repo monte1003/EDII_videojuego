@@ -1,11 +1,6 @@
 extends Node
 
-#The fair screen. With no game it plays the trailer (attract mode); when a game of the room starts it watches each round in the real
-#scene of the round, built from the seed that came from the server, with every player as a puppet and a camera that cuts by itself
-#(spectator); at the end it plays the podium ceremony with no way to skip it, celebrates the winner, puts the game in the ranking of the
-#fair with its animations and goes back to the trailer. A new game takes it to the spectator from anywhere. It follows the messages of
-#the room and changes nothing of the game. Players never touch it; the staff has hidden keys: M mutes, F2 shows the connection, F6 opens
-#the full ranking, F8 pressed twice empties it and Esc opens its menu (take a name out of the ranking, leave or close)
+#Fair screen: trailer when idle, spectator of each round, podium, then the ranking of the day
 
 signal mode_changed(mode: String)
 
@@ -14,9 +9,9 @@ enum Mode { ATTRACT, SPECTATOR, PODIUM, FINALE }
 const STAGES := {"lobby": "SALA DE ESPERA", "warmup": "CALENTAMIENTO", "intro": "SORTEO Y CARGA", "playing": "EN JUEGO",
 	"round_results": "RESULTADOS", "finished": "PARTIDA TERMINADA"}
 const MODE_NAMES := {Mode.ATTRACT: "atraccion", Mode.SPECTATOR: "espectador", Mode.PODIUM: "podio", Mode.FINALE: "ranking"}
-#Seconds the ranking of the end stays on screen before the trailer comes back
+#Seconds the final ranking stays before the trailer
 const RANKING_SECONDS := 14.0
-#Seconds the second press of F8 has to confirm that the ranking is emptied
+#Seconds to confirm the ranking reset with F8 again
 const RESET_WINDOW := 5.0
 const PLACE_MEDALS: Array[ScoreSheet.Medal] = [ScoreSheet.Medal.DIAMOND, ScoreSheet.Medal.GOLD, ScoreSheet.Medal.SILVER,
 	ScoreSheet.Medal.BRONZE]
@@ -36,14 +31,13 @@ var _status: Label
 var _round: Node
 var _director: SpectatorDirector
 var _podium: FairPodium
-#The key of the game being watched (its seeds), so the ranking never counts a game twice, and the entries it added
+#Key of the watched game (its seeds) and the entries it added
 var _game := ""
 var _fresh: Array[Dictionary] = []
 var _record := false
-#Who plays the game being watched, with the name and character each had when it started: {id: {"name", "character"}}
+#{id: {"name", "character"}} at the start of the watched game
 var _cast: Dictionary = {}
-#The players of the game as it ended, kept for the podium and the ranking: the room may already be in the next game, and the results of
-#each name in the ranking of the day
+#Players as the game ended, for the podium and the ranking
 var _final: Array[Dictionary] = []
 var _final_game := ""
 var _results: Array[Dictionary] = []
@@ -55,7 +49,7 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
-	#A screen that runs for hours: no more frames than a common monitor shows
+	#Runs for hours: cap at a common monitor rate
 	Engine.max_fps = 60
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	_rng.randomize()
@@ -65,7 +59,7 @@ func _ready() -> void:
 	add_child(frame)
 	reel.focus_changed.connect(frame.show_focus)
 	watch.name = "Watch"
-	#Opened from the menu it watches the room picked there; with --feria, the one of feria.cfg
+	#From the menu it watches the picked room; with --feria, feria.cfg
 	if FairMode.address != "":
 		watch.config_address = FairMode.address
 	add_child(watch)
@@ -86,7 +80,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_reset_left -= delta
-	#The screens of a round watched here stay hidden (its HUD, help and pause are for a player); only its loading cover shows
+	#Round HUD, help and pause stay hidden; only the loading cover shows
 	if _round != null:
 		_layers_left -= delta
 		if _layers_left <= 0.0:
@@ -96,7 +90,7 @@ func _process(delta: float) -> void:
 					(layer as CanvasLayer).visible = false
 
 
-#Esc opens the menu of the staff before anything else sees it (a round watched here would take it for its own pause)
+#Esc opens the staff menu before the round sees it
 func _input(event: InputEvent) -> void:
 	if not event.is_action_pressed("pause"):
 		return
@@ -127,11 +121,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			frame.notice("¿BORRAR TODO EL RANKING? PULSA F8 OTRA VEZ", RESET_WINDOW)
 
 
-#Every message about the game, after NetWatch has updated its picture of it
 func _on_message(message: Dictionary) -> void:
 	match String(message["t"]):
 		"warmup":
-			#Only a round left on screen goes away: the podium and the ranking end by themselves
+			#Only a round is taken away; podium and ranking end by themselves
 			if mode == Mode.SPECTATOR:
 				_to_attract()
 		"start":
@@ -140,7 +133,7 @@ func _on_message(message: Dictionary) -> void:
 			_cast = _room_cast()
 			_watch_round(0)
 		"snapshot":
-			#A screen that comes in (or back) with a round under way watches it from where it is
+			#Arriving with a round under way watches it from where it is
 			if mode == Mode.ATTRACT and watch.stage in ["intro", "playing"] and watch.round_index >= 0:
 				_game = _game_key()
 				if _cast.is_empty():
@@ -165,14 +158,13 @@ func _on_message(message: Dictionary) -> void:
 				_director.on_done(int(message.get("id", 0)))
 
 
-#The connection to the room was lost: a round or a podium cannot go on without it
+#Connection lost: the round or podium cannot go on
 func _on_room_lost(_reason: String) -> void:
 	if mode == Mode.SPECTATOR or mode == Mode.PODIUM:
 		_to_attract()
 
 
-#The real scene of a round, with the order and the seed of the room, every player a puppet and the camera of the director; a screen that
-#comes in late catches up with the players (RoundScene.catch_up)
+#Real round scene with the room seed, puppets and the director camera; late screens catch up
 func _watch_round(index: int) -> void:
 	if _game == "":
 		_game = _game_key()
@@ -195,7 +187,7 @@ func _watch_round(index: int) -> void:
 	_set_mode(Mode.SPECTATOR)
 
 
-#Who the director is watching: the banner shows the player, why, and the crown of its place in the game so far
+#Banner with the watched player, the reason and its crown so far
 func _on_focus(player_id: int, reason: String) -> void:
 	var info := MinigameCatalog.find(watch.plan[clampi(watch.round_index, 0, watch.plan.size() - 1)]) if not watch.plan.is_empty() else null
 	if player_id < 0:
@@ -211,7 +203,6 @@ func _on_focus(player_id: int, reason: String) -> void:
 	frame.show_focus(str(player.get("name", "")), reason, PLACE_MEDALS[place] if place >= 0 and place < PLACE_MEDALS.size() else ScoreSheet.Medal.NONE)
 
 
-#The ceremony of the game, as on the computers of the players but with no way to skip it
 func _start_podium() -> void:
 	_clear_stage()
 	GameSession.sync_lobby(watch.net.room)
@@ -224,7 +215,7 @@ func _start_podium() -> void:
 	_set_mode(Mode.PODIUM)
 
 
-#The winner celebrated on the stage of the trailer, then the ranking of the fair with the game in it, then back to the trailer
+#Winner on the trailer stage, then the fair ranking, then the trailer
 func _start_finale() -> void:
 	var order := _final if _final_game == _game else _standings()
 	_clear_stage()
@@ -257,8 +248,7 @@ func _start_finale() -> void:
 	_to_attract()
 
 
-#What the end of the ranking says, a line per player: a new record of the day, a name that beat its own mark, who got into the top ten and
-#where, who was short and by how much, and a name whose total did not beat the mark it already had
+#End lines per player: record, own best, top ten or points short
 func _finale_lines(ordered: Array[Dictionary]) -> Array[String]:
 	var lines: Array[String] = []
 	for result in _results:
@@ -279,8 +269,7 @@ func _finale_lines(ordered: Array[Dictionary]) -> Array[String]:
 	return lines.slice(0, 4)
 
 
-#The players of the game in the ranking of the fair, once: at the points of the last round and again, the same game, with the final totals
-#The players are taken from the room ("refresh") at the points of the last round and the final totals; the finale only shows them again
+#Puts the game players in the fair ranking at the last round and at the final totals
 func _put_in_ranking(refresh := true) -> void:
 	if _game == "":
 		return
@@ -304,8 +293,7 @@ func _put_in_ranking(refresh := true) -> void:
 	frame.ranking.show_rows(_ranking_rows())
 
 
-#Everybody of the game from the best to the worst: the totals the server sent at the end, or the sum of the rounds known so far, with
-#the best round to break a tie (the same AVL tree as the final count)
+#Everybody best to worst with the same AVL tree as the final count
 func _standings() -> Array[Dictionary]:
 	var players: Array[Dictionary] = []
 	var members: Dictionary = {}
@@ -335,7 +323,7 @@ func _standings() -> Array[Dictionary]:
 	return order
 
 
-#Who is in the room with its name and character as they are now: the cast of a game that starts
+#Room members with their current name and character
 func _room_cast() -> Dictionary:
 	var cast: Dictionary = {}
 	for member in watch.net.room:
@@ -348,7 +336,7 @@ func _on_name_removed(shown: String) -> void:
 	frame.notice("%s SALIÓ DEL RANKING" % shown.to_upper())
 
 
-#Back to the main menu from the menu of the staff: this computer stops being the screen of the fair; the ranking stays in its file
+#Back to the main menu; the ranking stays in its file
 func _leave() -> void:
 	menu.close()
 	FairMode.active = false
@@ -361,7 +349,7 @@ func _leave() -> void:
 	ScreenFlow.go_to_root()
 
 
-#Rows of [name, total] of the ranking, best first (all of them with -1)
+#[name, total] rows, best first (-1 for all)
 func _ranking_rows(count := FairRanking.TOP) -> Array[Array]:
 	var rows: Array[Array] = []
 	for entry in ranking.ordered():
@@ -371,7 +359,7 @@ func _ranking_rows(count := FairRanking.TOP) -> Array[Array]:
 	return rows
 
 
-#The live board: everybody of the game with its character colour and total, and what each won in round "scored" (-1: nothing yet)
+#Live board with each player's total and what it won in round "scored"
 func _refresh_board(scored := -1) -> void:
 	var live := watch.connected and watch.stage != "lobby" and mode != Mode.FINALE
 	var rows: Array[Dictionary] = []
@@ -385,7 +373,7 @@ func _refresh_board(scored := -1) -> void:
 	frame.show_board(rows)
 
 
-#A game is known by its seeds: the same game seen twice (the screen came back) is never two games in the ranking
+#A game is known by its seeds, so it is never counted twice
 func _game_key() -> String:
 	var parts := PackedStringArray()
 	for value in watch.seeds:
@@ -396,12 +384,12 @@ func _game_key() -> String:
 func _to_attract() -> void:
 	_clear_stage()
 	_set_mode(Mode.ATTRACT)
-	#The music of a round watched here may still be playing: the trailer brings its own
+	#The trailer brings its own music
 	ScreenFlow.music.play_for(&"fair_screen")
 	reel.play()
 
 
-#Takes away the round, the podium or the ranking of the end on screen and stops the trailer
+#Removes the round, podium or ranking and stops the trailer
 func _clear_stage() -> void:
 	frame.hide_finale()
 	if _round != null:
@@ -440,7 +428,7 @@ func _refresh() -> void:
 	_status.text = "\n".join(lines)
 
 
-#The light of the frame: whether there is a room, and what the game under way is doing
+#Live light text: room status and game stage
 func _live_line() -> String:
 	if not watch.connected:
 		return "BUSCANDO LA SALA"
@@ -464,7 +452,7 @@ func _game_line() -> String:
 	return "Ronda %d de %d · %s · %s" % [watch.round_index + 1, watch.plan.size(), title, stage]
 
 
-#The details of the connection for the staff, hidden until F2
+#Connection details for the staff, hidden until F2
 func _build_status() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 50

@@ -1,7 +1,7 @@
 class_name Level01Help
 extends RefCounted
 
-#The pages of the help of the feed race; the numbers come from its settings and layout
+#Help pages of the feed race, numbers from its settings and layout
 
 
 static func pages(settings: Level01Settings) -> Array[Dictionary]:

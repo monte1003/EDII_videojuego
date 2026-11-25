@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
-//The top of a tile of stories: a pale square framed by a ring that goes from magenta to orange, like a story not seen yet, with a soft
-//round picture in the middle. While the tile shakes the ring empties around it like the timer of a story and the tile flashes
+//Story tile top: ring like an unseen story that empties while the tile shakes
 uniform vec4 fill : source_color = vec4(0.88, 0.97, 1.0, 1.0);
 uniform vec4 ring_a : source_color = vec4(0.93, 0.31, 0.72, 1.0);
 uniform vec4 ring_b : source_color = vec4(1.0, 0.68, 0.32, 1.0);

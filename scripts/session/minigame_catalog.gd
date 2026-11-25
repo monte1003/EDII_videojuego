@@ -1,8 +1,7 @@
 class_name MinigameCatalog
 extends RefCounted
 
-#Every minigame of the game; a session only draws from the ones that are ready.
-#To add one: a MinigameInfo in resources/minigames and one line in ENTRIES.
+#Every minigame; to add one: a MinigameInfo in resources/minigames and a line in ENTRIES
 
 const PLANNED := 5
 const ENTRIES: Array[MinigameInfo] = [

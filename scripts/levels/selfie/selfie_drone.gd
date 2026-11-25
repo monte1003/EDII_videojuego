@@ -1,9 +1,7 @@
 class_name SelfieDrone
 extends Node3D
 
-#The camera drone: it flies from set to set over the studio, hovers, leans into its way and shrinks for a blink when it shoots.
-#A beam of light hangs under it down to the floor, and the frame it draws there is a flat piece with its own shader, with a low wall
-#of light along its edges that shows it from afar. The beam and the frame only guide the players: the photo leaves them out
+#Camera drone flying set to set with a light beam and the frame it draws on the floor
 
 const FRAME_SHADER: Shader = preload("res://assets/shaders/photo_frame.gdshader")
 const CURTAIN_SHADER: Shader = preload("res://assets/shaders/frame_curtain.gdshader")
@@ -38,7 +36,7 @@ func build(at: Vector3, center_share: float) -> void:
 	_model = PropKit.make_tall(&"drone", MODEL_HEIGHT, Color.WHITE, false)
 	_model.position.y = -MODEL_HEIGHT / 2.0
 	_body.add_child(_model)
-	#The beam hangs from the drone to the floor, wide at the bottom
+	#Beam from the drone to the floor
 	_beam = PartyKit.beam(BEAM_COLOR, SelfieLayout.DRONE_HEIGHT, 2.6, 0.5)
 	_beam.rotation.x = PI
 	_beam.position.y = -SelfieLayout.DRONE_HEIGHT / 2.0
@@ -86,7 +84,7 @@ func build(at: Vector3, center_share: float) -> void:
 	_frame.add_child(curtain)
 
 
-#The four sides of a square of one meter, standing up from the floor: the frame scales it to its size
+#Unit square sides standing up, scaled by the frame
 func _curtain_mesh() -> ArrayMesh:
 	var corners: Array[Vector3] = [Vector3(-0.5, 0.0, -0.5), Vector3(0.5, 0.0, -0.5), Vector3(0.5, 0.0, 0.5), Vector3(-0.5, 0.0, 0.5)]
 	var points := PackedVector3Array()
@@ -113,7 +111,7 @@ func _curtain_mesh() -> ArrayMesh:
 	return mesh
 
 
-#Flies along "points" (the first one is where it is) in "seconds"
+#Flies along "points" in "seconds"
 func fly(points: Array[Vector3], seconds: float) -> void:
 	_path = points.duplicate()
 	if _path.is_empty():
@@ -128,7 +126,7 @@ func fly(points: Array[Vector3], seconds: float) -> void:
 	_clock = maxf(seconds, 0.05)
 
 
-#Draws the frame on the floor: its middle, its side in meters and how close the shot is (0 to 1; it blinks three times on the way)
+#Frame on the floor: middle, side and shot progress (blinks three times)
 func show_frame(center: Vector3, side: float, lock: float) -> void:
 	_frame.show()
 	_frame.global_position = center + Vector3(0.0, FRAME_LIFT, 0.0)
@@ -144,7 +142,7 @@ func hide_frame() -> void:
 	_frame.hide()
 
 
-#The shot: the drone shrinks for an instant and a white burst opens around it
+#Shot: the drone shrinks and a white burst opens
 func snap() -> void:
 	_squeeze = 0.72
 	_flash.show()
@@ -168,7 +166,7 @@ func _process(delta: float) -> void:
 		position = _point_at(share * _travel_total)
 	var speed := (position - _last) / maxf(delta, 0.0001)
 	_last = position
-	#It leans into where it goes and bobs while it hovers
+	#Leans into its way and bobs while hovering
 	var aim := Vector2(clampf(speed.z * 0.03, -0.35, 0.35), clampf(-speed.x * 0.03, -0.35, 0.35))
 	_lean = _lean.lerp(aim, 1.0 - exp(-6.0 * delta))
 	_squeeze = lerpf(_squeeze, 1.0, 1.0 - exp(-9.0 * delta))

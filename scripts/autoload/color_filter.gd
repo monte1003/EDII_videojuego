@@ -20,7 +20,7 @@ func _ready() -> void:
 	add_child(_overlay)
 
 
-#The overlay only draws while a filter is on, so it costs nothing when nobody needs it
+#The overlay only draws while a filter is on
 func set_mode(new_mode: int) -> void:
 	mode = clampi(new_mode, 0, MODE_NAMES.size() - 1)
 	_overlay.visible = mode > 0

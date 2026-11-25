@@ -1,10 +1,7 @@
 class_name ArenaWorld
 extends ArenaGround
 
-#Builds an arena map from its layout: the ground and its fence, or the floating islands and their bridges; the terraces, ramps,
-#drums and walls on them, drawn with the candy ground of the game; and what moves (turning bars, sweeping blocks, trampolines,
-#cannons and belts). The static pieces are joined in a few meshes and collide as plain boxes, prisms and cylinders, with no gap
-#between them; nothing here decides a rule
+#Builds an arena map from its layout with the candy ground and its moving pieces
 
 const BOARD_TEXTURE: Texture2D = preload("res://assets/textures/board_checker.png")
 const BELT_TEXTURE: Texture2D = preload("res://assets/textures/belt_chevrons.png")
@@ -14,22 +11,21 @@ const WALKWAY_COLOR := Color("fff2f7")
 const EDGE_COLOR := Color("7ae6ff")
 const BELT_EDGE := Color("4cf2b0")
 const CANNON_COLOR := Color("ffc857")
-#The lighter layer on top of every block, like the icing of a cake, and how far it sticks out
+#Lighter icing layer on top of every block and its overhang
 const LIP := 0.3
 const LIP_OUT := 0.14
-#How much darker than its top the body of a block is
+#Block body shade under its top
 const BODY_SHADE := 0.2
-#A walkway is this thick and reaches this far into what it joins, so there is never a gap
+#Walkway thickness and overlap, so there is never a gap
 const WALK_THICKNESS := 0.5
 const OVERLAP := 0.25
 const EDGE_WIDTH := 0.2
 const EDGE_HEIGHT := 0.07
-#How high each step of a staircase looks
 const STEP_RISE := 0.16
-#The ground goes on this far past the fence, and is this thick
+#Ground margin past the fence and thickness
 const GROUND_MARGIN := 90.0
 const GROUND_DEPTH := 2.0
-#The fence: a wall nobody sees, far higher than any jump, behind a low candy rail on a curb
+#Fence: an invisible wall far higher than a jump behind a low candy rail
 const FENCE_HEIGHT := 18.0
 const FENCE_THICKNESS := 1.0
 const RAIL_HEIGHT := 0.66
@@ -38,22 +34,22 @@ const RAIL_STRIPE := 1.5
 const CURB_HEIGHT := 0.32
 const CURB_WIDTH := 0.7
 const BULB_SPACING := 2.0
-#The sensors that tell a locator where its player is: how high over a floor they reach and how wide a link is
+#Locator sensor height and link width
 const SENSOR_HEIGHT := 3.0
 const SENSOR_SINK := 0.4
 const LINK_WIDTH := 2.4
-#A place this small gets no mark on its floor
+#Smaller places get no floor mark
 const MARK_MIN := 2.4
 const BELT_TILE := 3.0
 const BELT_LIFT := 0.035
-#The padded block: across its way, high and along its way, which is what the hit test measures
+#Block size across, high and along its way, as the hit test measures
 const BLOCK_SIZE := Vector3(ArenaHazards.BLOCK_ACROSS, 0.9, ArenaHazards.BLOCK_ALONG)
 const BAR_HEIGHT := 0.6
-#How fast the arrows of a cannon light up one after the other
+#Speed of the cannon arrow chase
 const ARROW_CHASE := 1.4
-#Seconds before a turn in which a belt blinks
+#Seconds a belt blinks before turning
 const BELT_WARNING := 1.5
-#Seconds a piece takes to pop in when its stage starts
+#Seconds a piece takes to pop in
 const POP_TIME := 0.5
 
 var layout: ArenaLayout
@@ -66,7 +62,7 @@ var _link_areas: Array[Array] = []
 var _spinners: Array[Node3D] = []
 var _blocks: Array[Dictionary] = []
 var _pads: Array[Dictionary] = []
-#The arrows of every cannon, by their order from the back to the front: the ones in the same place light up together
+#Cannon arrows by order from back to front
 var _arrow_paint: Array[StandardMaterial3D] = []
 var _belts: Array[Dictionary] = []
 var _bulb_spots: Array[Transform3D] = []
@@ -105,7 +101,7 @@ func build(arena: ArenaLayout) -> void:
 	set_stage(0, false)
 
 
-#Tells a locator about every place and link, so it knows where its player stands
+#Tells a locator every place and link
 func watch(locator: PlayerLocator) -> void:
 	for id: StringName in _place_areas:
 		locator.watch_platform(id, _place_areas[id])
@@ -113,7 +109,7 @@ func watch(locator: PlayerLocator) -> void:
 		locator.watch_bridge(entry[0], entry[1], entry[2])
 
 
-#Shows what starts at this stage of the round; with "pop" the new pieces grow in instead of just appearing
+#Shows what starts at this stage; "pop" grows new pieces in
 func set_stage(stage: int, pop := true) -> void:
 	if stage == _stage:
 		return
@@ -127,7 +123,7 @@ func set_stage(stage: int, pop := true) -> void:
 		_reveal(entry["node"], ArenaLayout.is_on(entry["pad"], stage), pop)
 
 
-#Puts every moving piece where it is at "time" seconds of the round
+#Puts every moving piece where it is at "time"
 func update(time: float) -> void:
 	for index in _spinners.size():
 		var pivot := _spinners[index]
@@ -138,7 +134,7 @@ func update(time: float) -> void:
 		if node.visible:
 			node.global_position = ArenaHazards.block_center(block["sweeper"], time)
 	for entry in _pads:
-		#A pad with a beat sinks and goes dark while it rests
+		#A pad with a beat sinks and darkens while resting
 		var skin: Node3D = entry["skin"]
 		var live := ArenaHazards.pad_live(entry["pad"], time)
 		skin.scale.y = lerpf(skin.scale.y, 1.0 if live else 0.25, 0.3)
@@ -159,7 +155,6 @@ func update(time: float) -> void:
 		material.albedo_color = Color.WHITE if flow != 0.0 else Color(0.72, 0.72, 0.8)
 
 
-#The pad dips and springs back
 func bounce_pad(index: int) -> void:
 	if index < 0 or index >= _pads.size():
 		return
@@ -178,7 +173,7 @@ func _reveal(node: Node3D, on: bool, pop: bool) -> void:
 		create_tween().tween_property(node, "scale", Vector3.ONE, POP_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-#One flat floor under the whole map and well past its fence: whatever falls from a terrace lands on it
+#Flat floor under the whole map, past the fence
 func _build_ground() -> void:
 	var side := (layout.reach() + GROUND_MARGIN) * 2.0
 	var shape := BoxShape3D.new()
@@ -189,8 +184,7 @@ func _build_ground() -> void:
 	_merger.add(&"ground", _merged(&"board"), false, plane, Transform3D(Basis.IDENTITY, Vector3(0.0, ArenaLayout.GROUND, 0.0)), layout.ground_color)
 
 
-#The floating islands, each with its striped bumper and bulbs and an unseen wall all around except where a bridge comes in, and the
-#bridges between them with a candy rail and an unseen wall along each side
+#Islands with bumpers and walls except at bridges; bridges with rails and walls
 func _build_islands() -> void:
 	for island in layout.islands:
 		var mouths: Array[Vector3] = []
@@ -226,7 +220,7 @@ func _near_outline(outline: PackedVector2Array, point: Vector2, reach: float) ->
 	return false
 
 
-#A box of ground turned "yaw" radians, as the corners of its outline
+#Box outline turned "yaw"
 func _box_outline(center: Vector2, size: Vector2, yaw: float) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	for corner: Vector2 in [Vector2(-1.0, -1.0), Vector2(1.0, -1.0), Vector2(1.0, 1.0), Vector2(-1.0, 1.0)]:
@@ -234,7 +228,7 @@ func _box_outline(center: Vector2, size: Vector2, yaw: float) -> PackedVector2Ar
 	return points
 
 
-#A terrace or a deck: a candy block with its striped rim and bulbs. A wall is a tall block with only a rim
+#Terrace or deck block; a wall is a tall block with only a rim
 func _build_block(block: Dictionary) -> void:
 	var color := layout.color_of_zone(block["zone"])
 	var outline := _box_outline(block["center"], block["size"], float(block["yaw"]))
@@ -244,7 +238,7 @@ func _build_block(block: Dictionary) -> void:
 		_terrain.platform(outline, block["top"], block["bottom"], color, color.lightened(0.55))
 
 
-#A slope: a solid wedge down to the floor under its low end, or a thin walkway with lights on its sides and room under it
+#Solid wedge or thin walkway with lights
 func _build_ramp(ramp: Dictionary) -> void:
 	var from: Vector3 = ramp["from"]
 	var to: Vector3 = ramp["to"]
@@ -255,7 +249,7 @@ func _build_ramp(ramp: Dictionary) -> void:
 		_terrain.ramp(from, to, ramp["width"], WALKWAY_COLOR, EDGE_COLOR)
 
 
-#A round pillar to stand on, with its striped rim and bulbs
+#Round pillar with rim and bulbs
 func _build_drum(drum: Dictionary) -> void:
 	var center: Vector2 = drum["center"]
 	var radius: float = drum["radius"]
@@ -263,7 +257,7 @@ func _build_drum(drum: Dictionary) -> void:
 	_terrain.platform(CandyTerrain.circle(center, radius, maxi(roundi(radius * 6.0), 16)), drum["top"], drum["bottom"], color, color.lightened(0.55))
 
 
-#The fence along every side of the outline: an unseen wall, a curb, a candy rail with lights and a post at each corner
+#Fence: invisible wall, curb, rail with lights and corner posts
 func _build_fence() -> void:
 	var middle := Vector2.ZERO
 	for corner in layout.outline:
@@ -300,7 +294,7 @@ func _build_fence() -> void:
 	_merger.add(&"rim", _merged(&"rim"), false, tool.commit(), Transform3D.IDENTITY, PartyKit.PINK)
 
 
-#A straight candy tube between two points, with its stripes counted along it
+#Straight candy tube with stripes along it
 func _add_tube(tool: SurfaceTool, from: Vector3, to: Vector3, radius: float, sides: int) -> void:
 	var along := (to - from).normalized()
 	var across := Vector3.UP.cross(along).normalized()
@@ -322,7 +316,7 @@ func _add_tube(tool: SurfaceTool, from: Vector3, to: Vector3, radius: float, sid
 			tool.add_vertex(corners[index])
 
 
-#A flat face of four corners that is seen from the side "outward" points to
+#Quad seen from the "outward" side
 func _quad(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, outward: Vector3) -> void:
 	var corners: Array[Vector3] = [a, b, c, a, c, d]
 	if (b - a).cross(c - a).dot(outward) > 0.0:
@@ -332,7 +326,7 @@ func _quad(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, ou
 		tool.add_vertex(corner)
 
 
-#The sensor of a place and, when it is big enough, a mark on its floor: two flat discs in lighter tones of its zone
+#Place sensor and floor mark
 func _build_place(id: StringName) -> void:
 	var centre := layout.position_of(id)
 	var radius := layout.radius_of(id)
@@ -348,7 +342,7 @@ func _build_place(id: StringName) -> void:
 		_merger.add(&"board", _merged(&"board"), false, disc, Transform3D(Basis.IDENTITY, centre + Vector3(0.0, float(ring[2]), 0.0)), color.lightened(float(ring[1])))
 
 
-#The sensor of a link that is walked: a box along it, from the rim of one place to the rim of the other
+#Link sensor box from rim to rim
 func _build_link(entry: ArenaLayout.Link) -> void:
 	if entry.kind == ArenaLayout.DROP or entry.kind == ArenaLayout.LAUNCH:
 		return
@@ -375,7 +369,7 @@ func _build_spinners() -> void:
 		_spinners.append(pivot)
 
 
-#The padded block of each sweeper and the dark rail it runs on, with a yellow stop at each end
+#Sweeper blocks with their rails and stops
 func _build_blocks() -> void:
 	for sweeper in layout.sweepers:
 		var from: Vector3 = sweeper["a"]
@@ -397,8 +391,7 @@ func _build_blocks() -> void:
 		_blocks.append({"node": holder, "rail": rail, "sweeper": sweeper})
 
 
-#A trampoline is a dark base, a pink ring and a yellow skin that glows. A cannon is a striped drum with a gold cushion, three arrows
-#that light up one after the other toward where it throws
+#Trampoline: dark base, pink ring, glowing skin. Cannon: striped drum with chasing arrows
 func _build_pads() -> void:
 	for pad in layout.pads:
 		var node := Node3D.new()
@@ -428,7 +421,7 @@ func _build_pads() -> void:
 			_build_arrows(node, pad)
 
 
-#What tells where a cannon throws: three arrows on its skin that light up one after the other toward there
+#Three arrows lighting up toward the cannon target
 func _build_arrows(node: Node3D, pad: Dictionary) -> void:
 	var from: Vector3 = pad["at"]
 	var to: Vector3 = pad["to"]
@@ -448,7 +441,7 @@ func _build_arrows(node: Node3D, pad: Dictionary) -> void:
 		mark.basis = Basis.looking_at(aim, Vector3.UP) * Basis(Vector3.RIGHT, -PI / 2.0)
 
 
-#A belt is a strip with arrows lying on the floor it drags over
+#Belt strips with arrows
 func _build_belts() -> void:
 	for belt in layout.belts:
 		var from: Vector3 = belt["a"]
@@ -515,7 +508,7 @@ func _sensor(shape: Shape3D, xform: Transform3D) -> Area3D:
 	return area
 
 
-#The materials of the joined meshes read the colour of each vertex, so one serves every piece of the map
+#One vertex-colour material serves every piece
 func _merged(kind: StringName) -> Material:
 	if _merged_materials.has(kind):
 		return _merged_materials[kind]

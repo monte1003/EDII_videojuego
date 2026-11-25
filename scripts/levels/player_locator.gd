@@ -1,11 +1,11 @@
 class_name PlayerLocator
 extends Node
 
-#Tells which platform or bridge the player is on with Area3D sensors; in the air it keeps the last place
+#Which platform or bridge the player is on, from Area3D sensors; keeps the last one in the air
 
 signal place_changed
 
-#The player this locator follows; the sensors are shared, so it ignores the others
+#Followed player; the sensors are shared
 var player_id := 0
 var vertex: StringName = &""
 var on_bridge := false
@@ -26,7 +26,7 @@ func watch_bridge(a: StringName, b: StringName, area: Area3D) -> void:
 	area.body_exited.connect(_on_body_exited.bind(a, b, false))
 
 
-#Used after the player is put somewhere on purpose (respawn)
+#After putting the player somewhere on purpose
 func force_vertex(id: StringName) -> void:
 	vertex = id
 	on_bridge = false
@@ -35,7 +35,7 @@ func force_vertex(id: StringName) -> void:
 	place_changed.emit()
 
 
-#Vertices a bot may chase: the platform, or both ends of the bridge the player is on
+#Vertices a bot may chase: the platform or both bridge ends
 func chase_candidates() -> Array[StringName]:
 	if on_bridge:
 		return [bridge_a, bridge_b]

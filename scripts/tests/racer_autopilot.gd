@@ -1,19 +1,17 @@
 class_name RacerAutopilot
 extends Node
 
-#Chance that the racer stops to scroll its phone when it reaches an island, and for how long
+#Chance and length of a phone stop at an island
 const DISTRACTION_CHANCE := 0.3
 const DISTRACTION_TIME := Vector2(0.8, 2.0)
-#The clumsy racer (a person that is not good at the game): it stops more often and longer, and misses this share of the jumps
+#Clumsy racer: more and longer stops, and misses this share of jumps
 const CLUMSY_DISTRACTION_CHANCE := 0.6
 const CLUMSY_DISTRACTION_TIME := Vector2(1.5, 3.5)
 const CLUMSY_MISS := 0.35
 
-#Test helper that plays a racer of level 1 in place of a keyboard: it walks the shortest route to the goal like a player would, jumps the spinners, the sweeping blocks, the
-#rolling balls and the scroll wheels, waits between the axes and the likes, changes lane before a giant ball, walks against the wind and sometimes stops to scroll its
-#phone. The game never uses it; it only sets the actions of its Player, like the keyboard does for a person.
+#Test helper that plays a level 1 racer: shortest route, timed jumps and dodges
 
-#How far ahead in time it looks before stepping into what cannot be jumped, and the turns it tries to get out of the way
+#Look-ahead time and turns tried before stepping into what cannot be jumped
 const LOOK_AHEAD := 0.7
 const DODGES: Array[float] = [0.0, 0.9, -0.9, 1.57, -1.57]
 
@@ -23,13 +21,13 @@ var rng: RandomNumberGenerator
 #Seconds of the round, to know where the spinners point
 var clock: Callable
 var enabled := false
-#Meters off the middle of a bridge at which the racer walks, to one side or the other by its id, so racers side by side do not push each other (0 walks the middle)
+#Side offset on a bridge by id so racers do not push each other
 var lane_width := 0.0
 #The bridge that is about to fall: the racer waits at its gate instead of crossing it
 var danger_edge: Array[StringName] = []
 #Whether it may stop to scroll its phone on an island (off to time the course)
 var distractible := true
-#The islands to go through, in order, instead of the cheapest route (to time one way of the course); empty plays the cheapest route
+#Forced island order to time one way; empty takes the cheapest route
 var forced_route: Array[StringName] = []
 #Plays like a person that is not good at the game
 var clumsy := false
@@ -45,11 +43,11 @@ var _seen_version := -1
 var _last_plan := -100.0
 var _time := 0.0
 var _distracted_left := 0.0
-#Rolled again on every island: while it is under the share of misses, the jumps of the next stretch are not made
+#Rolled at each island to decide missed jumps
 var _miss_roll := 1.0
-#The pad of the deck the racer fell onto: it walks to it and a bubble carries it back to the start of the bridge
+#Deck pad to walk to after a fall
 var _deck: Dictionary = {}
-#The course with every fragile bridge up: like a person, it plans as if a bridge the feed took down will come back, and waits for it
+#Plans as if fallen fragile bridges come back
 var _open := Level01Layout.build_graph()
 
 
@@ -106,7 +104,7 @@ func _physics_process(delta: float) -> void:
 	_jump_rollers()
 
 
-#A racer that dropped well under the island or bridge it was on, onto a deck: it goes to the pad of the bubble that caught it
+#Dropped onto a deck: go to the bubble pad
 func _check_fall() -> void:
 	if not _deck.is_empty() or _player.carried or not _player.is_on_floor():
 		return
@@ -118,7 +116,7 @@ func _check_fall() -> void:
 		_committed = false
 
 
-#On the deck it goes to the pad; once the bubble has carried it back it goes on from the platform at the start of the bridge
+#Walks to the pad, then continues after the bubble
 func _walk_deck() -> void:
 	var pad: Vector3 = _deck["pad"]
 	if _player.carried:
@@ -164,7 +162,7 @@ func _walk() -> Vector3:
 	var gate := _gate_point(_vertex, next) + _lane(_vertex, next)
 	if not _reached(gate):
 		return _toward(gate)
-	#At the gate the bridge must be open and not about to fall: a fragile one that is down comes back, so it waits for it
+	#At the gate the bridge must be open; a fallen fragile one is waited for
 	if not graph.is_edge_enabled(_vertex, next):
 		return Vector3.ZERO
 	if _is_danger(_vertex, next):
@@ -207,7 +205,7 @@ func _jump_spinners() -> void:
 		_player.jump_requested = true
 
 
-#The block that sweeps the bridge it is crossing: it jumps when the block is about to reach it
+#Jumps the sweeping block of its bridge in time
 func _jump_blocks() -> void:
 	if not _jumps() or not _committed or not _player.is_on_floor() or not clock.is_valid():
 		return
@@ -219,7 +217,7 @@ func _jump_blocks() -> void:
 		_player.jump_requested = true
 
 
-#The comment of the bridge it is crossing: it jumps when its push is about to start and the bubble is close
+#Jumps the comment push in time
 func _jump_comments() -> void:
 	if not _jumps() or not _committed or not _player.is_on_floor() or not clock.is_valid():
 		return
@@ -233,7 +231,7 @@ func _jump_comments() -> void:
 		_player.jump_requested = true
 
 
-#The balls that roll across the island it stands on: it jumps when one is about to reach it
+#Jumps a rolling ball in time
 func _jump_balls() -> void:
 	if not _jumps() or _committed or not _player.is_on_floor() or not clock.is_valid():
 		return
@@ -245,8 +243,7 @@ func _jump_balls() -> void:
 			_player.jump_requested = true
 
 
-#Before stepping into what cannot be jumped (an axe, a like, a giant ball) it checks the way for the next moment; when it is not clear it
-#tries a turn to the side, waits where it is if that is safe, or steps back
+#Before what cannot be jumped: turn aside, wait if safe, or step back
 func _dodge(wanted: Vector3) -> Vector3:
 	if not clock.is_valid() or wanted == Vector3.ZERO or not _player.is_on_floor():
 		return wanted
@@ -272,7 +269,7 @@ func _clear(at: Vector3, way: Vector3, now: float) -> bool:
 	return true
 
 
-#Whether a point is well inside the way: a step to the side never takes the racer near an edge
+#Well inside the way, so a side step never nears an edge
 func _inside(point: Vector3) -> bool:
 	var index := Level01Layout.run_at(point)
 	if index >= 0:
@@ -339,7 +336,7 @@ func _toward(point: Vector3) -> Vector3:
 	return flat.normalized()
 
 
-#The move input goes in the space of the camera of the racer, which starts looking at its bridge
+#Move input in the racer's camera space
 func _set_move(direction: Vector3) -> void:
 	var local := (_player.get_node("CameraRig") as PlayerCamera).get_yaw_basis().inverse() * direction
 	_player.move_input = Vector2(local.x, local.z)

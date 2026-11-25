@@ -1,15 +1,13 @@
 class_name BeltKit
 extends RefCounted
 
-#The look of a conveyor belt, the same in every map: the moving surface sits a little sunken between two soft candy rails with round
-#ends, and a striped drum turns under each end, so a belt reads as a machine with relief and not as a painted strip. Only the look:
-#what the belt does is the business of its map
+#Conveyor belt look shared by every map: sunken surface, candy rails and striped drums
 
 const RAIL_RADIUS := 0.17
 const DRUM_RADIUS := 0.22
 
 
-#Dresses "parent", whose origin is the middle of the top of the belt and whose -Z runs along it, with its rails and its drums
+#Dresses "parent", whose origin is the middle of the belt top and -Z runs along it
 static func dress(parent: Node3D, length: float, width: float, color: Color) -> void:
 	var rail_paint := PartyKit.candy(PartyKit.WHITE, color, 2.0, length * 1.2)
 	for side: float in [-1.0, 1.0]:

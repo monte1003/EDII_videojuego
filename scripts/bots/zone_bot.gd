@@ -1,21 +1,17 @@
 class_name ZoneBot
 extends ChaserBot
 
-#A bot that lives in a zone of its own and never leaves it: it walks straight on a flat floor, with no graph, so it never gets stuck on
-#ramps or steps. It goes after the closest player inside its zone and shoves it with the usual warning; with nobody inside it wanders;
-#while a photo is taken in its zone it runs into the frame to spoil it. A curb the bot never crosses keeps it in too
+#Bot that stays in its zone on a flat floor: chases the closest player and spoils photos
 
-#How far inside the edge of its zone the bot keeps, and how close to a player it stops; it reaches whoever stands on a low pad of
-#its zone but not on the high one
+#Margin from the zone edge and stop distance from a player
 const EDGE_ROOM := 0.7
 const REACH_HEIGHT := 1.0
 const CLOSE := 1.1
-#Seconds before it picks another spot to wander to
+#Seconds before picking another wander spot
 const WANDER_TIME := 2.6
 
-#The floor of its zone on the ground
 var bounds := Rect2()
-#Where to go to be in the photo, or zero when there is no photo in its zone
+#Where to stand to be in the photo, or zero
 var frame_point := Vector3.ZERO
 
 var _wander := Vector3.ZERO
@@ -23,7 +19,7 @@ var _wander_left := 0.0
 var _rng := RandomNumberGenerator.new()
 
 
-#Builds the body of a bot: a capsule like the one of the players and the root its model hangs from
+#Capsule body like the players' with a root for its model
 static func make() -> ZoneBot:
 	var bot := ZoneBot.new()
 	bot.collision_layer = 2
@@ -41,7 +37,7 @@ static func make() -> ZoneBot:
 	return bot
 
 
-#Puts the bot at a spot of its zone and wakes it up
+#Places the bot and wakes it up
 func place(spot: Vector3, seed_value: int) -> void:
 	global_position = spot
 	_rng.seed = seed_value
@@ -74,7 +70,7 @@ func _physics_process(delta: float) -> void:
 		place(Vector3(bounds.get_center().x, 0.2, bounds.get_center().y), _rng.randi())
 
 
-#Where it heads now: into the frame of a photo of its zone, at the closest player that is in its zone, or to a spot of its own
+#Heads into a photo frame, at the closest player in its zone, or wanders
 func _steer(delta: float) -> Vector3:
 	var goal := Vector3.ZERO
 	if frame_point != Vector3.ZERO:
@@ -106,7 +102,7 @@ func _steer(delta: float) -> Vector3:
 	return way.normalized() * move_speed
 
 
-#It never steps out of its zone: the part of its walk that would take it over the edge is left out
+#Drops the part of its walk that would leave the zone
 func _keep_inside(wanted: Vector3) -> Vector3:
 	var inner := bounds.grow(-EDGE_ROOM)
 	var at := Vector2(global_position.x, global_position.z)

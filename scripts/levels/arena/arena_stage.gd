@@ -1,9 +1,7 @@
 class_name ArenaStage
 extends Node3D
 
-#The game-show set around an arena map, floating like the map over a sea of clouds: sky and light, a ring of candy pillars that rise
-#from the clouds joined by bunting with sweeping beams, grandstands on their own islands with a crowd that cheers, balloons, clouds,
-#a rainbow and a big wheel. None of it collides and all of it is always drawn
+#Game-show set around an arena over a sea of clouds: pillars, bunting, beams, stands and backdrop
 
 const PILLAR_COUNT := 10
 const PILLAR_SIZE := 1.8
@@ -22,7 +20,7 @@ var _radius := 40.0
 var _terrain: CandyTerrain
 
 
-#"radius" is how far the map reaches from its middle; the set stands just outside it
+#"radius" is the map reach; the set stands just outside
 func build(radius: float, seed_value: int, top_height: float) -> void:
 	_radius = radius
 	_rng.seed = seed_value
@@ -95,8 +93,7 @@ func _build_sky(radius: float) -> void:
 	add_child(sun)
 
 
-#A sea of clouds far under the map and a ring of big ones on the horizon, never over the map: the ring does not drift, since drifting
-#along X one of its clouds would cross the map sooner or later
+#Cloud sea under the map and a static ring on the horizon that never drifts over the map
 func _build_clouds() -> void:
 	var rim := CloudField.new()
 	rim.setup(Vector2(-_radius * 3.2, _radius * 3.2))
@@ -110,14 +107,14 @@ func _build_clouds() -> void:
 		var distance := _radius * _rng.randf_range(2.4, 3.0)
 		var at := Vector3(cos(angle) * distance, _rng.randf_range(7.0, 20.0), sin(angle) * distance)
 		var size := _rng.randf_range(8.0, 12.0)
-		#The speed it had is still drawn, so the rest of the set comes out as before
+		#Still drawn so the rest of the set comes out as before
 		_rng.randf()
 		rim.add_cloud(at, size, SEA_COLORS[index % SEA_COLORS.size()], 0.0, _rng)
 	add_child(rim)
 	rim.commit()
 
 
-#Candy pillars standing past the fence, each with a sweeping beam, and bunting from one to the next
+#Candy pillars past the fence with beams and bunting
 func _build_pillars(top_height: float) -> void:
 	var caps: Array[Vector3] = []
 	var ring := _radius + 9.0
@@ -142,8 +139,7 @@ func _build_pillars(top_height: float) -> void:
 		add_child(PartyKit.bunting(from, to, 2.6, 16, 1.8, PartyKit.PALETTE))
 
 
-#Four grandstands on the diagonals facing the middle, each on its own floating island, with balloons tied at their ends; one crowd
-#for all of them
+#Four grandstands on their own islands with balloons
 func _build_stands() -> void:
 	_crowd = CrowdField.new()
 	add_child(_crowd)
@@ -171,7 +167,7 @@ func _build_stands() -> void:
 	balloons.commit()
 
 
-#The far scenery: a rainbow and a big wheel
+#Rainbow and big wheel
 func _build_backdrop() -> void:
 	var rainbow := PartyKit.rainbow(_radius * 1.5, 2.6, [PartyKit.PINK, PartyKit.ORANGE, PartyKit.YELLOW, PartyKit.GREEN, PartyKit.CYAN, PartyKit.VIOLET])
 	rainbow.position = Vector3(0.0, -26.0, -_radius * 2.3)

@@ -1,11 +1,11 @@
 extends Screen
 
-#The waiting room: your character, the open places and the "Listo" button; when everybody is ready it starts
+#Waiting room: your character, the open places and "Listo"; starts when everybody is ready
 
 const START_DELAY := 1.3
 const ACTION_WIDTH := 300.0
 const MARK: Texture2D = preload("res://assets/ui/textures/mark.png")
-#The halo behind each place: its size on the screen, and how strong it is while waiting and once ready
+#Halo behind each place: size, and strength while waiting and once ready
 const HALO_SIZE := Vector2(330, 400)
 const HALO_ALPHA := 0.34
 const HALO_READY_ALPHA := 0.55
@@ -23,7 +23,7 @@ var _practice: TextButton
 var _net_panel: NetPanel
 var _character_label: Label
 var _character_dot: Panel
-#The keyboard on screen for the name, with the pad, and the hint that offers it next to the field
+#On-screen keyboard for the name with the pad
 var _keyboard := NameKeyboard.new()
 var _write_hint: Control
 var _halos: Array[TextureRect] = []
@@ -48,8 +48,7 @@ func _ready() -> void:
 	_on_device_changed(0)
 
 
-#A selected button answers the confirm key by itself, so here it only marks "Listo" when nothing is selected. On the name field the pad
-#opens the keyboard on screen (the real keyboard types in the field). The character changes with A and D, or L1 and R1 on the pad
+#Confirm marks "Listo" when nothing is selected; the pad opens the keyboard on the name field
 func _unhandled_input(event: InputEvent) -> void:
 	var idle := not _name_field.has_focus() and not _net_panel.is_picking()
 	if event.is_action_pressed("menu_confirm") and _name_field.has_focus() and not _net_panel.is_picking():
@@ -71,7 +70,7 @@ func _on_name_written(text: String) -> void:
 	_name_field.grab_focus()
 
 
-#The key drawn on "Listo" and the offer to write the name follow the device in use
+#Key hints follow the device in use
 func _on_device_changed(_kind: int) -> void:
 	_ready_button.set_icon(InputHints.confirm_icon())
 	_update_write_hint()
@@ -81,7 +80,7 @@ func _update_write_hint() -> void:
 	_write_hint.visible = _name_field.has_focus() and InputHints.uses_pad()
 
 
-#A soft glow of each player's colour behind its place, stronger and breathing once it is ready
+#Player colour glow behind each place, breathing once ready
 func _process(delta: float) -> void:
 	_clock += delta
 	var beat := 0.5 + 0.5 * sin(_clock * 3.6)
@@ -202,7 +201,7 @@ func _build_interface() -> void:
 	_links.append(back)
 
 
-#The buttons of the kit use the wide menu font; here every text of the screen is Outfit
+#Every text of this screen in Outfit
 func _restyle_texts() -> void:
 	var caption := _ready_button.find_child("Caption", true, false) as Label
 	if caption != null:
@@ -211,13 +210,12 @@ func _restyle_texts() -> void:
 		link.add_theme_font_override("font", UiKit.BOLD_FONT)
 
 
-#Secondary text of the screen, as the hint under the main menu
+#Secondary text like the main menu hint
 func _caption(text: String, size: int, alpha: float) -> Label:
 	return UiKit.label(text, UiKit.BODY_FONT, size, Color(Palette.INK_SOFT, alpha))
 
 
-#The emblem of the game beside the title, with a short line over it that says what this room is for: you leave the feed and step into the
-#ring
+#Game emblem beside the title with a short line over it
 func _build_title() -> HBoxContainer:
 	var lockup := HBoxContainer.new()
 	lockup.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -315,8 +313,7 @@ func _build_name_row() -> VBoxContainer:
 	_write_hint.visible = false
 	name_row.add_child(_write_hint)
 	box.add_child(name_row)
-	#The character is picked here too, with A and D or L1 and R1 to each side of its name and a dot of its colour; everybody in the room
-	#sees the change at once
+	#Character picker: A/D or L1/R1 around its name; the room sees the change at once
 	var picker := HBoxContainer.new()
 	picker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	picker.add_theme_constant_override("separation", 10)
@@ -342,7 +339,7 @@ func _build_name_row() -> VBoxContainer:
 	return box
 
 
-#A field with only a line under it, so it reads as a form and not as one more card
+#Underline-only field so it reads as a form
 func _underline(color: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(Palette.PAPER, 0.0)
@@ -371,7 +368,7 @@ func _toggle_ready() -> void:
 	if slot == null or not accepts_confirm():
 		return
 	if GameSession.is_networked():
-		#In a room the server keeps who is ready; the change comes back with the room
+		#In a room the server keeps who is ready
 		GameSession.net.set_ready(not slot.ready)
 		if not slot.ready:
 			_stage.cheer(_local_id)
@@ -404,7 +401,7 @@ func _refresh() -> void:
 		_cancel_countdown()
 
 
-#The next or the previous character; two players may wear the same one, the second in another colour
+#Next or previous character; repeats wear another colour
 func _cycle_character(step: int) -> void:
 	var slot := GameSession.lobby.find(_local_id)
 	if slot == null or not accepts_confirm():
@@ -421,7 +418,6 @@ func _cycle_character(step: int) -> void:
 	GameSession.lobby.changed.emit()
 
 
-#Leaving the lobby leaves the room too
 func _back() -> void:
 	if GameSession.is_networked():
 		GameSession.net.close()

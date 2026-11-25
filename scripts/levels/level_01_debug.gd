@@ -1,8 +1,7 @@
 class_name Level01Debug
 extends Node
 
-#Tools for the class: F3 draws the graph and the cheapest route from the player to the goal, F4 closes a bridge of that route for a few
-#seconds so Dijkstra can be seen choosing another one
+#Class tools: F3 draws the graph and route, F4 closes a route bridge to show Dijkstra rerouting
 
 const ROUTE_COLOR := Color("ffd23f")
 const DEMO_SECONDS := 8.0
@@ -11,7 +10,7 @@ var _level: Level01
 var _view: GraphDebugView
 var _hud: LevelHud
 var _timer := 0.0
-#The bridge the demo closed and the seconds it stays closed
+#Bridge closed by the demo and its seconds left
 var _closed: Array[StringName] = []
 var _demo_left := 0.0
 
@@ -51,7 +50,7 @@ func end_demo() -> void:
 	_closed.clear()
 
 
-#The cheapest route from where the player is to the goal, as Dijkstra sees it now
+#Cheapest route from the player to the goal now
 func _route() -> WeightedGraph.PathResult:
 	return _level.graph.shortest_path(_level.local_locator().vertex, Level01Layout.GOAL)
 
@@ -90,7 +89,7 @@ func _text(found: WeightedGraph.PathResult) -> String:
 	return "\n".join(lines)
 
 
-#Closes the first bridge of the route that can be closed with another way left, so the route changes in front of the class
+#Closes the first route bridge that leaves another way
 func _start_demo() -> void:
 	if not _level.rules.is_running():
 		return

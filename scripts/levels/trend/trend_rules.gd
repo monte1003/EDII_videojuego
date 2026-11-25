@@ -1,13 +1,11 @@
 class_name TrendRules
 extends RefCounted
 
-#The rules of the trend war with no nodes and by player id: five rounds, one in each zone. Every player always follows one trend, a kind
-#drawn at random; touching a bubble of that kind completes it, counts one and draws the next. The viral bubble is the trend of everybody
-#and counts more. More trends, more points. Every change is told with a signal
+#Trend war rules with no nodes: five zone rounds; each player follows one trend at a time
 
 enum Phase { WAITING, REVEAL, RUN, DONE }
 
-#The kind of the viral bubble, after the six kinds of the catalog
+#Viral kind, after the six catalog kinds
 const VIRAL := TrendCatalog.COUNT
 
 signal zone_announced(index: int, seconds: float)
@@ -18,7 +16,7 @@ signal finished
 
 class PlayerState:
 	var id: int
-	#The kind it follows now, and how many trends it completed
+	#Current kind and trends completed
 	var trend := -1
 	var completed := 0
 	var virals := 0
@@ -31,10 +29,10 @@ var settings: TrendSettings
 var sheet: ScoreSheet
 var players: Dictionary = {}
 var phase := Phase.WAITING
-#The round being played (its index in the order of the zones) and the seconds left of it
+#Round index in the zone order and seconds left
 var round_index := -1
 var time_left := 0.0
-#Trends a good player completes in the whole round: the scene works it out from the zones and the players
+#Trends a good player completes in the round, set by the scene
 var par := 1.0
 
 var _rng := RandomNumberGenerator.new()
@@ -57,7 +55,7 @@ func state_of(player_id: int) -> PlayerState:
 	return players.get(player_id)
 
 
-#The first zone is announced; every player gets its first trend
+#Announces the first zone and draws each player's first trend
 func start() -> void:
 	if phase != Phase.WAITING:
 		return
@@ -95,7 +93,7 @@ func tick(delta: float) -> void:
 					zone_started.emit(round_index)
 
 
-#The kind this player follows; -1 while no zone is being played
+#Kind this player follows; -1 between zones
 func needed(player_id: int) -> int:
 	var state := state_of(player_id)
 	if phase != Phase.RUN or state == null:
@@ -103,13 +101,13 @@ func needed(player_id: int) -> int:
 	return state.trend
 
 
-#Whether a bubble of "kind" is a trend for this player now: its own kind, or the viral one
+#Its own kind or the viral one
 func wants(player_id: int, kind: int) -> bool:
 	var need := needed(player_id)
 	return need >= 0 and (kind == need or kind == VIRAL)
 
 
-#A player touches a bubble of "kind": it only counts when it is its trend or the viral one; then it draws the next trend
+#Counts only its trend or the viral one, then draws the next
 func collect(player_id: int, kind: int) -> bool:
 	if not wants(player_id, kind):
 		return false
@@ -124,7 +122,7 @@ func collect(player_id: int, kind: int) -> bool:
 	return true
 
 
-#In a room the server decides who completes a trend: the others take it as it says, with the next trend it drew
+#In a room the server decides and sends the next trend
 func apply_collect(player_id: int, kind: int, next_trend: int) -> void:
 	var state := state_of(player_id)
 	if state == null or kind < 0 or kind > VIRAL:
@@ -139,7 +137,7 @@ func apply_collect(player_id: int, kind: int, next_trend: int) -> void:
 		trend_drawn.emit(player_id, next_trend)
 
 
-#How far the round of the zone is, from 0 when it starts to 1 when it ends
+#Zone round progress, 0 to 1
 func zone_share() -> float:
 	if phase != Phase.RUN:
 		return 0.0
@@ -158,7 +156,7 @@ func totals() -> Dictionary:
 	return result
 
 
-#A new trend: any kind but the one it just completed
+#Any kind but the one just completed
 func _draw(state: PlayerState) -> void:
 	var kind := _rng.randi() % TrendCatalog.COUNT
 	if kind == state.trend:

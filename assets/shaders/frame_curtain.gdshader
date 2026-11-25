@@ -1,9 +1,7 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
 
-//A low wall of light that rises from the edges of the frame and fades upward, so the frame shows from afar and over the props of
-//a set. Dashes run along it like the edge of a viewfinder; it turns gold while the frame blinks before the shot. Up close it fades
-//away, so it never hangs between the camera and its player, and so does a side seen edge on
+//Low wall of light on the frame edges; turns gold before the shot, fades up close
 uniform vec4 color : source_color = vec4(1.0);
 uniform vec4 hot : source_color = vec4(1.0, 0.85, 0.3, 1.0);
 uniform float blink = 0.0;

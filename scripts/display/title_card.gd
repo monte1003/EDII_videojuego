@@ -1,20 +1,17 @@
 class_name TitleCard
 extends Control
 
-#The words of the trailer set as a film sets them: flat over the picture and never inside the scene (nothing gets in front of them), over a
-#soft pool of night that keeps them readable on any background, in the wide type of the game's buttons. A line comes in with its small
-#part closing its letters up and its punch opening from the middle; while it stays it drifts a little closer, and it leaves fast. The title
-#is the logo of the game slammed in on the beat, with a light behind it and a glint crossing its letters
+#Trailer words set like a film: flat over the picture on a pool of night, in the button type
 
 const LOGO: Texture2D = preload("res://assets/ui/textures/title.png")
 const SHINE: Shader = preload("res://assets/shaders/title_shine.gdshader")
 const WIDE: FontFile = preload("res://assets/ui/fonts/Unbounded.ttf")
-#The OpenType tag of the weight axis ("wght") of the font
+#OpenType tag of the weight axis ("wght")
 const WEIGHT := 2003265652
-#The ranking column and its margins on the right: words stay in the middle of what is left
+#The ranking column and its margin on the right
 const COLUMN := FairFrame.COLUMN_WIDTH + 46.0
 const OUT_SECONDS := 0.25
-#The slow push while words stay on screen
+#Slow push while the words stay
 const DRIFT := 1.04
 const DRIFT_SECONDS := 7.0
 
@@ -26,7 +23,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
-#A line of the trailer: the first part small, its letters closing up; the punch big, opening from its middle
+#Trailer line: small part closing up, big punch opening from the middle
 func say(lines: Array[String]) -> void:
 	var card := _new_card()
 	var free := size.x - COLUMN
@@ -46,7 +43,7 @@ func say(lines: Array[String]) -> void:
 	motion.tween_property(rig, "scale", Vector2.ONE * DRIFT, DRIFT_SECONDS).from(Vector2.ONE * 0.97).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 
-#The logo slammed in on the beat with its line under it; a "call" comes in gold after "call_after" seconds and beats with the music
+#Logo slammed in on the beat with its line; "call" comes in gold and beats
 func title(tagline: String, call := "", call_after := 0.0, beat := 0.5) -> void:
 	var card := _new_card()
 	var free := size.x - COLUMN
@@ -95,7 +92,7 @@ func title(tagline: String, call := "", call_after := 0.0, beat := 0.5) -> void:
 		pulse.tween_callback(_keep_beating.bind(call_words, beat))
 
 
-#The name of a character at the bottom left, as a fighting game brings a fighter in, under a line of its colour
+#Character name at the bottom left like a fighting game
 func name_card(shown_name: String, tag: String, colour: Color) -> void:
 	var card := _new_card()
 	var free := size.x - COLUMN
@@ -123,14 +120,13 @@ func name_card(shown_name: String, tag: String, colour: Color) -> void:
 	motion.tween_property(tag_font, "spacing_glyph", 8, 0.7).from(26).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 
 
-#The call grows a little on every beat of the music
+#The call grows on every beat
 func _keep_beating(words: Label, beat: float) -> void:
 	var beating := words.create_tween().set_ignore_time_scale(true).set_loops()
 	beating.tween_property(words, "scale", Vector2.ONE * 1.06, 0.07)
 	beating.tween_property(words, "scale", Vector2.ONE, maxf(beat - 0.07, 0.1)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
-#Takes the words away fast
 func clear() -> void:
 	if _card == null:
 		return
@@ -164,7 +160,7 @@ func _column(gap: int) -> VBoxContainer:
 	return block
 
 
-#The wide type of the game at a weight and a spacing between letters
+#Game type at a weight and letter spacing
 func _type(weight: int, spacing: int) -> FontVariation:
 	var font := FontVariation.new()
 	font.base_font = WIDE
@@ -183,7 +179,7 @@ func _words(text: String, font: Font, font_size: int, colour: Color) -> Label:
 	return label
 
 
-#The biggest size up to "font_size" at which the text fits in "width"
+#Biggest size up to "font_size" that fits in "width"
 static func _fit(text: String, font: Font, font_size: int, width: float) -> int:
 	var fitted := font_size
 	while fitted > 14 and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fitted).x > width:
@@ -191,7 +187,7 @@ static func _fit(text: String, font: Font, font_size: int, width: float) -> int:
 	return fitted
 
 
-#The punch inside a window that opens from its middle while the words stay still; the full width waits in the meta "full"
+#Punch in a window that opens from its middle; full width in meta "full"
 func _window(text: String, font: Font, font_size: int) -> Control:
 	var words := _words(text, font, font_size, Palette.PAPER)
 	var full := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size) + Vector2(24.0, 16.0)
@@ -207,7 +203,7 @@ func _window(text: String, font: Font, font_size: int) -> Control:
 	return window
 
 
-#The block with its point "anchor" (a share of its size) on "at", in a rig that drifts as one, over a pool of night and an optional light
+#Block anchored at "at" in a drifting rig over a pool of night
 func _rig(card: Control, block: Control, at: Vector2, anchor: Vector2, shade: float, light: Control = null) -> Control:
 	var pool := TextureRect.new()
 	pool.texture = _pool(shade)
@@ -234,7 +230,7 @@ func _rig(card: Control, block: Control, at: Vector2, anchor: Vector2, shade: fl
 	return rig
 
 
-#A soft oval of night, darkest in its middle and gone at its edges
+#Soft oval of night
 static func _pool(strength: float) -> GradientTexture2D:
 	var gradient := Gradient.new()
 	gradient.set_color(0, Color(Palette.NIGHT, strength))
@@ -248,7 +244,7 @@ static func _pool(strength: float) -> GradientTexture2D:
 	return texture
 
 
-#The warm light behind the logo, added to the picture
+#Warm light behind the logo
 func _light() -> TextureRect:
 	var gradient := Gradient.new()
 	gradient.set_color(0, Color(Palette.PILL, 0.45))

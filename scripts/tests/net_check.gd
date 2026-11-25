@@ -1,13 +1,9 @@
 extends SceneTree
 
-#Checks the sockets and threads of the game on the local network in one process: the framing of the messages (whole, cut in pieces and
-#several together), what is thrown away (unknown types, broken JSON, a message too long), a server with three clients that talk both ways
-#through their threads, and that every thread finishes. Then the fair screen, in net_check_cases.gd: the players get the same with it and
-#without it, it changes nothing and gets the whole game, and it finds the room by itself.
-#run: godot --headless --fixed-fps 60 --path . --script res://scripts/tests/net_check.gd
+#Checks sockets and threads in one process: framing, rejects, server and clients, heartbeat and drops
 
 const TEST_PORT := 47830
-#Every wait for the threads is in real time: with --fixed-fps the frames can go by much faster than the sockets
+#Thread waits are in real time; --fixed-fps frames run faster than sockets
 const WAIT_MS := 5000
 
 var _failures := 0
@@ -83,7 +79,7 @@ func _check_links() -> void:
 	var heard: Array[Dictionary] = []
 	limit = Time.get_ticks_msec() + WAIT_MS
 	while Time.get_ticks_msec() < limit:
-		#Each thread also says "ping" once a second (as soon as it starts, if the game took over a second to open): that is the heartbeat
+		#Each thread pings once a second: the heartbeat
 		for link in accepted:
 			heard.append_array(link.take().filter(func(message: Dictionary) -> bool: return message["t"] != "ping"))
 		if heard.size() >= 6:

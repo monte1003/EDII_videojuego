@@ -1,8 +1,7 @@
 class_name SocialDropWorld
 extends Node3D
 
-#The SocialDrop board: nine big app icon cards (3 across, 3 deep) floating in the sky inside a frame of lights, and a giant
-#screen on each side that counts down and shows the icon to find; the set around it is in SocialDropStage
+#SocialDrop board: nine app icon cards in a frame of lights with a giant screen on each side
 
 const COLUMNS := 3
 const ROWS := 3
@@ -12,38 +11,35 @@ const TILE_THICKNESS := 0.4
 const TILE_SHADER := preload("res://assets/ui/shaders/icon_tile.gdshader")
 const PANEL_SHADER := preload("res://assets/ui/shaders/screen_panel.gdshader")
 const QUESTION: Texture2D = preload("res://assets/ui/question_mark.png")
-#The two colours the hidden cards alternate in, like a chessboard
+#Hidden card colours, like a chessboard
 const HIDDEN_COLORS: Array[Color] = [Color("6a52e0"), Color("ff6f91")]
-#A card hops this high while it turns over, and takes this long
-#The pictures of the cards roll like a slot machine (as the tiles of Fall Guys flash with one fruit after another): how long the roll takes at
-#the least and the most, how many cells of the strip pass per second at the start, how high the card lifts and how much it pops when it stops
+#Card hop height and time; the pictures roll like a slot machine
 const ROLL_MIN := 0.42
 const ROLL_MAX := 0.75
 const ROLL_LIFT := 0.1
 const ROLL_POP := 0.045
 #Side in pixels of every picture in the strip
 const STRIP_CELL := 256
-#The cards roll as a wave that starts in the middle of the board and goes out: the last card starts this much later than the first
+#Cards roll as a wave from the middle out
 const FLIP_STAGGER := 0.1
-#The cards come back up in the same wave
+#Cards rise back in the same wave
 const RISE_STAGGER := 0.22
-#The platforms: rounded corners, a soft bevel along the top edge and the glowing frame that fills the flat top; the card and the frame
-#round their corners like the flat top
+#Platform corners, bevel and glowing frame
 const SLAB_CORNER := 1.0
 const SLAB_BEVEL := 0.2
 const CARD_SHARE := 0.88
 const FRAME_SHARE := 0.91
 const FRAME_SHADER := preload("res://assets/ui/shaders/tile_frame.gdshader")
 const CARD_REST := 0.02
-#How far a tile falls before it hides; it comes back from half of it
+#Fall depth before hiding; returns from half of it
 const DROP_DEPTH := 14.0
 const DROP_TIME := 1.0
 const RISE_TIME := 0.85
-#Free meters between the edge of the platform and each screen, and the size and height of a screen
+#Gap to each screen, screen size and height
 const SCREEN_DISTANCE := 3.6
 const SCREEN_SIZE := Vector2(9.0, 5.0)
 const SCREEN_HEIGHT := 3.2
-#The screens lean back a little, so they face the players that look up at them
+#Screens lean back toward the players
 const SCREEN_TILT_DEGREES := 12.0
 const SCREEN_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 const SCREEN_FONT_SIZE := 220
@@ -53,17 +49,17 @@ const FRAME_COLOR := Color("372c58")
 const PANEL_COLOR := Color("1d1638")
 const WARNING_TINT := Color("ff5a5a")
 const GOLD_EDGE := Color("ffd84a")
-#The pips on the screens that tell the stage of the round (as many as SocialDrop.STAGES), and how the card to stand on glows
+#Stage pips per screen and target glow
 const STAGE_PIPS := 7
-#How many icons flash by on the screens before the one that stays
+#Icons flashing by before the one that stays
 const SPIN_STEPS := 6
 const PIP_SPACING := 0.62
 const FOUND_GLOW := 1.7
-#How the card frames pulse and how far a doomed card shakes and a pressed card dips
+#Frame pulse, doomed shake and step dip
 const FRAME_GLOW := 0.7
 const SHAKE_REACH := 0.035
 const PRESS_DEPTH := 0.07
-#The trim of each screen (one colour per screen) and the spacing of the lights on the screens and around the board
+#Screen trim colours and light spacing
 const SCREEN_ACCENTS: Array[Color] = [PartyKit.PINK, PartyKit.CYAN, PartyKit.YELLOW, PartyKit.VIOLET]
 const SCREEN_BULB_SPACING := 1.0
 const FRAME_MARGIN := 0.55
@@ -71,30 +67,30 @@ const FRAME_BULB_SPACING := 1.3
 class Tile:
 	var body: StaticBody3D
 	var collider: CollisionShape3D
-	#The card on top: one face whose picture rolls from the cover with the "?" to the icon and back
+	#Card face whose picture rolls between the cover and the icon
 	var card: Node3D
 	var top: ShaderMaterial
 	var icon := 0
 	var dropped := false
 	var face_up := false
 	var flip: Tween
-	#Where the card rests, its glowing frame, how red it is while it is about to fall and the dip of a step on it
+	#Rest position, frame, red warning and step dip
 	var base := Vector3.ZERO
 	var frame: ShaderMaterial
 	var glow := FRAME_GLOW
-	#Where the strip of pictures is on the face, in cells
+	#Strip position on the face, in cells
 	var scroll := 0.0
 	var warn := 0.0
 	var press: Tween
 
 
 var _icons: Array[Texture2D] = []
-#All the icons and the cover with the question mark, one under the other, in one picture
+#Every icon plus the "?" cover in one tall picture
 var _strip: ImageTexture
 var _tiles: Array[Tile] = []
 var _screen_labels: Array[Label3D] = []
 var _screen_icons: Array[Sprite3D] = []
-#The pips of every screen, one list per screen, and the colour of each screen
+#Pips per screen and each screen colour
 var _screen_pips: Array[Array] = []
 var _screen_accents: Array[Color] = []
 var _clock := 0.0
@@ -117,7 +113,7 @@ func build(icons: Array[Texture2D], rng: RandomNumberGenerator) -> void:
 	deal(rng, 0, 2, 4)
 
 
-#The frames of the cards pulse through the colours of the set, red while their card is about to fall
+#Frames pulse through the set colours, red when about to fall
 func _process(delta: float) -> void:
 	_clock += delta
 	for index in _tiles.size():
@@ -129,14 +125,14 @@ func _process(delta: float) -> void:
 		tile.frame.set_shader_parameter("energy", tile.glow)
 
 
-#The colour of a frame slides through the colours of the set without any jump, a little behind the card next to it
+#Smooth colour slide a little behind the neighbour card
 func _frame_color(index: int) -> Color:
 	var position := _clock * 0.35 + index * 0.45
 	var count := PartyKit.PALETTE.size()
 	return PartyKit.PALETTE[int(position) % count].lerp(PartyKit.PALETTE[(int(position) + 1) % count], smoothstep(0.0, 1.0, fposmod(position, 1.0)))
 
 
-#Four free places in the middle of the board, one per player
+#Four free places in the middle, one per player
 func spawn_points() -> Array[Vector3]:
 	var points: Array[Vector3] = []
 	for spot in [Vector2(-1.3, -1.3), Vector2(1.3, -1.3), Vector2(-1.3, 1.3), Vector2(1.3, 1.3)]:
@@ -144,7 +140,7 @@ func spawn_points() -> Array[Vector3]:
 	return points
 
 
-#Where the card with "icon" that is nearest to "from" is, in the world; the centre of the board when none is left
+#Nearest card with "icon" to "from", or the board centre
 func cell_position(icon: int, from := Vector3.ZERO) -> Vector3:
 	var best := Vector3.ZERO
 	var best_distance := INF
@@ -158,7 +154,7 @@ func cell_position(icon: int, from := Vector3.ZERO) -> Vector3:
 	return best
 
 
-#The icon of the card under a point, -1 when there is no card
+#Icon of the card under a point, -1 for none
 func icon_at(at: Vector3) -> int:
 	var half := TILE_SIZE / 2.0
 	for tile in _tiles:
@@ -174,8 +170,7 @@ func show_icons(up: bool) -> void:
 			_flip(tile, up)
 
 
-#Gives every card its icon for a round: "distinct" different icons, the one to find ("target") among them and on "copies"
-#cards; the rest of the cards repeat the other icons, each shown at least once
+#Deals the round: "distinct" icons, the target on "copies" cards, every other icon at least once
 func deal(rng: RandomNumberGenerator, target: int, distinct: int, copies: int) -> void:
 	var others: Array[int] = []
 	for index in _icons.size():
@@ -198,25 +193,25 @@ func deal(rng: RandomNumberGenerator, target: int, distinct: int, copies: int) -
 			_set_card(tile, true)
 
 
-#The tiles that will drop blink red three times during "seconds"
+#Doomed tiles blink red three times
 func warn(icon: int, seconds: float) -> void:
 	var doomed := _doomed(icon)
 	var half := seconds / 6.0
 	var tween := create_tween().set_loops(3)
 	tween.tween_method(_tint.bind(doomed), 0.0, 1.0, half).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tween.tween_method(_tint.bind(doomed), 1.0, 0.0, half).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	#They tremble more and more until they let go
+	#They tremble more and more
 	var shake := create_tween()
 	shake.tween_method(_shake.bind(doomed), 0.0, 1.0, seconds)
 	shake.tween_callback(_shake.bind(0.0, doomed))
 
 
-#Every tile without "icon" stops holding the player and falls out of sight; the one that stays shows its icon
+#Every tile without "icon" falls; the one that stays shows its icon
 func drop(icon: int) -> void:
 	for tile in _tiles:
 		if tile.icon == icon and not tile.dropped:
 			_flip(tile, true)
-			#The cards that stay light up their border in gold and throw a few stars
+			#Kept cards glow gold with a few stars
 			var found := create_tween()
 			found.tween_method(_glow_card.bind(tile), 0.0, FOUND_GLOW, 0.35)
 			ImpactFx.stars(self, tile.base + Vector3(0.0, 0.6, 0.0), 4)
@@ -226,7 +221,7 @@ func drop(icon: int) -> void:
 		if tile.press != null and tile.press.is_valid():
 			tile.press.kill()
 		tile.body.position = tile.base
-		#It lets go with a puff of dust and tumbles away, a different way for each card
+		#Each card tumbles away its own way with dust
 		var spin := Vector3(signf(sin(tile.base.x * 7.0 + tile.base.z)), signf(cos(tile.base.x + tile.base.z * 5.0)), signf(sin(tile.base.z * 3.0 + 1.0)))
 		ImpactFx.dust(self, tile.base + Vector3(0.0, 0.3, 0.0), SIDE_COLOR.lightened(0.55), 10)
 		var tween := create_tween().set_parallel(true)
@@ -237,7 +232,7 @@ func drop(icon: int) -> void:
 		tween.chain().tween_callback(tile.body.hide)
 
 
-#A new board: the fallen tiles rise back and turn face down; they only hold the player again once they are in place
+#New board: fallen tiles rise face down and hold again once in place
 func restore() -> void:
 	_tint(0.0, _tiles)
 	_stage.cheer(2.2)
@@ -250,7 +245,7 @@ func restore() -> void:
 		_set_card(tile, false)
 		tile.body.rotation = Vector3.ZERO
 		tile.body.position.y = -TILE_THICKNESS / 2.0 - DROP_DEPTH / 2.0
-		#It comes back up in the wave of the board, slowing down as it gets to its place
+		#Rises in the board wave, slowing near its place
 		var tween := create_tween()
 		tween.tween_interval(_wave_delay(tile, RISE_STAGGER))
 		tween.tween_callback(tile.body.show)
@@ -264,7 +259,7 @@ func celebrate() -> void:
 	_stage.celebrate()
 
 
-#The pips on the screens: the first "index + 1" of them are lit, in the colour of their screen
+#First "index + 1" pips lit in their screen colour
 func set_stage(index: int) -> void:
 	for screen in _screen_pips.size():
 		for pip in STAGE_PIPS:
@@ -274,7 +269,7 @@ func set_stage(index: int) -> void:
 			node.scale = Vector3.ONE * (1.25 if pip == index else 1.0)
 
 
-#A card dips when somebody lands on it and springs back, and its frame flashes
+#Card dip and frame flash on landing
 func press_tile(at: Vector3) -> void:
 	var half := TILE_SIZE / 2.0
 	for tile in _tiles:
@@ -291,7 +286,6 @@ func press_tile(at: Vector3) -> void:
 
 func screen_text(text: String, color: Color) -> void:
 	var width := SCREEN_FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, SCREEN_FONT_SIZE).x * TEXT_PIXEL_SIZE
-	#Long words shrink to fit the screen
 	var fit := minf(1.0, SCREEN_SIZE.x * 0.86 / maxf(width, 0.01))
 	for index in _screen_labels.size():
 		_screen_icons[index].hide()
@@ -301,7 +295,7 @@ func screen_text(text: String, color: Color) -> void:
 	_punch(_screen_labels, fit, 1.3)
 
 
-#"settle" is the final image of a spin: it lands with a bigger bounce
+#"settle" is the last image of a spin, with a bigger bounce
 func screen_icon(index: int, settle: bool) -> void:
 	for screen_index in _screen_icons.size():
 		_screen_labels[screen_index].hide()
@@ -310,7 +304,7 @@ func screen_icon(index: int, settle: bool) -> void:
 		_show_on_screens(_icons[index])
 		_punch(_screen_icons, 1.0, 1.06)
 		return
-	#The final icon comes out of a quick spin through the others that slows down, like the tiles of the floor
+	#The final icon comes out of a slowing spin
 	if _spin_tween and _spin_tween.is_valid():
 		_spin_tween.kill()
 	_spin_tween = create_tween()
@@ -352,7 +346,7 @@ func _tint(amount: float, tiles: Array[Tile]) -> void:
 		tile.top.set_shader_parameter("tint", color)
 
 
-#The cards that are going to fall tremble more as the time goes by
+#Doomed cards tremble more over time
 func _shake(progress: float, tiles: Array[Tile]) -> void:
 	for tile in tiles:
 		if tile.dropped:
@@ -361,13 +355,13 @@ func _shake(progress: float, tiles: Array[Tile]) -> void:
 		tile.body.position.z = tile.base.z + cos(progress * 83.0 + tile.base.x) * SHAKE_REACH * progress
 
 
-#The border of a card lights up in gold as much as "amount"
+#Gold border glow by "amount"
 func _glow_card(amount: float, tile: Tile) -> void:
 	tile.top.set_shader_parameter("edge_color", GOLD_EDGE)
 	tile.top.set_shader_parameter("edge_glow", amount)
 
 
-#The picture of the card rolls to its icon or to the cover with the question mark and stops there, slowing down; the card does not turn
+#The picture rolls to the icon or the cover and stops; the card never turns
 func _flip(tile: Tile, up: bool) -> void:
 	if tile.face_up == up and tile.flip == null:
 		return
@@ -376,7 +370,7 @@ func _flip(tile: Tile, up: bool) -> void:
 	var cells := float(_icons.size() + 1)
 	var from := tile.scroll
 	var target := float(tile.icon) if up else cells - 1.0
-	#It always rolls forward; to show an icon it goes once round the whole strip first, like a slot machine
+	#Always forward; an icon goes once round the strip first
 	var distance := fposmod(target - from, cells) + (cells if up else 0.0)
 	tile.face_up = up
 	tile.flip = create_tween()
@@ -385,13 +379,13 @@ func _flip(tile: Tile, up: bool) -> void:
 	tile.flip.tween_callback(_set_card.bind(tile, up))
 
 
-#How long a card waits for its turn: the cards in the middle go first and the corners last
+#Wave delay: middle first, corners last
 func _wave_delay(tile: Tile, spread: float) -> float:
 	var farthest := (TILE_SIZE + TILE_GAP) * sqrt(2.0)
 	return Vector2(tile.base.x, tile.base.z).length() / farthest * spread
 
 
-#One moment of the roll: it starts fast and smeared and slows down until it stops; the card rises a little and pops when it lands
+#One roll moment: fast and blurred, slowing to a stop with a pop
 func _roll_step(progress: float, tile: Tile, from: float, distance: float) -> void:
 	var eased := 1.0 - pow(1.0 - progress, 3.0)
 	var speed := distance * 3.0 * pow(1.0 - progress, 2.0)
@@ -402,7 +396,6 @@ func _roll_step(progress: float, tile: Tile, from: float, distance: float) -> vo
 	tile.card.scale = Vector3.ONE * (1.0 + ROLL_POP * sin(clampf((progress - 0.75) / 0.25, 0.0, 1.0) * PI))
 
 
-#The card at rest, with no tween running
 func _set_card(tile: Tile, up: bool) -> void:
 	if tile.flip != null and tile.flip.is_valid():
 		tile.flip.kill()
@@ -415,7 +408,7 @@ func _set_card(tile: Tile, up: bool) -> void:
 	tile.card.position.y = TILE_THICKNESS / 2.0 + CARD_REST
 
 
-#What a screen shows grows into place while it fades in; the last icon of a spin ("from" above 1.2) lands with a soft bounce
+#Screen content grows in while fading; the last spin icon lands softly
 func _punch(nodes: Array, base: float, from: float) -> void:
 	if _punch_tween and _punch_tween.is_valid():
 		_punch_tween.kill()
@@ -454,8 +447,7 @@ func _build_tiles() -> void:
 			block.mesh = block_mesh
 			block.material_override = side
 			tile.body.add_child(block)
-			#The face is a window on the strip of pictures: the icons keep their colours (only a touch desaturated, see icon_tile.gdshader)
-			#and the cover is a "?" on one of two colours that alternate like a chessboard
+			#Face as a window on the strip; the cover alternates two colours
 			tile.top = ShaderMaterial.new()
 			tile.top.shader = TILE_SHADER
 			tile.top.set_shader_parameter("strip", _strip)
@@ -463,7 +455,6 @@ func _build_tiles() -> void:
 			tile.top.set_shader_parameter("hidden_color", HIDDEN_COLORS[(row + column) % 2])
 			tile.top.set_shader_parameter("sparkle", 1.0)
 			tile.top.set_shader_parameter("corner", _corner_share(TILE_SIZE * CARD_SHARE))
-			#A glowing frame under the card shows around it
 			tile.frame = ShaderMaterial.new()
 			tile.frame.shader = FRAME_SHADER
 			tile.frame.set_shader_parameter("corner", _corner_share(TILE_SIZE * FRAME_SHARE))
@@ -481,8 +472,7 @@ func _build_tiles() -> void:
 			_tiles.append(tile)
 
 
-#The icons and, under them, the cover with the question mark, each in a square of STRIP_CELL pixels in one tall picture: the faces of all the cards
-#show windows of it
+#Icons and the cover stacked in STRIP_CELL squares in one picture
 func _make_strip(icons: Array[Texture2D]) -> ImageTexture:
 	var strip := Image.create(STRIP_CELL, STRIP_CELL * (icons.size() + 1), true, Image.FORMAT_RGBA8)
 	var pictures: Array[Texture2D] = icons.duplicate()
@@ -498,13 +488,13 @@ func _make_strip(icons: Array[Texture2D]) -> ImageTexture:
 	return ImageTexture.create_from_image(strip)
 
 
-#The share of a square "size" meters wide that its round corner takes, so it follows the corner of the flat top of a platform
+#Corner share of a square "size" wide
 func _corner_share(size: float) -> float:
 	var flat_half := TILE_SIZE / 2.0 - SLAB_BEVEL
 	return maxf(SLAB_CORNER - SLAB_BEVEL - (flat_half - size / 2.0), 0.05) / size
 
 
-#A slab with rounded corners and a soft bevel along its top edge, in one mesh with smooth normals: the platforms have no hard edges
+#Rounded beveled slab in one smooth mesh
 func _rounded_slab(size: float, thickness: float, corner: float, bevel: float) -> ArrayMesh:
 	var half := size / 2.0 - corner
 	var arc := 7
@@ -517,7 +507,7 @@ func _rounded_slab(size: float, thickness: float, corner: float, bevel: float) -
 			var direction := Vector2(cos(angle), sin(angle))
 			outline.append(centres[quarter] + direction * corner)
 			outward.append(direction)
-	#From the bottom edge up the side and round the bevel to the flat top: how far in, how high and how much the surface looks up
+	#Profile from the bottom edge up over the bevel to the top
 	var top := thickness / 2.0
 	var profile: Array[Vector3] = [Vector3(0.0, -top, 0.0), Vector3(0.0, top - bevel, 0.0)]
 	var bevel_steps := 5
@@ -538,7 +528,6 @@ func _rounded_slab(size: float, thickness: float, corner: float, bevel: float) -
 				corners.append([Vector3(spot.x, ring.y, spot.y), look])
 			_slab_triangle(tool, corners[0], corners[1], corners[2])
 			_slab_triangle(tool, corners[0], corners[2], corners[3])
-	#The flat top and the flat bottom
 	var last: Vector3 = profile[profile.size() - 1]
 	for index in count:
 		var next := (index + 1) % count
@@ -550,7 +539,7 @@ func _rounded_slab(size: float, thickness: float, corner: float, bevel: float) -
 	return tool.commit()
 
 
-#A triangle of the slab (each corner is [position, normal]) turned so that its front side looks the way its normals do
+#Triangle facing the way its normals do
 func _slab_triangle(tool: SurfaceTool, a: Array, b: Array, c: Array) -> void:
 	var flat := ((c[0] as Vector3) - (a[0] as Vector3)).cross((b[0] as Vector3) - (a[0] as Vector3))
 	var looks := (a[1] as Vector3) + (b[1] as Vector3) + (c[1] as Vector3)
@@ -561,7 +550,7 @@ func _slab_triangle(tool: SurfaceTool, a: Array, b: Array, c: Array) -> void:
 		tool.add_vertex(corner[0] as Vector3)
 
 
-#One side of a card: a plane that faces up, or down when "tilt" is a half turn
+#Card face up, or down with a half turn
 func _face(mesh: Mesh, material: Material, tilt: float) -> MeshInstance3D:
 	var face := MeshInstance3D.new()
 	face.mesh = mesh
@@ -572,7 +561,7 @@ func _face(mesh: Mesh, material: Material, tilt: float) -> MeshInstance3D:
 	return face
 
 
-#A screen on each side of the platform, facing the middle: wherever the camera turns there is one to see
+#A screen on each side facing the middle
 func _build_screens() -> void:
 	var half_columns := COLUMNS * (TILE_SIZE + TILE_GAP) / 2.0
 	var half_rows := ROWS * (TILE_SIZE + TILE_GAP) / 2.0
@@ -608,7 +597,7 @@ func _build_screen(at: Vector3, yaw: float, accent: Color) -> void:
 	panel.material_override = glass
 	panel.position.z = 0.31
 	screen.add_child(panel)
-	#The pips of the stage of the round, in a row under the numbers
+	#Stage pips under the numbers
 	var pips: Array = []
 	var pip_mesh := SphereMesh.new()
 	pip_mesh.radius = 0.2
@@ -625,7 +614,7 @@ func _build_screen(at: Vector3, yaw: float, accent: Color) -> void:
 		pips.append(disc)
 	_screen_pips.append(pips)
 	_screen_accents.append(accent)
-	#A post that holds it, so it does not float
+	#A post holds it up
 	_box(mount, Vector3(0.9, SCREEN_HEIGHT + 3.0, 0.9), Vector3(0.0, -(SCREEN_HEIGHT + 3.0) / 2.0 + 0.2, -0.6), _material(FRAME_COLOR))
 
 	var icon := Sprite3D.new()
@@ -646,7 +635,7 @@ func _build_screen(at: Vector3, yaw: float, accent: Color) -> void:
 	_screen_labels.append(label)
 
 
-#Lights along the trim of a screen, in the colour of that screen
+#Lights along the screen trim
 func _screen_lights(frame: Transform3D, accent: Color) -> void:
 	var half := (SCREEN_SIZE + Vector2.ONE * 0.95) / 2.0
 	var corners := [Vector2(-half.x, -half.y), Vector2(half.x, -half.y), Vector2(half.x, half.y), Vector2(-half.x, half.y)]
@@ -659,7 +648,7 @@ func _screen_lights(frame: Transform3D, accent: Color) -> void:
 			_light_at(frame * Vector3(spot.x, spot.y, 0.0), accent.lerp(Color.WHITE, 0.3))
 
 
-#Lights around the board, just outside the cards
+#Lights around the board
 func _build_lights() -> void:
 	var half := Vector2(COLUMNS * (TILE_SIZE + TILE_GAP) - TILE_GAP, ROWS * (TILE_SIZE + TILE_GAP) - TILE_GAP) / 2.0 + Vector2.ONE * FRAME_MARGIN
 	var corners := [Vector2(-half.x, -half.y), Vector2(half.x, -half.y), Vector2(half.x, half.y), Vector2(-half.x, half.y)]

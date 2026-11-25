@@ -2,7 +2,7 @@ class_name TextButton
 extends Button
 
 @export var accent := Palette.CORAL
-#For a dark background (the pause): paper letters and a pale pill
+#For a dark background (the pause): light letters and a pale pill
 @export var light := false
 
 var _tween: Tween
@@ -11,7 +11,7 @@ var _dot: Panel
 
 
 func _ready() -> void:
-	#Una sola pildora para todos los estados: al apuntar el boton solo cambia su opacidad
+	#One pill for every state; hovering only changes its opacity
 	_pill.set_corner_radius_all(120)
 	_pill.corner_detail = 12
 	_pill.set_border_width_all(2)
@@ -35,7 +35,7 @@ func _ready() -> void:
 	_build_dot()
 
 
-#Un punto del color de acento dentro de la pildora dice a donde lleva el boton sin pintarlo entero
+#An accent dot inside the pill says where the button leads
 func _build_dot() -> void:
 	var style := StyleBoxFlat.new()
 	style.bg_color = accent

@@ -1,9 +1,8 @@
 extends MenuPage
 
-#Shortcut for testing from the main menu: every ready minigame of the catalog opens straight
-#away, without the lobby, the draw or the results screen (no session is running)
+#Test shortcut: opens any ready minigame without lobby, draw or results
 
-#Space kept free around the column when it has to shrink to fit the window
+#Margin when the column shrinks to fit
 const FIT_MARGIN := 14.0
 
 @onready var _center: Control = $Center
@@ -12,8 +11,7 @@ const FIT_MARGIN := 14.0
 
 func _ready() -> void:
 	super()
-	#The window is never taller than the base screen, so a long list is shrunk (never stretched) to fit; it runs again whenever the
-	#window or the list changes size
+	#Shrinks a long list to fit the window, never stretches it
 	resized.connect(_fit_layout)
 	_center.resized.connect(_fit_layout)
 	_layout.minimum_size_changed.connect(_fit_layout)
@@ -25,13 +23,13 @@ func _ready() -> void:
 		var tagline := UiKit.body(info.tagline, 19)
 		tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		content.add_child(tagline)
-	#The ceremony of the end of the game with the players of the demo
+	#End ceremony with the demo players
 	for count in [4, 1]:
 		var podium := UiKit.text_button("PODIO · %d %s" % [count, "JUGADORES" if count > 1 else "JUGADOR"], Palette.GOLD, 30)
 		podium.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		podium.pressed.connect(_open_podium.bind(count))
 		content.add_child(podium)
-	#Each vibration of the pad, to try it with a real DualSense
+	#Each pad vibration, to try with a real DualSense
 	var rumble := UiKit.text_button("VIBRACIÓN DEL MANDO", Palette.TEAL, 30)
 	rumble.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	rumble.pressed.connect(ScreenFlow.open.bind(&"rumble_lab"))
@@ -39,8 +37,7 @@ func _ready() -> void:
 	_fit_layout.call_deferred()
 
 
-#Scales the whole column down, around the middle of the window, until it fits with a margin; never above its normal size. The scale goes
-#on the box that centres it, since a container resets the scale of what it holds
+#Scales the column down around the middle until it fits; the scale goes on the centring box
 func _fit_layout() -> void:
 	var need := _layout.get_combined_minimum_size()
 	if need.x <= 0.0 or need.y <= 0.0:

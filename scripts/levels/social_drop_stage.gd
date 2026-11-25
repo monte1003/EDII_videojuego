@@ -1,8 +1,7 @@
 class_name SocialDropStage
 extends Node3D
 
-#The set around the SocialDrop board: sky and light, a ring of candy pillars joined by bunting, grandstands with a cheering crowd,
-#balloons, a big wheel, a rainbow, sweeping beams, confetti cannons and a sea of drifting clouds. None of it collides
+#Set around the SocialDrop board: pillars, stands, balloons, beams, cannons and clouds
 
 const PILLAR_COUNT := 8
 const PILLAR_RADIUS := 31.0
@@ -12,7 +11,7 @@ const STAND_RADIUS := 31.0
 const STAND_WIDTH := 14.0
 const STAND_TIERS := 4
 const STAND_HEIGHT := -1.6
-#Where the cannons and the balloons stand: the four corners of the board, outside the screens
+#Cannon and balloon corners outside the screens
 const CORNER := Vector2(9.0, 9.0)
 const SEA_COUNT := 30
 const SEA_AREA := Rect2(-60.0, -45.0, 120.0, 80.0)
@@ -21,7 +20,7 @@ const SEA_COLORS: Array[Color] = [Color("ffffff"), Color("f3ecff"), Color("fde8f
 const HORIZON_COUNT := 14
 const FLOATING_ICONS := 10
 const CHEER_TIME := 1.6
-#Giant toy props on floating pedestals around the board; the speakers beat with the music, the others just float and turn a little
+#Giant props on pedestals; speakers beat, the rest float and turn
 const BEAT := 0.52
 const PROPS: Array[Dictionary] = [
 	{"id": &"speaker", "height": 6.5, "at": Vector3(17.5, -1.5, 8.5), "beat": true},
@@ -45,7 +44,7 @@ var _floaters: Array[Dictionary] = []
 var _cards: Array[Node3D] = []
 var _cheer: Tween
 var _clock := 0.0
-#The props that float (holder, height they float at, phase) and the ones that beat (holder, glow ring)
+#Floating props and beating ones
 var _bobbers: Array[Dictionary] = []
 var _speakers: Array[Dictionary] = []
 
@@ -66,7 +65,7 @@ func build(icons: Array[Texture2D]) -> void:
 	add_child(likes)
 
 
-#The crowd jumps higher for a moment, as when a drop is survived
+#The crowd jumps higher for a moment
 func cheer(power: float) -> void:
 	if _cheer != null and _cheer.is_valid():
 		_cheer.kill()
@@ -75,7 +74,7 @@ func cheer(power: float) -> void:
 	_cheer.tween_method(_crowd.set_excitement, power, 1.0, CHEER_TIME).set_ease(Tween.EASE_OUT)
 
 
-#Confetti from every cannon and a crowd gone wild
+#Confetti from every cannon and a wild crowd
 func celebrate() -> void:
 	for cannon in _cannons:
 		var muzzle := cannon.get_node("Muzzle") as Marker3D
@@ -85,7 +84,7 @@ func celebrate() -> void:
 
 func _process(delta: float) -> void:
 	_clock += delta
-	#The speakers throb on the beat and the pedestals of the props rock gently
+	#Speakers throb on the beat and pedestals rock
 	var pulse := pow(1.0 - fposmod(_clock, BEAT) / BEAT, 4.0)
 	for entry in _speakers:
 		(entry["model"] as Node3D).scale = Vector3.ONE * (1.0 + 0.08 * pulse)
@@ -123,7 +122,7 @@ func _build_sky() -> void:
 	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	environment.ambient_light_energy = 0.9
-	#Linear keeps the icons' colours as they are; filmic would dull them
+	#Linear keeps the icon colours; filmic would dull them
 	environment.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.55
@@ -132,7 +131,7 @@ func _build_sky() -> void:
 	environment.adjustment_enabled = true
 	environment.adjustment_saturation = 1.12
 	environment.adjustment_contrast = 1.04
-	#Depth fog only reaches past the set: it fades the far clouds into the sky
+	#Depth fog only past the set
 	environment.fog_enabled = true
 	environment.fog_mode = Environment.FOG_MODE_DEPTH
 	environment.fog_light_color = Color(0.9, 0.8, 0.98)
@@ -152,8 +151,7 @@ func _build_sky() -> void:
 	add_child(sun)
 
 
-#A sea of clouds under the board and a ring of big ones on the horizon. The ring does not drift: drifting along X, one of its clouds would
-#cross the board sooner or later (the clock of the drift counts from the start of the game, not of the round)
+#Cloud sea under the board and a static ring on the horizon that never drifts over it
 func _build_clouds() -> void:
 	var sea := CloudField.new()
 	sea.setup(Vector2(SEA_AREA.position.x, SEA_AREA.end.x))
@@ -170,14 +168,14 @@ func _build_clouds() -> void:
 		var distance := _rng.randf_range(78.0, 105.0)
 		var at := Vector3(cos(angle) * distance, _rng.randf_range(-12.0, 2.0), sin(angle) * distance)
 		var size := _rng.randf_range(7.0, 11.0)
-		#The speed it had is still drawn, so the rest of the set comes out as before
+		#Still drawn so the rest of the set comes out as before
 		_rng.randf()
 		rim.add_cloud(at, size, SEA_COLORS[index % SEA_COLORS.size()], 0.0, _rng)
 	add_child(rim)
 	rim.commit()
 
 
-#Candy pillars rising from the clouds, each with a sweeping beam, and bunting from one to the next
+#Pillars from the clouds with beams and bunting
 func _build_pillars() -> void:
 	var caps: Array[Vector3] = []
 	for index in PILLAR_COUNT:
@@ -201,7 +199,7 @@ func _build_pillars() -> void:
 		add_child(PartyKit.bunting(from, to, 2.4, 14, 1.7, PartyKit.PALETTE))
 
 
-#Four grandstands on the diagonals, facing the board, in one mesh each and one crowd for all of them
+#Four diagonal grandstands facing the board, one crowd
 func _build_stands() -> void:
 	_crowd = CrowdField.new()
 	add_child(_crowd)
@@ -214,7 +212,7 @@ func _build_stands() -> void:
 	_crowd.commit()
 
 
-#Each corner of the board has a confetti cannon and a bunch of balloons tied next to it
+#Cannon and balloons at each board corner
 func _build_corners() -> void:
 	var balloons := BalloonField.new()
 	add_child(balloons)
@@ -233,7 +231,7 @@ func _build_corners() -> void:
 	balloons.commit()
 
 
-#The far scenery: a rainbow, a big wheel and giant props that float and sway
+#Rainbow, big wheel and floating giant props
 func _build_backdrop() -> void:
 	var rainbow := PartyKit.rainbow(54.0, 2.4, [PartyKit.PINK, PartyKit.ORANGE, PartyKit.YELLOW, PartyKit.GREEN, PartyKit.CYAN, PartyKit.VIOLET])
 	rainbow.position = Vector3(0.0, -24.0, -84.0)
@@ -263,7 +261,7 @@ func _build_backdrop() -> void:
 		_floaters.append({"node": item, "base_y": at.y, "yaw": item.rotation.y, "phase": _rng.randf() * TAU, "speed": _rng.randf_range(0.35, 0.8)})
 
 
-#The giant toy props: each one stands on a candy pedestal with a ring of light under it, floats a little and looks at the board
+#Giant toys on candy pedestals that float and face the board
 func _build_props() -> void:
 	for spec in PROPS:
 		var at: Vector3 = spec["at"]
@@ -302,7 +300,7 @@ func _build_props() -> void:
 			_speakers.append({"model": model, "ring": glow})
 
 
-#Big app icons far around the set, turning slowly
+#Big app icons turning far around the set
 func _build_floating_icons(icons: Array[Texture2D]) -> void:
 	for index in FLOATING_ICONS:
 		var side := -1.0 if index % 2 == 0 else 1.0

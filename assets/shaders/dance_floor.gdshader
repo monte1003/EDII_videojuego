@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
-//A dance floor of square tiles that light up in turns with the beat: each tile picks one of four colours and whether it is on from
-//its place and the beat, so the floor changes its picture twice a second without any script
+//Dance floor whose tiles light up with the beat, no script needed
 uniform vec4 color_a : source_color = vec4(1.0, 0.48, 0.52, 1.0);
 uniform vec4 color_b : source_color = vec4(1.0, 0.78, 0.34, 1.0);
 uniform vec4 color_c : source_color = vec4(0.25, 0.75, 0.68, 1.0);

@@ -1,8 +1,7 @@
 class_name ScoreSheet
 extends Resource
 
-#Every number of the scoring in one place: the medals, and what each minigame needs to turn what it measures into 0 to 1000 points.
-#Tuning the balance is changing these numbers, never the code of a round
+#Every scoring number in one place: tuning means changing these, never the rounds
 
 enum Medal { NONE, BRONZE, SILVER, GOLD, DIAMOND }
 
@@ -16,25 +15,25 @@ const MEDAL_NAMES: Array[String] = ["Sin medalla", "Bronce", "Plata", "Oro", "Di
 @export var diamond := 920
 
 @export_group("Feed race")
-#Reaching the goal, the most the time adds, and each attempt that was not spent
+#Goal reached, most the time adds, and each unused attempt
 @export var race_finish := 300
 @export var race_time_points := 550
 @export var race_attempt_points := 50
 @export var race_attempts := 3
-#Seconds of the best and of the worst arrival that still adds something
+#Best and worst arrival seconds that still add points
 @export var race_best := 70.0
 @export var race_worst := 150.0
 @export var race_gamma := 1.15
-#Without reaching the goal: up to this much for the share of the course that was covered
+#Goal not reached: up to this much by the share covered
 @export var race_unfinished := 200
 
 @export_group("Street")
 @export var street_seconds := 60.0
-#Lasting the whole round, the most a clean run adds on top, and what each hit takes from it
+#Whole round survived, most a clean run adds, and the cost of each hit
 @export var street_survive := 600
 @export var street_clean := 400
 @export var street_hit_cost := 60
-#Without lasting: up to this much, by the share of the time held
+#Not survived: up to this much by the share of time held
 @export var street_partial := 580
 @export var street_gamma := 1.2
 
@@ -43,7 +42,7 @@ const MEDAL_NAMES: Array[String] = ["Sin medalla", "Bronce", "Plata", "Oro", "Di
 @export var drop_gamma := 1.25
 
 @export_group("Trend war")
-#The trends completed against the par of the round (what a good player completes): reaching the par gives all the points
+#Trends completed against the round par; reaching par gives all the points
 @export var trend_gamma := 1.0
 
 @export_group("Perfect selfie")
@@ -52,10 +51,10 @@ const MEDAL_NAMES: Array[String] = ["Sin medalla", "Bronce", "Plata", "Oro", "Di
 @export var selfie_center := 20
 @export var selfie_pose := 60
 @export var selfie_perfect := 20
-#How much a photo is worth by how many are in it (1, 2, 3, 4 or more)
+#Photo value by how many are in it (1, 2, 3, 4 or more)
 @export var selfie_crowd: Array[float] = [1.5, 1.0, 0.8, 0.7]
 @export var selfie_photos := 8
-#Followers that are worth the 1000 points, and the curve up to them
+#Followers worth 1000 points and the curve up to them
 @export var selfie_best := 1440.0
 @export var selfie_gamma := 1.0
 
@@ -72,12 +71,12 @@ func medal_for(points: int) -> Medal:
 	return Medal.NONE
 
 
-#Points a medal starts at; 0 for none
+#Starting points of a medal; 0 for none
 func threshold_of(medal: Medal) -> int:
 	return [0, bronze, silver, gold, diamond][medal]
 
 
-#How many points are missing for the next medal; 0 when it is already the best
+#Points missing for the next medal; 0 at the best
 func gap_to_next(points: int) -> int:
 	var medal := medal_for(points)
 	if medal == Medal.DIAMOND:
@@ -85,14 +84,14 @@ func gap_to_next(points: int) -> int:
 	return threshold_of((medal + 1) as Medal) - points
 
 
-#The shared curve: 1 at "best", 0 at "worst", clipped at both ends and bent by "gamma"
+#Shared curve: 1 at "best", 0 at "worst", clipped and bent by "gamma"
 static func share(value: float, best: float, worst: float, gamma := 1.0) -> float:
 	if is_equal_approx(best, worst):
 		return 0.0
 	return pow(clampf((worst - value) / (worst - best), 0.0, 1.0), gamma)
 
 
-#The race: "progress" is the share of the course covered (0 to 1), used only when the goal was not reached
+#"progress" is the share covered, used only without the goal
 func race_points(finished: bool, seconds: float, attempts_left: int, progress: float) -> int:
 	if not finished:
 		return roundi(race_unfinished * clampf(progress, 0.0, 1.0))
@@ -111,12 +110,12 @@ func drop_points(seconds: float) -> int:
 	return _whole(MAX_POINTS * pow(clampf(seconds / drop_seconds, 0.0, 1.0), drop_gamma))
 
 
-#The whole round: "count" trends completed (a viral one counts more) against the "par" of the round
+#"count" trends completed (viral counts more) against "par"
 func trend_score(count: int, par: float) -> int:
 	return roundi(MAX_POINTS * pow(clampf(count / maxf(par, 1.0), 0.0, 1.0), trend_gamma))
 
 
-#Followers of one photo for somebody inside the frame; "crowd" counts everybody inside, bots too
+#Followers of a photo for someone in the frame; "crowd" counts bots too
 func selfie_followers(centered: bool, posing: bool, crowd: int) -> int:
 	var base := selfie_inside
 	if centered:
@@ -132,7 +131,7 @@ func selfie_points(followers: int) -> int:
 	return _whole(MAX_POINTS * pow(clampf(followers / selfie_best, 0.0, 1.0), selfie_gamma))
 
 
-#The most followers a round can give: every photo alone, in the centre and posing
+#Most followers a round can give
 func selfie_max_followers() -> int:
 	return selfie_followers(true, true, 1) * selfie_photos
 

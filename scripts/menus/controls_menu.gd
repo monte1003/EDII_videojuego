@@ -1,13 +1,13 @@
 extends MenuPage
 
-#What each row does, its key on the keyboard and its action, which names the pad button
+#Each row: what it does, its keyboard key and the action that names the pad button
 const ROWS := [
 	["Caminar", "WASD", &"move"],
 	["Saltar", "ESPACIO", &"jump"],
 	["Barrer (en el aire)", "ESPACIO ×2", &"jump"],
 	["Mover la cámara", "MOUSE", &"look"],
 ]
-#Keys that only work inside the levels; they follow the Input Map
+#Keys used only inside the levels, from the Input Map
 const ACTION_ROWS := [
 	["Usar o posar (alterna)", &"interact"],
 	["Empujar", &"shove"],
@@ -32,7 +32,7 @@ func _ready() -> void:
 	InputDevice.changed.connect(_on_device_changed)
 
 
-#The keys of the keyboard, or the buttons of the pad while it is in use
+#Keyboard keys, or pad buttons while the pad is in use
 func _fill() -> void:
 	for child in _grid.get_children():
 		_grid.remove_child(child)

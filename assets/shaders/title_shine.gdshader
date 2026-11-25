@@ -1,6 +1,6 @@
 shader_type canvas_item;
 
-//A band of light that crosses the logo on a slant, only over its letters (not over its soft glow)
+//Slanted band of light over the logo letters
 uniform float sweep = -1.0;
 uniform float width = 0.09;
 uniform float strength = 0.7;

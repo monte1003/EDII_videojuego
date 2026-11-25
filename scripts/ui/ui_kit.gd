@@ -1,7 +1,7 @@
 class_name UiKit
 extends RefCounted
 
-#The pieces every screen builds with, so spacing, shapes and fonts are the same everywhere
+#Pieces every screen builds with, so spacing, shapes and fonts match
 
 const HEADING_FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
 const BODY_FONT: Font = preload("res://assets/ui/fonts/body_font.tres")
@@ -41,7 +41,7 @@ static func body(text: String, size: int, color := Palette.INK_SOFT) -> Label:
 	return label(text, BODY_FONT, size, color)
 
 
-#The light card with a lilac border used by every panel of the game
+#Light card with a lilac border used by every panel
 static func card_style(alpha := 0.94, radius := 28) -> StyleBoxFlat:
 	var style := box(Color(Palette.PAPER, alpha), radius)
 	style.set_border_width_all(2)
@@ -55,7 +55,7 @@ static func card_style(alpha := 0.94, radius := 28) -> StyleBoxFlat:
 	return style
 
 
-#The coral action button; secondary ones are white. All of one stack share width and height.
+#Coral action button; secondary ones white; one stack shares size
 static func game_button(text: String, primary := true, width := BUTTON_WIDTH, pulse := false, font_size := 22) -> GameButton:
 	var button := GAME_BUTTON.instantiate() as GameButton
 	button.text = text
@@ -77,7 +77,7 @@ static func text_button(text: String, accent := Palette.CORAL, size := 22) -> Te
 	return button
 
 
-#A key cap with its name, for the control hints
+#Key cap with its name
 static func key_chip(key_name: String, size := 20) -> PanelContainer:
 	var chip := PanelContainer.new()
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -86,7 +86,7 @@ static func key_chip(key_name: String, size := 20) -> PanelContainer:
 	return chip
 
 
-#The light cap with a lilac rim under every key and pad button
+#Light cap with a lilac rim under every key and button
 static func key_cap() -> StyleBoxFlat:
 	var style := box(Color(Palette.PAPER, 0.92), 10)
 	style.set_border_width_all(2)
@@ -99,12 +99,12 @@ static func key_cap() -> StyleBoxFlat:
 	return style
 
 
-#The cap of an action: its key on the keyboard, its button on the pad, changing by itself with the device in use
+#Action cap: key on keyboard, button on pad, switching by itself
 static func action_chip(action: StringName, size := 20, keys_text := "") -> HintChip:
 	return HintChip.new(action, size, keys_text)
 
 
-#The key part of a hint line: "jump=ESPACIO" is an action with what its key reads, so it follows the device; a bare text is just a key
+#"jump=ESPACIO" follows the device; bare text is just a key
 static func entry_chip(entry: String, size := 20) -> PanelContainer:
 	var cut := entry.find("=")
 	if cut < 0:

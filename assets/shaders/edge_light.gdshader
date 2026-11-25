@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode unshaded;
 
-//Light strips along the sides of the bridges, all in one draw call: the colour of each one is in its instance, and a wave of light runs
-//along the course (it depends on where the strip is) so the whole level seems to pulse in one direction
+//Light strips on the bridge sides with a wave running along the course
 varying vec3 tint;
 varying float pulse;
 

@@ -1,19 +1,10 @@
 extends RefCounted
 
-#The cases of net_check.gd about the fair screen. They live apart because the game's autoloads (GameSession and its room) only exist
-#once the test is running: a script passed with --script is compiled before them.
-#A room with the host and three players is played twice with the same steps: without the screen, and with a screen that comes in, sees a
-#second one turned away, leaves, is replaced by one that sends what it must not, comes back and drops in the middle of a round. Both
-#times the players must get exactly the same messages in the same order, and the start of the round and the points must not wait for the
-#screen, which must get the whole picture of the game. Then a full room where one player drops and comes back, the next game without the
-#one that left for good, the limit of four players and the announcement that says whether the room already has its screen; what the
-#server decides inside a round reaching everybody, and what a player asks reaching only the server. Last, how the
-#screen finds the room: feria.cfg, a wait that grows while there is no room, the room it finds when the host opens after it, the network
-#announcement and one source covering for the other
+#Fair screen cases of net_check, apart because autoloads only exist at run time
 
 const SETTLE_MS := 250
 const FRAME_MS := 4
-#Real-time limits: with --fixed-fps the frames go much faster than the sockets. Each try at a closed port takes Windows a couple of seconds
+#Real-time limits; a try at a closed port takes Windows a couple of seconds
 const FIND_MS := 30000
 const WAITS_MS := 60000
 const PLAN: Array[StringName] = [&"trend_war", &"perfect_selfie", &"social_drop", &"street_game", &"level_01"]
@@ -57,7 +48,7 @@ func _expect(condition: bool, label: String) -> void:
 		_failures += 1
 
 
-#Waits in real time while the players' messages come in; frames take a few ms so the room's clocks (300 s for the points) never run out
+#Waits in real time while messages arrive
 func _settle(ms := SETTLE_MS) -> void:
 	var until := Time.get_ticks_msec() + ms
 	while Time.get_ticks_msec() < until:
@@ -82,7 +73,7 @@ func _kinds_seen(kind: String) -> Array[Dictionary]:
 	return found
 
 
-#A fresh room for the host each time, as in a game just opened (_check_room_again opens the same one twice)
+#A fresh host room each time
 func _open_room() -> bool:
 	if _host != null:
 		_host.queue_free()
@@ -96,7 +87,7 @@ func _open_room() -> bool:
 	return false
 
 
-#One game of the room, step by step (one sender per step, so the order of everything is fixed); with the screen in between when asked
+#One room game step by step, with the screen when asked
 func _play(with_screen: bool) -> Array[Array]:
 	var label := "con pantalla" if with_screen else "sin pantalla"
 	_players.clear()
@@ -206,8 +197,7 @@ func _screen_comes_in() -> void:
 		"la primera pantalla sigue conectada después de los rechazos y la sala sigue con 4")
 
 
-#The screen leaves cleanly; another one comes in and sends everything a player would send: none of it counts. It drops without a word
-#and the first one comes back
+#A second screen that acts like a player counts for nothing; the first one comes back
 func _screen_tries_to_play() -> void:
 	_screen.set_ready(false)
 	_screen.vote()
@@ -237,7 +227,7 @@ func _screen_tries_to_play() -> void:
 	_expect(_kinds_seen("snapshot").size() == 2 and _screen.room.size() == 4, "al volver recibe otra foto de la sala")
 
 
-#In the middle of the round the screen's link dies without a goodbye; it comes back and catches up with the round under way
+#The screen link dies mid round, returns and catches up
 func _screen_drops_in_round() -> void:
 	_screen._host_link.stop()
 	await _settle()
@@ -281,8 +271,7 @@ func _check_screen_saw_the_game() -> void:
 	print("      4 posiciones juntas: %d bytes en 1 mensaje; una a una: %d bytes en 4 mensajes" % [together, apart])
 
 
-#The same room of the host, closed in the middle of a game (after the points of the first round, with a start still waiting) and opened
-#again: the new game starts from nothing. Before 23/11 the old points blocked the first marker and the old clock sent a start of its own
+#A room closed mid game and reopened starts from nothing
 func _check_room_again() -> void:
 	var room := NetRoom.new()
 	tree.root.add_child(room)
@@ -299,7 +288,7 @@ func _check_room_again() -> void:
 		var heard: Array[String] = []
 		await _settle()
 		if game == 1:
-			#Long enough for any clock left from the last game to run out (with --fixed-fps the frames go fast)
+			#Long enough for any old clock to run out
 			for frame in 600:
 				await tree.process_frame
 			await _settle()
@@ -326,7 +315,7 @@ func _check_room_again() -> void:
 		"una sala cerrada a mitad de partida y abierta otra vez empieza de cero: salida y marcador de la ronda 1, nada viejo (%s)" % str(got))
 
 
-#A full room where one drops and comes back, the next game without the one that left for good, and the screen told in the announcement
+#Full room: one drops and returns, the next game without the one gone, screen announced
 func _check_full_room() -> void:
 	var room := NetRoom.new()
 	tree.root.add_child(room)
@@ -386,8 +375,7 @@ func _check_full_room() -> void:
 	await _settle()
 
 
-#What the server decides inside a round goes to every player and to the screen; what a player asks reaches only the server; the screen
-#sends nothing. A screen that comes in with a round under way learns how long ago it was let go
+#Server decisions reach players and screen; player requests reach only the server
 func _check_round_events() -> void:
 	var room := NetRoom.new()
 	tree.root.add_child(room)
@@ -431,8 +419,7 @@ func _check_round_events() -> void:
 	await _settle()
 
 
-#The players load a round before the server and the server's player is out of it first (it lost in La Calle): the results must wait for
-#the points of the players still in the round, in this game and in the next one of the same room
+#The server player is out first: results still wait for the players in the round
 func _check_early_server() -> void:
 	var room := NetRoom.new()
 	tree.root.add_child(room)

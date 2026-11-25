@@ -1,8 +1,6 @@
 extends SceneTree
 
-#Checks the dive of the player (a second press of the jump in the air) on a flat floor: how far it reaches, how long each part
-#lasts, once per jump, what cancels it, when it is not allowed, and that with the dive off nothing changes.
-#Run: godot --headless --fixed-fps 60 --path . --script res://scripts/tests/dive_check.gd
+#Checks the dive on a flat floor: reach, timing, once per jump and cancels; run with --fixed-fps 60
 
 const CHARACTERS: Array[String] = ["fire", "water", "plant", "lightning"]
 #Where the discs of the leap stand: high over the floor, past its far side
@@ -43,8 +41,7 @@ func _make(dive: bool) -> Player:
 	return player
 
 
-#Runs, jumps and presses the jump again "press_at" seconds after the takeoff (negative: never). Returns how far from the takeoff
-#it stopped and what happened on the way
+#Runs, jumps and presses again at "press_at" (negative: never); returns the distance and events
 func _leap(player: Player, press_at: float, extra_press_at := -1.0) -> Dictionary:
 	var dives := [0]
 	var count := func(_direction: Vector3) -> void: dives[0] += 1
@@ -100,8 +97,7 @@ func _disc(at: Vector3, radius: float) -> void:
 	_scene.add_child(body)
 
 
-#Runs off the island of a leap (HOP_RUN meters before its rim), jumps "margin" meters before its rim and dives "press" seconds into the jump (negative: never).
-#It says whether the player is on the ledge, across the gap, when everything is over
+#Jumps a gap "margin" before the rim and dives at "press"; says where the player ends
 func _hop(press: float, margin: float, rim: float, gap: float) -> bool:
 	var player := _make(true)
 	player.global_position = Vector3(0.0, HOP_TOP + 0.05, HOP_Z - rim + HOP_RUN)
@@ -119,7 +115,7 @@ func _hop(press: float, margin: float, rim: float, gap: float) -> bool:
 			if press >= 0.0 and not pressed and clock >= press:
 				pressed = true
 				player.jump_requested = true
-			#The keys are let go once the dive is on its way (or the jump is over): the rest is momentum
+			#Keys released once the dive is on its way: the rest is momentum
 			if clock >= (press + 0.1 if press >= 0.0 else 1.0):
 				player.move_input = Vector2.ZERO
 	player.move_input = Vector2.ZERO
@@ -142,7 +138,7 @@ func _run() -> void:
 	_scene.add_child(floor_body)
 	await _frames(10)
 
-	#The plain jump, the measure of everything else. The player stops on landing, so "reach" is the jump alone
+	#Plain jump, the measure of everything else
 	var plain := await _leap(_make(true), -1.0)
 	var jump: float = plain["reach"]
 	_check(plain["dives"] == 0, "un salto sin segunda pulsación no barre")
@@ -294,7 +290,7 @@ func _run() -> void:
 	_check(off["dives"] == 0 and absf(float(off["reach"]) - jump) < 0.02,
 		"con dive_enabled apagado el salto es idéntico (%.3f m contra %.3f m)" % [off["reach"], jump])
 
-	#A gap too wide for a jump: a dive pressed in a wide stretch of the jump lands on the ledge
+	#A gap too wide for a jump is crossed by a well-timed dive
 	var hop := {"gap": 6.0, "radius": 3.2}
 	var rim := 6.0
 	_disc(Vector3(0.0, HOP_TOP, HOP_Z), rim)

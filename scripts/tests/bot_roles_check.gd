@@ -1,6 +1,6 @@
 extends SceneTree
 
-#Checks what each bot role chooses and the Dijkstra penalties; run: godot --headless --path . --script res://scripts/tests/bot_roles_check.gd
+#Checks each bot role choice and the Dijkstra penalties; run headless with --script
 
 var _failures := 0
 var _context: ChaseContext

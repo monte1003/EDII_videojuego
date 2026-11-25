@@ -2,9 +2,7 @@
 class_name LevelPreview
 extends Node3D
 
-#Only in the editor: builds the map of its level from the same data the game reads (the layout of the course or of the arena, the board,
-#the street), so the level can be seen in the 3D view without playing; change a value of the layout and open the scene again to see it.
-#Nothing it builds has an owner, so none of it is saved into the scene. In the game it leaves at once: the round builds its own map
+#Editor only: builds the level map from the game data so it shows without playing; nothing is saved
 
 enum Map { FEED_RACE, SOCIAL_DROP, STREET, TREND_WAR, SELFIE }
 

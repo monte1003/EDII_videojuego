@@ -1,18 +1,17 @@
 shader_type spatial;
 render_mode cull_disabled, depth_prepass_alpha, diffuse_burley, specular_schlick_ggx;
 
-//A toy car whose windows are painted dark on its texture: here those pixels turn into glass, so the people inside show through.
-//Only the dark pixels in the band of the windows count, so the tyres and the lights stay as they are
+//Toy car: the dark pixels in the window band turn into glass
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;
 uniform vec4 tint : source_color = vec4(1.0);
-//The roof can have its own colour: it starts at this share of the height of the car
+//Roof colour, from this share of the car height
 uniform vec4 roof_tint : source_color = vec4(1.0);
 uniform float roof_start : hint_range(0.0, 1.0) = 0.935;
 uniform vec3 glass_color : source_color = vec3(0.55, 0.7, 0.95);
 uniform float glass_alpha : hint_range(0.0, 1.0) = 0.16;
 uniform float feet_y = 0.0;
 uniform float body_height = 1.0;
-//Where the windows are as a share of the height of the car, and how dark a pixel must be to be glass
+//Window band as a share of the car height, and darkness threshold
 uniform float glass_low : hint_range(0.0, 1.0) = 0.45;
 uniform float glass_high : hint_range(0.0, 1.0) = 0.95;
 uniform float glass_darkness : hint_range(0.0, 1.0) = 0.45;

@@ -1,9 +1,7 @@
 class_name ActionChip
 extends Control
 
-#The chip of an action that only makes sense now: the key and one word, near the player or over the rival it is aimed at. It
-#comes in with a bounce, beats softly while the action is ready, sinks when the key is pressed, shows its recharge as a bar
-#that fills under the key and goes away with a fade when there is nothing to do. Every screen has its own chips
+#Chip of an action available now: key and word near the player, with bounce, beat and recharge bar
 
 const IN_TIME := 0.24
 const OUT_TIME := 0.24
@@ -63,14 +61,14 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	if _charge >= 1.0:
 		return
-	#The recharge: a thin bar under the key that fills from the left
+	#Recharge bar under the key
 	var width := _key.size.x
 	var top := _key.size.y + 5.0
 	draw_rect(Rect2(0.0, top, width, BAR_HEIGHT), Color(Palette.NIGHT, 0.55), true)
 	draw_rect(Rect2(0.0, top, width * clampf(_charge, 0.0, 1.0), BAR_HEIGHT), Palette.GOLD, true)
 
 
-#Comes in with a bounce, or goes away with a fade
+#Bounces in or fades out
 func set_shown(on: bool) -> void:
 	if on == _shown:
 		return
@@ -95,12 +93,12 @@ func is_shown() -> bool:
 	return _shown
 
 
-#The key was pressed: the chip sinks for a moment
+#Sinks for a moment on press
 func press() -> void:
 	_sink = 1.0
 
 
-#How much of the recharge is done, from 0 to 1; while it is not 1 the chip is dim and the bar shows
+#Recharge done, 0 to 1; dim with a bar until full
 func set_charge(share: float) -> void:
 	var was := _charge
 	_charge = clampf(share, 0.0, 1.0)
@@ -111,7 +109,7 @@ func set_charge(share: float) -> void:
 	queue_redraw()
 
 
-#The word of the chip, and whether it is lit (an action that is on right now)
+#Chip word, lit while the action is on
 func set_word(word: String, hot := false) -> void:
 	if _word.text != word:
 		_word.text = word
@@ -121,7 +119,7 @@ func set_word(word: String, hot := false) -> void:
 		_word.add_theme_color_override("font_color", Palette.GOLD if hot else Palette.PAPER)
 
 
-#A short line next to the chip that says what the action is for; it fades by itself
+#Short fading line about what the action is for
 func teach(text: String, seconds := 3.2) -> void:
 	_caption.text = text
 	_fit()
@@ -134,7 +132,7 @@ func teach(text: String, seconds := 3.2) -> void:
 	_caption_tween.tween_property(_caption, "modulate:a", 0.0, 0.5)
 
 
-#The middle of the chip goes to a point of the screen
+#Centres the chip on a screen point
 func place(screen_point: Vector2) -> void:
 	position = screen_point - size / 2.0
 
@@ -146,7 +144,7 @@ func _fit() -> void:
 	pivot_offset = size / 2.0
 
 
-#White text with a dark outline, as in the rest of the screens of a round
+#White text with a dark outline
 func _text(text: String, font: Font, size_points: int, color: Color) -> Label:
 	var label := UiKit.label(text, font, size_points, color)
 	label.add_theme_color_override("font_outline_color", Color(Palette.NIGHT, 0.88))

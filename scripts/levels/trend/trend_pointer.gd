@@ -1,8 +1,7 @@
 class_name TrendPointer
 extends Control
 
-#An arrow on the edge of the screen that points to the zone of the trend while it is out of view. Each screen has its own, aimed
-#with the camera of its player
+#Edge arrow toward the trend zone while it is out of view, per screen
 
 const SIZE := 34.0
 const MARGIN := 64.0
@@ -18,7 +17,7 @@ func _ready() -> void:
 	hide()
 
 
-#Points to "target" as "camera" sees it; it hides when the target is in view or "wanted" is false
+#Aims at "target"; hidden when in view or not "wanted"
 func aim(camera: Camera3D, target: Vector3, wanted: bool) -> void:
 	if not wanted or camera == null:
 		hide()
@@ -51,7 +50,7 @@ func _draw() -> void:
 	var area := get_viewport_rect().size
 	var centre := area / 2.0
 	var way := Vector2.from_angle(_angle)
-	#Where the ray from the middle meets the edge of the screen, kept inside the margin
+	#Ray from the middle to the screen edge, inside the margin
 	var half := centre - Vector2.ONE * MARGIN
 	var reach := minf(half.x / maxf(absf(way.x), 0.001), half.y / maxf(absf(way.y), 0.001))
 	var tip := centre + way * (reach + 6.0 * sin(_clock * 7.0))

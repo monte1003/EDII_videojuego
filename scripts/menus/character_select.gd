@@ -83,7 +83,7 @@ func _select(index: int) -> void:
 	_model_pivot.rotation.y = 0.0
 
 
-#The keys drawn on the two buttons follow the device in use: Enter and E, or the cross and the circle of the pad
+#Key hints follow the device: Enter and E, or cross and circle
 func _show_keys() -> void:
 	(_play_button as GameButton).set_icon(InputHints.confirm_icon())
 	(_back_button as GameButton).set_icon(InputHints.back_icon())
@@ -93,7 +93,7 @@ func _on_device_changed(_kind: int) -> void:
 	_show_keys()
 
 
-#The right stick turns the character like dragging it with the mouse
+#The right stick turns the character like a mouse drag
 func _process(delta: float) -> void:
 	var turn := Input.get_axis("look_left", "look_right")
 	if turn != 0.0:

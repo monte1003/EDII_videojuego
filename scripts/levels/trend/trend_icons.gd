@@ -1,12 +1,11 @@
 class_name TrendIcons
 extends Node
 
-#The icon of each kind is a picture of the very toy that floats in its bubble: each toy is drawn once into a small image
-#with its own camera and light, so what the row of the trend shows is exactly what there is to fetch
+#Each icon is a render of the very toy in its bubble
 
 const SIZE := 192
 
-#One picture per kind, shared by every row on the screen
+#One picture per kind, shared by every row
 static var textures: Array[Texture2D] = []
 
 

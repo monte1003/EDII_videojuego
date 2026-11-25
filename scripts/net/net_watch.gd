@@ -1,10 +1,7 @@
 class_name NetWatch
 extends Node
 
-#The fair screen's way into the room: it watches the game without playing. It looks for the server at the address written in feria.cfg
-#next to the game and at the one the server announces on the network, each one the backup of the other, and every time it loses the room
-#it tries again by itself, forever, waiting longer each time (1, 2, 4, 8 and then 10 seconds). From what the server sends it keeps a
-#picture of the game: the room, the order of the rounds and their seeds, the round under way and the points
+#Fair screen connection: tries feria.cfg and the announced address in turns, forever
 
 signal changed
 
@@ -12,23 +9,22 @@ const CONFIG_FILE := "feria.cfg"
 const FIRST_WAIT := 1.0
 const LONGEST_WAIT := 10.0
 
-#The room it watches through: the game's own, unless a test gives it another one
+#The room it watches through; tests may give their own
 var net: NetRoom
 var status := ""
 var connected := false
-#The address being tried or watched, and the one written in feria.cfg (read when it starts, unless it was given before)
+#Address being tried and the one from feria.cfg
 var address := ""
 var config_address := ""
-#The picture of the game. Stage is where the server is: lobby, warmup, intro, playing, round_results or finished
+#Picture of the game; stage: lobby, warmup, intro, playing, round_results or finished
 var stage := "lobby"
 var plan: Array[StringName] = []
 var seeds: Array[int] = []
 var round_index := -1
-#Points of each round played, by player id
 var table: Array[Dictionary] = []
-#The totals the server counted when the game ended: {"id", "name", "character", "total", "best"}
+#Final totals from the server: {"id", "name", "character", "total", "best"}
 var finals: Array[Dictionary] = []
-#Messages and bytes per second that came from the server in the last second
+#Messages and bytes per second from the server
 var messages_per_second := 0
 var bytes_per_second := 0
 
@@ -67,14 +63,13 @@ func _process(delta: float) -> void:
 		_try()
 
 
-#Where feria.cfg is: next to the game's executable (next to the project when it runs from the editor)
+#feria.cfg sits next to the executable, or the project in the editor
 static func config_path() -> String:
 	var folder := OS.get_executable_path().get_base_dir() if OS.has_feature("template") else ProjectSettings.globalize_path("res://")
 	return folder.path_join(CONFIG_FILE)
 
 
-#The first address in feria.cfg: a line with just the address or with "ip_anfitrion = ..." (quotes or not); lines that start with # or ;
-#are comments. None when the file is missing or has no valid address
+#First address in feria.cfg, plain or "ip_anfitrion = ..."; # and ; start comments
 static func read_config(path := "") -> String:
 	var file := FileAccess.open(path if path != "" else config_path(), FileAccess.READ)
 	if file == null:
@@ -88,7 +83,7 @@ static func read_config(path := "") -> String:
 	return ""
 
 
-#Points a player added up over the rounds the screen knows of
+#Points of a player over the rounds this screen knows
 func total_of(player_id: int) -> int:
 	var total := 0
 	for points in table:
@@ -96,7 +91,7 @@ func total_of(player_id: int) -> int:
 	return total
 
 
-#The addresses to try, in turns: the one of feria.cfg and the ones announced on the network by a room of this same version
+#Addresses to try in turns: feria.cfg and announced rooms of this version
 func candidates() -> Array[String]:
 	var found: Array[String] = []
 	if config_address.is_valid_ip_address():
@@ -136,14 +131,14 @@ func _on_joined() -> void:
 
 
 func _on_left(reason: String) -> void:
-	#An address that never answered gives its turn to the other one
+	#An address that never answered yields its turn
 	if not connected:
 		_turn += 1
 	connected = false
 	_wait_again("%s (%s)" % [reason, address])
 
 
-#The picture of the game follows the server's messages; positions, shoves and the warm-up clock pass by without changing it
+#The game picture follows the server; positions, shoves and warm-up clock do not change it
 func _on_watched(message: Dictionary) -> void:
 	match String(message["t"]):
 		"snapshot":
@@ -202,7 +197,6 @@ func _on_watched(message: Dictionary) -> void:
 	changed.emit()
 
 
-#Once a second: how much came from the server in the last second
 func _measure(delta: float) -> void:
 	_rate_clock += delta
 	if _rate_clock < 1.0:
@@ -210,7 +204,7 @@ func _measure(delta: float) -> void:
 	var now := net.traffic() if net.role == NetRoom.Role.WATCH else {}
 	var messages := int(now.get("messages_in", 0))
 	var bytes := int(now.get("bytes_in", 0))
-	#A new connection counts from zero again
+	#A new connection counts from zero
 	if messages < int(_counted.get("messages_in", 0)):
 		_counted = {}
 	messages_per_second = roundi((messages - int(_counted.get("messages_in", 0))) / _rate_clock)

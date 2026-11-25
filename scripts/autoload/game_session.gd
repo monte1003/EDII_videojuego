@@ -1,6 +1,6 @@
 extends Node
 
-#A game of ROUND_COUNT rounds, one per minigame in a random order; every change of state goes through these methods and is announced with a signal
+#A game of ROUND_COUNT rounds in random order; every state change goes through here with a signal
 
 enum Phase { IDLE, LOBBY, WARMUP, INTRO, PLAYING, ROUND_RESULTS, FINISHED }
 
@@ -10,11 +10,10 @@ signal round_finished(result: RoundResult)
 signal session_finished(results: Array[RoundResult])
 
 const ROUND_COUNT := 5
-#For a lobby opened on its own, without going through the character select
+#For a lobby opened without the character select
 const DEFAULT_CHARACTER: CharacterData = preload("res://resources/characters/fire.tres")
-#Every character that can be picked, in the order of the character select
 const CHARACTER_IDS: Array[StringName] = [&"fire", &"water", &"plant", &"lightning"]
-#Seconds the results of a round stay on screen in a room before the next round
+#Seconds the round results stay on screen in a room
 const NET_RESULTS_SECONDS := 8
 
 var lobby := LobbyState.new()
@@ -22,27 +21,26 @@ var phase := Phase.IDLE
 var plan: Array[StringName] = []
 var round_index := -1
 var results: Array[RoundResult] = []
-#A practice is one minigame played on its own from the lobby
+#A practice is one minigame played alone from the lobby
 var practice := false
 
-#The numbers of the scoring and the best scores kept on this computer
 var score_sheet: ScoreSheet = preload("res://resources/score_sheet.tres")
 var score_book := ScoreBook.new()
-#Whether the total of the game that just ended beat the best one kept
+#Whether the game that just ended beat the best total
 var session_record := false
 
-#The game on the local network: a room this computer opened or joined (offline it plays alone)
+#The local network room this computer opened or joined
 var net := NetRoom.new()
-#The player of this computer: player 1 alone; in a room, the id the server gave it
+#Player 1 alone; in a room, the id the server gave
 var local_id := GameState.PLAYER_ONE
-#The seed of each round, the same on every computer of a room (empty alone, where each round draws its own), and the one being played
+#Seed of each round, the same on every computer of a room; empty alone
 var seeds: Array[int] = []
 var round_seed := 0
 
 var _rng := RandomNumberGenerator.new()
-#In a room, the result of this computer while the server gathers the points of everybody
+#In a room, this computer's result while the server gathers everyone's points
 var _waiting_result: RoundResult
-#This computer came back to a game under way and waits for the next round
+#Came back to a game under way and waits for the next round
 var _rejoined := false
 
 
@@ -52,7 +50,7 @@ func _ready() -> void:
 	net.left.connect(_on_room_lost)
 
 
-#The server went away in the middle of a game: back to the main menu (the lobby says it by itself)
+#The server left mid game: back to the main menu
 func _on_room_lost(_reason: String) -> void:
 	if phase != Phase.LOBBY and phase != Phase.IDLE:
 		abandon()
@@ -62,7 +60,7 @@ func is_networked() -> bool:
 	return net.is_active()
 
 
-#Fills the lobby with the players that picked a character; safe to call again
+#Fills the lobby with the players that picked a character
 func prepare_lobby() -> void:
 	if is_networked():
 		sync_lobby(net.room)
@@ -99,7 +97,7 @@ func is_last_round() -> bool:
 	return round_index >= plan.size() - 1
 
 
-#The lobby starts the session when everybody is ready: the warm-up comes first
+#Starts the session with the warm-up
 func start_session() -> void:
 	if not lobby.all_ready() or (is_networked() and not net.is_host()):
 		return
@@ -109,7 +107,7 @@ func start_session() -> void:
 		return
 	seeds.clear()
 	if is_networked():
-		#In a room everybody goes to the warm-up first; the order and the seeds go out when it ends
+		#The order and the seeds go out when the warm-up ends
 		net.begin_warmup()
 		enter_warmup()
 		return
@@ -120,7 +118,7 @@ func start_session() -> void:
 	ScreenFlow.open(&"warmup")
 
 
-#The order of the rounds and their seeds came from the server (or this computer is the server)
+#Round order and seeds from the server, or drawn here as the server
 func begin_networked(order: Array[StringName], round_seeds: Array[int]) -> void:
 	plan = order.duplicate()
 	seeds = round_seeds.duplicate()
@@ -131,7 +129,7 @@ func begin_networked(order: Array[StringName], round_seeds: Array[int]) -> void:
 	_select_next_round()
 
 
-#The lobby of a room shows everybody in it, as the server says
+#Shows everybody in the room as the server says
 func sync_lobby(members: Array[Dictionary]) -> void:
 	lobby.slots.clear()
 	for member in members:
@@ -139,7 +137,7 @@ func sync_lobby(members: Array[Dictionary]) -> void:
 		var character: CharacterData = load(character_path) if ResourceLoader.exists(character_path) else DEFAULT_CHARACTER
 		var slot := PlayerSlot.new(int(member.get("id", 0)), str(member.get("name", "JUGADOR")), character)
 		slot.ready = bool(member.get("ready", false))
-		#Whoever lost its connection, or came back and waits for the next round, does not play the round under way
+		#Disconnected or rejoined players sit out the round under way
 		slot.connected = bool(member.get("connected", true)) and not bool(member.get("waiting", false))
 		lobby.slots.append(slot)
 	lobby.changed.emit()
@@ -161,7 +159,7 @@ func finish_warmup() -> void:
 	if not is_networked():
 		_select_next_round()
 		return
-	#In a room the server draws the order of the rounds and their seeds and sends them; the others wait for them
+	#The server draws and sends the order and the seeds; the others wait
 	if not net.is_host():
 		return
 	_rng.randomize()
@@ -173,8 +171,7 @@ func finish_warmup() -> void:
 	begin_networked(plan, seeds)
 
 
-#Back in a game under way after losing the connection: the order, the seeds and the points so far come from the server; this computer
-#waits for the next round on a screen of its own
+#Rejoining a game under way: order, seeds and points come from the server
 func rejoin(order: Array[StringName], round_seeds: Array[int], current: int, table: Array[Dictionary]) -> void:
 	plan = order.duplicate()
 	seeds = round_seeds.duplicate()
@@ -192,14 +189,13 @@ func rejoin(order: Array[StringName], round_seeds: Array[int], current: int, tab
 	ScreenFlow.open(&"rejoin")
 
 
-#A round this computer did not play, with the points the server gave everybody
+#A round this computer missed, with the points the server gave
 func _kept_result(index: int, points: Dictionary) -> RoundResult:
 	var result := RoundResult.make(plan[index] if index < plan.size() else &"", false, "", "")
 	return result.with_score(RoundScore.make(score_sheet, int(points.get(local_id, 0)), ""), points)
 
 
-#The fair screen watches a round of a room without playing it: the order, the seeds and the round it builds, with nobody of the room as
-#its player and no change of phase, so it never reports points
+#The fair screen follows a round without playing or reporting points
 func follow_round(order: Array[StringName], round_seeds: Array[int], index: int) -> void:
 	plan = order.duplicate()
 	seeds = round_seeds.duplicate()
@@ -209,7 +205,6 @@ func follow_round(order: Array[StringName], round_seeds: Array[int], index: int)
 	local_id = 0
 
 
-#Everybody of a room goes to the warm-up together
 func enter_warmup() -> void:
 	results.clear()
 	plan.clear()
@@ -219,7 +214,7 @@ func enter_warmup() -> void:
 	ScreenFlow.open(&"warmup")
 
 
-#Which colour of its character a player wears: the first one with a character wears it as it is, the next ones with the same, others
+#Colour variant of a player: repeats of the same character get another one
 func variant_of(player_id: int) -> int:
 	var slot := lobby.find(player_id)
 	if slot == null or slot.character == null:
@@ -238,7 +233,7 @@ static func character_by_id(id: StringName) -> CharacterData:
 	return load(path) as CharacterData if ResourceLoader.exists(path) else DEFAULT_CHARACTER
 
 
-#The intro screen calls it when its animation ends: the round starts
+#Called by the intro when its animation ends
 func begin_round() -> void:
 	var info := current_info()
 	if phase != Phase.INTRO or info == null:
@@ -247,7 +242,7 @@ func begin_round() -> void:
 	ScreenFlow.open(info.id)
 
 
-#A minigame calls it once when its round is over; it returns false when no session is running
+#Called once by a minigame at the end; false without a session
 func report_result(result: RoundResult) -> bool:
 	if phase != Phase.PLAYING:
 		return false
@@ -261,7 +256,7 @@ func report_result(result: RoundResult) -> bool:
 	return true
 
 
-#The server sent the points of everybody for a round: the result of this computer takes them and the results show
+#Points of everybody for a round, from the server
 func apply_round_points(index: int, points: Dictionary) -> void:
 	if _rejoined and _waiting_result == null and index == round_index and results.size() == index:
 		results.append(_kept_result(index, points))
@@ -282,7 +277,7 @@ func _store_result(result: RoundResult) -> void:
 	ScreenFlow.open(&"round_results")
 
 
-#From the round results: the next round, or the end of the session
+#Next round or end of the session
 func advance() -> void:
 	if phase != Phase.ROUND_RESULTS:
 		return
@@ -312,7 +307,6 @@ func advance_now() -> void:
 		_select_next_round()
 
 
-#Points a player has added up over the rounds played so far
 func total_of(player_id: int) -> int:
 	var total := 0
 	for result in results:
@@ -320,7 +314,7 @@ func total_of(player_id: int) -> int:
 	return total
 
 
-#The best single round of a player: what breaks a tie of totals
+#Best single round of a player, the tie-break
 func best_round_of(player_id: int) -> int:
 	var best := 0
 	for result in results:
@@ -328,24 +322,23 @@ func best_round_of(player_id: int) -> int:
 	return best
 
 
-#The players from the first to the last: an AVL tree ordered by total, best round and player id, walked from its greatest key down
+#Players from first to last: AVL tree by total, best round and id
 func standings() -> Array[AVLTree.AVLNode]:
 	return _ranking().standings()
 
 
-#Place of each player by id; players with the same total and the same best round share it
+#Place of each player by id; equal total and best round share it
 func places() -> Dictionary:
 	return _ranking().places()
 
 
-#The medal of a whole game: the average of its rounds against the same thresholds
+#Medal of a whole game: the average of its rounds
 func session_medal(player_id: int) -> ScoreSheet.Medal:
 	if results.is_empty():
 		return ScoreSheet.Medal.NONE
 	return score_sheet.medal_for(roundi(float(total_of(player_id)) / results.size()))
 
 
-#The tree of scores of everybody who played, for the podium
 func ranking() -> AVLTree:
 	return _ranking()
 
@@ -363,7 +356,7 @@ func restart_round() -> void:
 		ScreenFlow.open(info.id)
 
 
-#New game from the end screen: back to the lobby with the same character
+#New game from the end screen with the same character
 func play_again() -> void:
 	reset()
 	net.reopen()

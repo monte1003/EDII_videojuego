@@ -1,30 +1,27 @@
 class_name PodiumPlan
 extends RefCounted
 
-#Who stands where at the end of a game and which crown each one wears, with no nodes. With several players the crowns go by place from
-#the top: the first wears diamond, the second gold, the third silver and the fourth bronze, so the winner always wears the best one, and
-#players tied in a place share its crown and its height. Alone, the crown is the medal of the whole game (none under bronze). The reveal
-#goes from the last to the first: the in-order walk of the tree of scores, from the smallest key up
+#Podium places and crowns without nodes: diamond, gold, silver and bronze by place; ties share
 
 class Entry:
 	var player_id: int
 	var points: int
 	var place: int
-	#A ScoreSheet.Medal: NONE wears no crown
+	#A ScoreSheet.Medal; NONE has no crown
 	var crown: int
-	#Block of the stage: 0 is the middle one, then left, right and far left
+	#Stage block: 0 middle, then left, right and far left
 	var slot: int
 	var height: float
 
 
-#Height of the block of each place, from the first to the fourth, and where each block stands across the stage, from the middle one
+#Block height per place and block positions from the middle
 const HEIGHTS: Array[float] = [2.3, 1.65, 1.15, 0.75]
 const SLOTS: Array[float] = [0.0, -3.4, 3.4, -6.8]
 const SOLO_HEIGHT := 1.9
 const CROWNS: Array[int] = [ScoreSheet.Medal.DIAMOND, ScoreSheet.Medal.GOLD, ScoreSheet.Medal.SILVER, ScoreSheet.Medal.BRONZE]
 
 
-#Everybody from the best to the worst, each with its place, crown, block and height
+#Everybody best to worst with place, crown, block and height
 static func build(tree: AVLTree, solo_medal: int) -> Array[Entry]:
 	var order := tree.standings()
 	var places := tree.places()
@@ -47,7 +44,7 @@ static func build(tree: AVLTree, solo_medal: int) -> Array[Entry]:
 	return entries
 
 
-#The order of the reveal, from the last to the first
+#Reveal order, last to first
 static func reveal_order(tree: AVLTree, entries: Array[Entry]) -> Array[Entry]:
 	var by_id: Dictionary = {}
 	for entry in entries:

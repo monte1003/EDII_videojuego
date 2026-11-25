@@ -1,12 +1,11 @@
 class_name Level01Backdrop
 extends Node3D
 
-#Giant hearts, chat bubbles, bells, phones, islands and clouds around the course: they give the level depth and its theme and never collide.
-#Each one keeps clear of the big wheels and of every other piece, and sleeps when no camera is near
+#Floating hearts, bubbles, bells, phones, islands and clouds around the course; no collisions
 
-#How soon the far props take their simpler shapes (1 is what the engine does by itself)
+#LOD bias of far props
 const SCENERY_LOD := 0.35
-#What floats around: model, how many, its size range (the measure that is fitted) and whether it is tall or long
+#Floating kinds: model, count, size range and fit measure
 const KINDS: Array[Dictionary] = [
 	{"id": &"heart", "count": 10, "size": Vector2(4.5, 8.0), "tall": true},
 	{"id": &"bubble", "count": 10, "size": Vector2(6.0, 10.0), "tall": false},
@@ -15,17 +14,17 @@ const KINDS: Array[Dictionary] = [
 	{"id": &"island", "count": 8, "size": Vector2(9.0, 15.0), "tall": false},
 	{"id": &"cloud", "count": 14, "size": Vector2(14.0, 26.0), "tall": false},
 ]
-#The cloud sea under the course: big white clouds, a few draw calls
+#Cloud sea under the course
 const SEA_COUNT := 150
 const SEA_COLORS: Array[Color] = [Color("ffffff"), Color("f4f0ff"), Color("eaf3ff")]
-#The stretch of the course where pieces may float, away from the rainbows at both ends
+#Course stretch where pieces float
 const Z_RANGE := Vector2(-216.0, 192.0)
-#Free air around each piece on top of its own size, and how many places are tried before a piece is left out
+#Free space around each piece and placement tries
 const BREATHING := 3.0
 const TRIES := 30
 
 var _items: Array[Dictionary] = []
-#The balls (centre and radius) that are already taken: the wheels of the set and the pieces placed so far
+#Taken spheres: set wheels and placed pieces
 var _taken: Array[Vector4] = []
 var _clock := 0.0
 
@@ -51,7 +50,7 @@ func build() -> void:
 				item = PropKit.make_tall(kind["id"], size, Color.WHITE, false)
 			else:
 				item = PropKit.make_long(kind["id"], size, Color.WHITE, false)
-			#Far scenery takes its simpler shapes sooner: the same pieces, never hidden, with fewer triangles while they are small on screen
+			#Far scenery switches to simpler shapes sooner; nothing is hidden
 			for piece in item.find_children("*", "MeshInstance3D", true, false):
 				(piece as MeshInstance3D).lod_bias = SCENERY_LOD
 			_taken.append(Vector4(at.x, at.y, at.z, reach))
@@ -66,7 +65,7 @@ func build() -> void:
 	var sparks := PartyKit.sparkles(Vector3(80.0, 14.0, 190.0), 170)
 	sparks.position = Vector3(0.0, 14.0, 20.0)
 	add_child(sparks)
-	#Little hearts float up over the whole course, like the likes of the crowd
+	#Hearts floating up over the course
 	var likes := PartyKit.hearts(Vector3(70.0, 12.0, 150.0), 90)
 	likes.position = Vector3(0.0, 14.0, 20.0)
 	add_child(likes)
@@ -81,7 +80,7 @@ func _process(delta: float) -> void:
 		node.rotation.y = entry["yaw"] + sin(wave * 0.7) * 0.22
 
 
-#A spot beside the course (big pieces keep further out so they never swallow it) where a ball of radius "reach" touches nothing, or null
+#Free spot beside the course for a sphere of "reach", or null
 func _free_place(rng: RandomNumberGenerator, size: float, reach: float, index: int) -> Variant:
 	for attempt in TRIES:
 		var side := -1.0 if (index + attempt) % 2 == 0 else 1.0

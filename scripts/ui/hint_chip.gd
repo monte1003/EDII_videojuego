@@ -1,16 +1,14 @@
 class_name HintChip
 extends PanelContainer
 
-#The cap of a control hint for one action: the key while the keyboard is in use, the DualSense button while the pad is, drawn as
-#PlayStation games show it. It changes by itself when the player picks up the other device; on the keyboard it looks exactly like the
-#key caps of before
+#Key cap of an action: the key on keyboard, the DualSense button on pad; switches by itself
 
 var _action: StringName
 var _size := 20
 var _keys_text := ""
 
 
-#"keys_text" is what shows on the keyboard (the key of the action when empty); a tail like " ×2" also shows next to the pad button
+#"keys_text" shows on the keyboard; a tail like " x2" also shows on the pad
 func _init(action: StringName, size_points := 20, keys_text := "") -> void:
 	_action = action
 	_size = size_points
@@ -55,7 +53,7 @@ func _fill() -> void:
 	reset_size()
 
 
-#A button with a word printed on it (R1, OPTIONS): a dark pill with light letters, like the round buttons
+#Dark pill with a printed word (R1, OPTIONS)
 func _word_button(word: String) -> PanelContainer:
 	var pill := PanelContainer.new()
 	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -1,9 +1,6 @@
 extends Node
 
-#The vibration of the pad of this computer. Every effect lives in one table: the weak motor (a fast buzz), the strong one (a deep thump),
-#both from 0 to 1, and how many seconds it lasts. A round hands over the player of its screen and the round itself; the effects follow
-#signals that already exist, so the game logic never asks for a vibration. A weaker effect never cuts a stronger one short, and the pad
-#stops while the pause is open, when it goes away and when the game closes
+#Pad vibration: one effect table driven by existing signals; weaker never cuts stronger
 
 const EFFECTS := {
 	&"hit": {"weak": 0.55, "strong": 0.9, "seconds": 0.34},
@@ -22,11 +19,10 @@ const EFFECTS := {
 var enabled := true
 
 var _player: Player
-#Strength and end time of the effect that is playing, so a weaker one does not replace it
 var _strength := 0.0
 var _until := 0
 var _paused := false
-#The pad that got the last effect, kept here so it can still be stopped while the game closes
+#Last pad used, so it can still be stopped while closing
 var _device := -1
 
 
@@ -43,8 +39,7 @@ func _exit_tree() -> void:
 	stop()
 
 
-#Plays an effect of the table on the pad in use; nothing happens on the keyboard or without a pad ("force" is for the test screen,
-#which plays it even when the button was clicked with the mouse)
+#Plays an effect on the pad in use; "force" is for the test screen
 func play(effect: StringName, force := false) -> void:
 	var numbers: Dictionary = EFFECTS.get(effect, {})
 	if numbers.is_empty() or InputDevice.pad < 0:
@@ -68,7 +63,7 @@ func stop() -> void:
 		Input.stop_joy_vibration(_device)
 
 
-#The player of this screen: its blows, its daze and its landings shake the pad (never a puppet of another computer)
+#Vibrates for the blows, daze and landings of this screen's player
 func follow(player: Player) -> void:
 	_player = player
 	player.hit_taken.connect(_on_hit_taken)
@@ -78,14 +73,14 @@ func follow(player: Player) -> void:
 	player.dive_landed.connect(_on_dive_landed)
 
 
-#The round of the screen: its countdown, the fall of its player, its shoves and its finish line, and its pause, which stops the pad
+#Vibrates for the countdown, falls, shoves, finish and pause of the round
 func follow_round(round_scene: RoundScene) -> void:
 	_paused = false
 	round_scene.iris.closing.connect(play.bind(&"fall"))
 	_follow_parts.call_deferred(round_scene)
 
 
-#What a round builds in its own _ready, connected once it is all there
+#Connected once the round has built its parts
 func _follow_parts(round_scene: RoundScene) -> void:
 	if not is_instance_valid(round_scene):
 		return

@@ -1,30 +1,26 @@
 class_name PodiumCeremony
 extends Node3D
 
-#The end of the game as a ceremony on a stage at night. A crane shot opens on the stage while PODIO drops letter by letter; then each player,
-#from the last place up, drops onto its block with a jolt of the camera, its spotlight comes on and its crown comes down onto its head. For
-#the first place the stage goes dark under a drum roll, the victory theme starts, the winner lands with a big shake, a flash, confetti and
-#fireworks, ¡VICTORIA! bursts in, its crown comes down shining and the camera circles it while it dances; then everybody poses together.
-#Alone, the player gets its crown of the whole game the same way. Enter skips to the end and then goes on to the numbers of the game
+#End of game ceremony on a night stage: each player lands from last to first and gets its crown
 
 const MUSIC: AudioStream = preload("res://assets/audio/music/victory_theme.ogg")
-#The victory theme swells for this long before its first big hit
+#The victory theme swells this long before its first hit
 const MUSIC_LEAD := 1.0
 const FIGURE_SCALE := 1.6
 const HEAD_BONE := &"mixamorig_HeadTop_End"
-#Width of a crown in meters and how far it sits down into the head
+#Crown width in meters and how far it sits into the head
 const CROWN_WIDTH := 0.62
 const CROWN_SINK := 0.1
 const DROP_HEIGHT := 7.0
 const WORD_KEYS: Array[StringName] = [&"", &"bronce", &"plata", &"oro", &"diamante"]
 const CROWN_NAMES: Array[String] = ["SIN CORONA", "CORONA DE BRONCE", "CORONA DE PLATA", "CORONA DE ORO", "CORONA DE DIAMANTE"]
 const CHIMES: Array[float] = [0.0, 659.0, 784.0, 988.0, 1319.0]
-#Players of the demo, when the stage is opened on its own from the test menu
+#Demo players when opened from the test menu
 const DEMO_CHARACTERS: Array[StringName] = [&"fire", &"water", &"plant", &"lightning"]
 const DEMO_POINTS: Array[int] = [3920, 3310, 2740, 2105]
 const DANCES: Array[int] = [2, 3, 4, 5]
 
-#How many players the demo shows (1 to 4)
+#Demo player count (1 to 4)
 static var demo_players := 4
 
 class Figure:
@@ -50,7 +46,7 @@ var _demo := false
 var _skipped := false
 var _done := false
 var _leaving := false
-#Seconds since the stage opened: a key still held from the screen before does nothing in the first ones
+#Keys held from the previous screen do nothing at first
 var _age := 0.0
 var _firework_left := 0.0
 var _fireworks_on := false
@@ -77,7 +73,7 @@ func _ready() -> void:
 	var standings := tree.standings()
 	var solo_medal := ScoreSheet.Medal.DIAMOND
 	if not _demo and standings.size() == 1:
-		#Alone, the crown of the medal of the game, and at least the bronze one: whoever played the whole game is crowned
+		#Alone: the medal of the game, at least bronze, so a full game is crowned
 		solo_medal = maxi(GameSession.session_medal(standings[0].player_id), ScoreSheet.Medal.BRONZE) as ScoreSheet.Medal
 	_entries = PodiumPlan.build(tree, solo_medal)
 	_order = PodiumPlan.reveal_order(tree, _entries)
@@ -119,7 +115,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_leave()
 
 
-#The players from the session, or four players of the demo when the stage opens on its own
+#Session players, or the demo ones
 func _gather() -> AVLTree:
 	if not GameSession.results.is_empty():
 		return GameSession.ranking()
@@ -179,7 +175,7 @@ func _run() -> void:
 	_finale()
 
 
-#A crane shot from high over the crowd down to the stage while PODIO drops letter by letter
+#Crane shot down to the stage while PODIO drops letter by letter
 func _opening() -> void:
 	var fade := create_tween()
 	fade.tween_property(_fade, "color:a", 0.0, 1.0)
@@ -194,7 +190,7 @@ func _opening() -> void:
 	await _hold(3.9)
 
 
-#One player drops onto its block, its light comes on and its crown comes down
+#A player lands on its block, its light comes on and its crown comes down
 func _present(entry: PodiumPlan.Entry) -> void:
 	var figure: Figure = _figures[entry.player_id]
 	var top := _stage.top_of(entry)
@@ -219,7 +215,7 @@ func _present(entry: PodiumPlan.Entry) -> void:
 	_hide_lower()
 
 
-#The big reveal: dark stage and a drum roll, then the theme, the landing, the flash, the confetti, the word and the shining crown
+#Big reveal: dark stage and drum roll, then theme, landing, flash and confetti
 func _crown_winner(entry: PodiumPlan.Entry) -> void:
 	var figure: Figure = _figures[entry.player_id]
 	var top := _stage.top_of(entry)
@@ -259,7 +255,7 @@ func _crown_winner(entry: PodiumPlan.Entry) -> void:
 		return
 
 
-#Everybody together: a wide shot of the stage, every player posing, and the key to go on
+#Everybody posing in a wide shot, with the key to go on
 func _finale() -> void:
 	_done = true
 	_hide_lower()
@@ -278,7 +274,7 @@ func _finale() -> void:
 	show.tween_property(_prompt, "modulate:a", 1.0, 0.5)
 
 
-#Enter before the end: everybody goes straight to its block with its crown and the last shot
+#Enter before the end jumps to the last shot
 func _finish_now() -> void:
 	if _done:
 		return
@@ -321,7 +317,7 @@ func _leave() -> void:
 		ScreenFlow.open(&"session_results")
 
 
-#Falls from above onto its block in "seconds" and lands with a squash, dust and a jolt of the camera of "weight" (0 to 1)
+#Falls onto its block in "seconds" with a squash, dust and a camera jolt of "weight"
 func _drop(figure: Figure, seconds: float, weight: float) -> void:
 	var top := _stage.top_of(figure.entry)
 	figure.root.position = top + Vector3(0.0, DROP_HEIGHT * (1.0 + weight), 0.0)
@@ -346,7 +342,7 @@ func _drop(figure: Figure, seconds: float, weight: float) -> void:
 	figure.tween.tween_property(figure.root, "scale", Vector3.ONE * FIGURE_SCALE, 0.5).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
 
-#The crown comes down from over the head, turning, and sits; a chime in the note of its metal and a burst of sparkles
+#The crown comes down turning, with a chime and sparkles
 func _lower_crown(figure: Figure, seconds: float) -> void:
 	if figure.entry.crown == ScoreSheet.Medal.NONE:
 		return
@@ -378,19 +374,19 @@ func _lower_crown(figure: Figure, seconds: float) -> void:
 	var pop := create_tween()
 	pop.tween_property(crown, "scale", Vector3.ONE * 1.25, 0.1)
 	pop.tween_property(crown, "scale", Vector3.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	#The winner has its own big word over the stage
+	#The winner gets its own big word
 	if figure.entry != _order.back():
 		_show_tier_word(figure)
 
 
-#Top of the head right now, following the dance
+#Top of the head right now
 func _head_point(figure: Figure) -> Vector3:
 	if figure.skeleton == null or figure.bone < 0:
 		return figure.root.global_position + Vector3(0.0, FIGURE_SCALE, 0.0)
 	return (figure.skeleton.global_transform * figure.skeleton.get_bone_global_pose(figure.bone)).origin
 
 
-#The crown follows the head: its place and how the head leans against its rest
+#The crown follows the head and its lean
 func _seat_crown(figure: Figure) -> void:
 	if figure.crown == null:
 		return
@@ -407,7 +403,7 @@ func _pose(figure: Figure, style: int) -> void:
 	figure.model.play_move(CharacterModel.POSES[posmod(style, CharacterModel.POSES.size())], true, 0.25)
 
 
-#The name of the crown pops over the player, letter by letter, and goes away
+#Crown name pops over the player letter by letter
 func _show_tier_word(figure: Figure) -> void:
 	if figure.entry.crown == ScoreSheet.Medal.NONE:
 		return
@@ -421,7 +417,7 @@ func _show_tier_word(figure: Figure) -> void:
 	away.tween_callback(word.queue_free)
 
 
-#The word of the winner: ¡VICTORIA! with several players; alone, ¡GRAN PARTIDA! with a crown or ¡BUEN INTENTO! without one
+#Headline: VICTORIA with several players; alone, depends on the crown
 func _show_headline(entry: PodiumPlan.Entry) -> void:
 	if _headline != null:
 		_headline.queue_free()
@@ -434,7 +430,7 @@ func _show_headline(entry: PodiumPlan.Entry) -> void:
 	_pop_letters(_headline, 0.06)
 
 
-#The letters fall from "height" meters over their place one after the other and bounce on landing
+#Letters fall from "height" one after another and bounce
 func _drop_letters(word: Node3D, height: float, step: float) -> void:
 	var letters := PuffyWord.letters(word)
 	for index in letters.size():
@@ -447,7 +443,7 @@ func _drop_letters(word: Node3D, height: float, step: float) -> void:
 		fall.tween_callback(SynthSound.play.bind(self, SynthSound.land(0.12), -14.0, 1.0 + 0.06 * index))
 
 
-#The letters burst from nothing one after the other, overshoot and settle
+#Letters pop in one after another and settle
 func _pop_letters(word: Node3D, step: float) -> void:
 	var letters := PuffyWord.letters(word)
 	for index in letters.size():
@@ -459,7 +455,7 @@ func _pop_letters(word: Node3D, step: float) -> void:
 		pop.tween_property(letter, "rotation:z", _rng.randf_range(-0.08, 0.08), 0.5).set_delay(step * index).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-#Waits on a timer of the stage, so a wait still running when the stage closes just never ends
+#Waits on a stage timer, so it never ends if the stage closes
 func _hold(seconds: float) -> bool:
 	var timer := Timer.new()
 	timer.one_shot = true
@@ -532,7 +528,7 @@ func _build_overlay() -> void:
 	_overlay.add_child(_fade)
 
 
-#Black bars over and under the picture, like a film, or away
+#Film bars on or off
 func _letterbox(on: bool, seconds: float) -> void:
 	var height := get_viewport().get_visible_rect().size.y * (0.1 if on else 0.0)
 	var tween := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
@@ -545,7 +541,7 @@ func _flash_screen() -> void:
 	create_tween().tween_property(_flash, "color:a", 0.0, 0.6).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
-#The place, the name and the points of a player slide in at the bottom left
+#Place, name and points slide in at the bottom left
 func _show_lower(entry: PodiumPlan.Entry) -> void:
 	var figure: Figure = _figures[entry.player_id]
 	var color := PodiumStage.CROWN_COLORS[entry.crown].lightened(0.15)

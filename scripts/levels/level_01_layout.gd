@@ -1,17 +1,12 @@
 class_name Level01Layout
 extends RefCounted
 
-#Single source of truth of level 1, the feed race: the graph, the platforms and their heights, the belts, the slides, the fragile bridges and
-#every obstacle are built from these tables. Everything that moves is a function of the seconds of the round, so it can be drawn, hit and
-#planned for from the time alone. The course runs north: from the start three wide ways (Likes, Comentarios and Scroll), each with its own
-#obstacles, meet at the first plaza; from it three slides of different shapes (Recarga, Cargando and Desliza) drop to three more ways
-#(Algoritmo, Viral and Historias), which meet at the second plaza before the ramp to the goal. Every way of the first part reaches every way
-#of the second through the plaza. A way is a row of square plates as wide as its bridges
+#Single source of truth of level 1: graph, platforms, belts, slides, fragile bridges and obstacles
 
-#Meters of centre-to-centre distance that count as one unit of cost
+#Centre distance worth one unit of cost
 const UNIT := 9.5
 
-#Platform centres: x and z on the ground (north is -Z, the start looks north) and y, how high the top of the platform is
+#Platform centres: x and z on the ground (north is -Z) and the top height
 const POSITIONS := {
 	&"N": Vector3(0.0, 14.0, 132.0),
 	&"Aw": Vector3(-24.0, 14.0, 132.0),
@@ -66,24 +61,21 @@ const RADII := {
 	&"z1": 4.0,
 	&"z2": 4.0,
 }
-#The plates of the ways: squares as wide as the ways, laid along them, so a way is one wide lane from end to end
+#Way plates: squares as wide as the ways, laid along them
 const PLATE := 9.0
 const PLATES: Array[StringName] = [&"A1", &"A2", &"A3", &"A4", &"B1", &"B2", &"B3", &"C1", &"C2", &"C3", &"C4",
 	&"A5", &"A6", &"A7", &"A8", &"B5", &"B6", &"B7", &"B8", &"C5", &"C6", &"C7", &"C8"]
-#The landings in the turns of two slides: small round cups with a wall all around but where the slides come in and go out
+#Slide turn cups, walled except where slides come in and go out
 const CUPS: Array[StringName] = [&"h1", &"h2", &"z1", &"z2"]
 const CUP_WALL := 1.6
-#Each way by its first plate: its name on the arch over its entrance
+#Way names on the arch over each entrance
 const WAY_NAMES := {
 	&"A1": "LIKES", &"B1": "COMENTARIOS", &"C1": "SCROLL", &"A5": "ALGORITMO", &"B5": "VIRAL", &"C5": "HISTORIAS",
 }
-#Each slide by the first platform it reaches from the plaza: its name hangs over its mouth. The straight one is the pull that refreshes the
-#feed, the spiral one turns like the wheel of a loading screen and the zigzag one goes from side to side like a swipe
+#Slide names over their mouths: refresh pull, loading spiral and zigzag swipe
 const SLIDE_NAMES := {&"Bn": "RECARGA", &"h1": "CARGANDO", &"z1": "DESLIZA"}
 
-#Kinds of bridge: a plain one, a conveyor belt that flows from the first vertex to the second, a slide that goes downhill from the first vertex
-#to the second and never the other way, a fragile one that the feed takes down for a while and a narrow one (none of the last two on this
-#course: since 24/11/2026 the bridges that the feed took down are plain floor)
+#Bridge kinds: plain, belt, one-way slide, fragile and the rest
 const WALK := &"walk"
 const BELT := &"belt"
 const SLIDE := &"slide"
@@ -92,14 +84,13 @@ const NARROW := &"narrow"
 const WIDE_WIDTH := 9.0
 const NARROW_WIDTH := 2.4
 const SLIDE_WIDTH := 5.5
-#The cost back along a slide: there is none, it is a one-way arc of the graph
+#No cost back: a slide is a one-way arc
 const ONE_WAY := -1.0
-#How fast a slide carries whoever is on it (m/s), and how high its rails are
+#Slide speed (m/s) and rail height
 const SLIDE_SPEED := 10.5
 const SLIDE_RAIL := 1.2
 
-#[a, b, cost a to b, cost b to a, kind]; a belt costs little with the flow and a lot against it, a slide only goes one way, and the
-#costs of the bridges and plates with something that hits include the wait it takes to get past
+#[a, b, cost a to b, cost b to a, kind]; costs include the wait to get past hazards
 const EDGES := [
 	[&"N", &"Aw", 2.4, 2.4, WALK],
 	[&"N", &"Ce", 2.4, 2.4, WALK],
@@ -146,51 +137,42 @@ const EDGES := [
 	[&"E", &"M", 3.4, 3.4, WALK],
 ]
 
-#Comments: a speech bubble that is typed on one side of a wide bridge, flashes and then sweeps across it, pushing off whoever is on its way.
-#Each cycle starts on the other side. "at" is its share of the length of the bridge
+#Comments: a bubble typed on one side that sweeps across; "at" is its share of the bridge
 const COMMENTS := [
 	{"edge": [&"C5", &"C6"], "at": 0.5, "period": 6.0, "phase": 2.0, "words": ["mi día", "spoiler", "ya vi", "mood"]},
 ]
-#Seconds of each part of a comment cycle: typed, flashing before the push, the push itself and the bubble deflating
+#Comment cycle: typed, flashing, pushing and deflating
 const COMMENT_TYPE := 1.5
 const COMMENT_WARN := 0.9
 const COMMENT_PUSH := 0.35
 const COMMENT_FADE := 0.6
-#The decks: under every bridge of the ways there is a solid deck, so a fall costs the way back and not an attempt. The decks of one way
-#join in one floor under all of it. A deck lies this far under the lower end, is this much wider than the bridge on each side and this much
-#longer, and a pad on it, this far past the platform of the bridge that is closer to the start and this far out of the side of the bridge,
-#sends whoever steps there back up to that platform in a bubble
+#Decks under every way bridge, so a fall costs the way back and not an attempt
 const DECK_DEPTH := 5.0
 const DECK_MARGIN := 3.5
 const DECK_EXTRA := 4.0
 const DECK_PAD_OUT := 3.5
 const DECK_PAD_SIDE := 1.0
-#Where the bubble lands on a plate: this far from its middle toward the bridge, off the line of its ball; on a plate with a bar, in the
-#corner by the bridge, this far in from both edges, out of reach of the bar. On a round island it lands in the middle
+#Bubble landing on a plate: off the ball line and out of the bar's reach
 const DECK_LANDING_IN := 2.9
-#A fall from the second row of axes of Comentarios costs more: its bubble goes back to the first plate of the way. Comentarios is the
-#shortest way, and this is its price
+#A fall from the second axe row of Comentarios goes back to its first plate
 const LIFT_BACK := {"B2|B3": &"B1"}
 const DECK_CORNER := 0.9
-#The floor of a deck has round corners of this radius. Its rim is a soft bumper this high, as thick as twice DECK_TUBE, along the inside of
-#its edge; where the edge lies inside another deck at the same height the rim is left out, so decks that overlap are one floor
+#Deck corner radius and soft rim; no rim where the edge lies inside another deck
 const DECK_ROUND := 2.0
 const DECK_RIM := 1.6
 const DECK_TUBE := 0.55
-#How many pieces the rim has on each round corner, and how often a straight side is tested against the other decks
+#Rim pieces per corner and side test step
 const DECK_CORNER_STEPS := 5
 const DECK_RIM_STEP := 0.25
-#Whoever is this close over the floor of a deck stands (or falls) on it: the course is 5 m above
+#Height over a deck floor that counts as standing or falling on it
 const DECK_CATCH := 3.0
 
 const START := &"N"
 const GOAL := &"M"
-#The vertices that save the progress of whoever passes through them: the two plazas
+#The two plazas save progress
 const CHECKPOINTS: Array[StringName] = [&"S", &"E"]
 
-#Platforms with a bar that sweeps them: "arm" is the half length, "speed" the turn in radians per second (the sign is the direction) and
-#"phase" the angle at the start. A bar with a "surge" speeds up and slows down by "depth" (a share of its speed) as the sine of "rate" radians
-#per second, and it never stops or turns back. With "arms" 2 there are two bars crossed, so it comes back twice as often
+#Spinner bars: "arm" half length, "speed" rad/s with sign, "phase" start angle, optional "surge"
 const SPINNERS := {
 	&"A2": {"arm": 4.2, "speed": 1.15, "phase": 0.3, "arms": 2},
 	&"A3": {"arm": 4.2, "speed": -2.0, "phase": 2.0, "surge": {"depth": 0.5, "rate": 1.1}},
@@ -201,44 +183,36 @@ const SPINNERS := {
 	&"C7": {"arm": 4.2, "speed": -1.8, "phase": 1.2, "surge": {"depth": 0.45, "rate": 0.9}},
 }
 
-#Belts that turn around: each flows from its first platform to its second until "phase" seconds, then the other way, and turns again every
-#"period" seconds. Its arrows blink TURN_WARNING seconds before each turn. It is the endless scroll at the end of Scroll
+#Turning belts: forward until "phase", then reversing every "period"; arrows blink before
 const TURNS := [
 	{"edge": [&"C4", &"Cx"], "period": 17.0, "phase": 8.0},
 ]
 const TURN_WARNING := 1.5
 
-#Candy balls that never stop rolling across a platform, back and forth along a line through its middle in the direction "angle" (radians from
-#+X toward +Z): a full trip there and back takes "period" seconds and "phase" says where in it the ball is at the start. The ball is small
-#enough to jump over. One crosses the way out of Algoritmo
+#Rolling balls back and forth along "angle" through the middle every "period"
 const BALLS := [
 	{"island": &"Ay", "angle": 0.0, "period": 3.0, "phase": 0.4},
 ]
 const BALL_RADIUS := 0.5
 
-#Bridges with a block that sweeps across them: it sits "at" that share of the bridge and goes from side to side in "period" seconds. Its
-#"look" is the thing of its way: a like in Likes and a hashtag in Viral
+#Sweeping blocks at "at" of a bridge, side to side every "period"; "look" is its model
 const PUSHERS := [
 	{"edge": [&"A2", &"A3"], "at": 0.5, "period": 2.6, "phase": 1.4, "look": &"like_hand"},
 	{"edge": [&"B6", &"B7"], "at": 0.5, "period": 2.4, "phase": 0.5, "look": &"hashtag"},
 ]
 
-#The axes of Comentarios: rows of comments that hang from a beam high over a bridge and swing across it like pendulums, one after the other,
-#each "lag" seconds behind the one before it. "count" of them share the bridge evenly; whoever waits between two and goes when the next one
-#swings away gets through
+#Comentarios axes: comment rows swinging like pendulums, each "lag" behind the last
 const AXES := [
 	{"edge": [&"B1", &"B2"], "count": 5, "period": 2.4, "phase": 0.0, "lag": 0.6, "words": ["ratio", "jaja", "spam", "+1", "lol"]},
 	{"edge": [&"B2", &"B3"], "count": 5, "period": 2.2, "phase": 0.9, "lag": 0.55, "words": ["cringe", "f", "xd", "ok", "bot"]},
 ]
-#Where an axe hangs from, over the floor, how long its rod is and how far it swings to each side (radians); the comment at the end of the rod
-#is this wide across the bridge, this tall and this thick along it
+#Axe pivot height, rod length, swing and comment size
 const AXE_PIVOT := 7.6
 const AXE_ROD := 7.0
 const AXE_SWING := 1.05
 const AXE_BLADE := Vector3(3.0, 1.7, 1.0)
 
-#The like punchers of Likes: a box at one side of a bridge ("side" 1 or -1, by the way across the bridge) that punches a like across it,
-#holds it out and pulls it back. It sits "at" that share of the bridge and punches every "period" seconds, "phase" seconds into its cycle
+#Likes punchers: a box at one side punching a like across at "at" every period
 const PUNCHERS := [
 	{"edge": [&"Aw", &"A1"], "at": 0.3, "side": 1.0, "period": 2.6, "phase": 0.0},
 	{"edge": [&"Aw", &"A1"], "at": 0.7, "side": -1.0, "period": 2.6, "phase": 1.3},
@@ -247,18 +221,16 @@ const PUNCHERS := [
 	{"edge": [&"A3", &"A4"], "at": 0.3, "side": 1.0, "period": 2.0, "phase": 0.2},
 	{"edge": [&"A3", &"A4"], "at": 0.7, "side": -1.0, "period": 2.0, "phase": 1.2},
 ]
-#How far across the bridge the like reaches from the side it punches from, and the parts of its cycle: it shakes, flies out, holds and comes back
+#Punch reach and cycle parts: shake, fly, hold and return
 const PUNCH_REACH := 6.4
 const PUNCH_WINDUP := 0.5
 const PUNCH_OUT := 0.14
 const PUNCH_HOLD := 0.3
 const PUNCH_BACK := 0.7
-#The like as the hit test sees it: along the bridge, across it and how high over the floor
+#The like as the hit test sees it
 const PUNCH_FIST := Vector3(1.6, 1.5, 1.2)
 
-#Runs of things that roll toward whoever comes: they rise out of slots in the middle of the far plate, roll along the way to the middle of the
-#near one and sink there. In Scroll they are scroll wheels across half the way, low enough to jump over; in Algoritmo they are giant balls
-#in three lanes that light up before a ball comes, too high to jump: they are dodged. "every" is the seconds between two of them
+#Runs of things rolling from the far plate to the near one: scroll wheels or giant balls
 const ROLLER := &"roller"
 const BOULDER := &"boulder"
 const RUNS := [
@@ -267,32 +239,30 @@ const RUNS := [
 	{"kind": BOULDER, "from": &"A6", "to": &"A5", "speed": 6.0, "every": 1.7, "phase": 0.0},
 	{"kind": BOULDER, "from": &"A8", "to": &"A7", "speed": 6.5, "every": 1.5, "phase": 0.8},
 ]
-#A scroll wheel: its radius and how long it is across the way (half of it, so the other half is free); a giant ball: its radius, the lanes
-#and how long a lane is lit before its ball comes
+#Wheel radius and length; giant ball radius, lanes and lane warning
 const ROLLER_RADIUS := 0.45
 const ROLLER_LENGTH := 4.4
 const BOULDER_RADIUS := 1.2
 const BOULDER_LANES: Array[float] = [-3.0, 0.0, 3.0]
 const BOULDER_WARN := 1.2
-#Seconds a thing takes to rise out of its slot and to sink into the other one
+#Seconds to rise and to sink
 const RUN_RISE := 0.35
 
-#The fans of Viral: a turbine at one side of a bridge ("side" 1 or -1 is the side it stands on) that blows across it: it spins up, blows for
-#"blow" seconds and rests, every "period" seconds. While it blows it drags whoever is on the bridge toward the other side at "power" m/s
+#Viral fans: spin up, blow across for "blow" seconds and rest every "period"
 const FANS := [
 	{"edge": [&"B5", &"B6"], "side": -1.0, "period": 4.4, "blow": 1.9, "phase": 0.0, "power": 4.2},
 	{"edge": [&"B7", &"B8"], "side": 1.0, "period": 4.0, "blow": 1.8, "phase": 1.6, "power": 4.4},
 ]
 const FAN_SPIN_UP := 0.9
 
-#The stories of Historias: plates made of tiles that shake when somebody steps on them, drop and come back a while later
+#Historias story plates: tiles that shake, drop and come back
 const TILE_PLATES: Array[StringName] = [&"C6", &"C8"]
 const TILE_GRID := 3
 const TILE_GAP := 0.12
 const TILE_SHAKE := 0.7
 const TILE_GONE := 4.0
 
-#"shortcuts" false leaves out the narrow bridges, for the checks that measure plain routes (this course has none)
+#"shortcuts" false leaves out narrow bridges (none in this course)
 static func build_graph(shortcuts := true) -> WeightedGraph:
 	var graph := WeightedGraph.new()
 	for id: StringName in POSITIONS:
@@ -323,14 +293,13 @@ static func kind_of(a: StringName, b: StringName) -> StringName:
 	return &""
 
 
-#How wide a bridge of that kind is
 static func width_of(kind: StringName) -> float:
 	if kind == NARROW:
 		return NARROW_WIDTH
 	return SLIDE_WIDTH if kind == SLIDE else WIDE_WIDTH
 
 
-#How high the islands around a place on the course are (a smooth average), for the scenery that follows the climb
+#Smoothed island height around a point, for scenery
 static func height_at(z: float) -> float:
 	var total := 0.0
 	var weights := 0.0
@@ -342,7 +311,6 @@ static func height_at(z: float) -> float:
 	return total / maxf(weights, 0.0001)
 
 
-#The bridges the feed may take down
 static func fragile_edges() -> Array[Array]:
 	var found: Array[Array] = []
 	for edge in EDGES:
@@ -351,7 +319,7 @@ static func fragile_edges() -> Array[Array]:
 	return found
 
 
-#The sweeping block of the bridge between a and b, or an empty dictionary when it has none
+#Sweeping block of a bridge, or empty
 static func pusher_of(a: StringName, b: StringName) -> Dictionary:
 	for pusher: Dictionary in PUSHERS:
 		var edge: Array = pusher["edge"]
@@ -360,7 +328,7 @@ static func pusher_of(a: StringName, b: StringName) -> Dictionary:
 	return {}
 
 
-#Unit vector of the flow of the belt between a and b as seen on the ground at "time", or zero when it is not a belt
+#Belt flow at "time" on the ground, or zero
 static func belt_flow(a: StringName, b: StringName, time := 0.0) -> Vector3:
 	for edge in EDGES:
 		if edge[4] != BELT:
@@ -374,7 +342,7 @@ static func belt_flow(a: StringName, b: StringName, time := 0.0) -> Vector3:
 	return Vector3.ZERO
 
 
-#Unit vector of the flow of the slide between a and b (the way down), or zero when it is not a slide
+#Slide flow downhill, or zero
 static func slide_flow(a: StringName, b: StringName) -> Vector3:
 	for edge in EDGES:
 		if edge[4] != SLIDE:
@@ -384,7 +352,7 @@ static func slide_flow(a: StringName, b: StringName) -> Vector3:
 	return Vector3.ZERO
 
 
-#How the ground under whoever is on the bridge between a and b drifts at "time" (m/s): a belt carries at "belt_speed", a slide much faster
+#Ground drift on a bridge at "time" (m/s)
 static func drift(a: StringName, b: StringName, time: float, belt_speed: float) -> Vector3:
 	var flow := belt_flow(a, b, time)
 	if flow != Vector3.ZERO:
@@ -392,7 +360,7 @@ static func drift(a: StringName, b: StringName, time: float, belt_speed: float) 
 	return slide_flow(a, b) * SLIDE_SPEED
 
 
-#The turning schedule of the belt between a and b, or an empty dictionary when it never turns
+#Turn schedule of a belt, or empty
 static func turn_of(a: StringName, b: StringName) -> Dictionary:
 	for turn: Dictionary in TURNS:
 		var edge: Array = turn["edge"]
@@ -401,7 +369,7 @@ static func turn_of(a: StringName, b: StringName) -> Dictionary:
 	return {}
 
 
-#True while the belt flows from its first island to its second
+#True while the belt flows forward
 static func belt_forward(turn: Dictionary, time: float) -> bool:
 	var first: float = turn["phase"]
 	if time < first:
@@ -409,7 +377,7 @@ static func belt_forward(turn: Dictionary, time: float) -> bool:
 	return (1 + int(floorf((time - first) / float(turn["period"])))) % 2 == 0
 
 
-#True in the seconds before the belt turns around
+#True just before the belt turns
 static func belt_warning(turn: Dictionary, time: float) -> bool:
 	var first: float = turn["phase"]
 	var next := first
@@ -418,12 +386,12 @@ static func belt_warning(turn: Dictionary, time: float) -> bool:
 	return next - time <= TURN_WARNING
 
 
-#What the belt of "edge" costs to cross from its first island to its second and back: with the flow is cheap, against it is dear
+#Belt costs both ways: cheap with the flow
 static func belt_costs(edge: Array, forward: bool) -> Vector2:
 	return Vector2(edge[2], edge[3]) if forward else Vector2(edge[3], edge[2])
 
 
-#The bridges that have a deck under them: every bridge of the ways (the slides have rails, and the ramp to the goal does not need one)
+#Bridges with a deck under them
 static func soft_edges() -> Array[Array]:
 	var found: Array[Array] = []
 	for edge in EDGES:
@@ -432,7 +400,7 @@ static func soft_edges() -> Array[Array]:
 	return found
 
 
-#The comment of the bridge between a and b, or an empty dictionary when it has none
+#Comment of a bridge, or empty
 static func comment_of(a: StringName, b: StringName) -> Dictionary:
 	for comment: Dictionary in COMMENTS:
 		var edge: Array = comment["edge"]
@@ -441,8 +409,7 @@ static func comment_of(a: StringName, b: StringName) -> Dictionary:
 	return {}
 
 
-#The deck under a bridge: where its top is, how big and how turned it is, and the pad of its bubble: where it stands, the platform it
-#goes back to and where on it the bubble lands
+#Deck under a bridge: top, size, turn and its pad and landing
 static func deck_of(edge: Array) -> Dictionary:
 	var from: Vector3 = POSITIONS[edge[0]]
 	var to: Vector3 = POSITIONS[edge[1]]
@@ -452,7 +419,7 @@ static func deck_of(edge: Array) -> Dictionary:
 	var start_first := from.z >= to.z
 	var start: StringName = edge[0] if start_first else edge[1]
 	var away := direction if start_first else -direction
-	#The pad stands on the side of the bridge that faces the middle of the course (or the start, on a bridge across it), and never under a fan
+	#Pad on the side facing the course middle, never under a fan
 	var side := Vector3(-away.z, 0.0, away.x)
 	if side.x * (POSITIONS[start] as Vector3).x > 0.0 or (is_zero_approx(side.x) and side.z < 0.0):
 		side = -side
@@ -470,17 +437,17 @@ static func deck_of(edge: Array) -> Dictionary:
 	}
 
 
-#Where the bubble of a deck lands on the platform "start" of its bridge, the bridge going off toward "away"
+#Bubble landing on the start platform of the bridge
 static func deck_landing(start: StringName, away: Vector3) -> Vector3:
 	var centre: Vector3 = POSITIONS[start]
 	if not PLATES.has(start):
-		#On a round island a ball crosses, it lands to one side of the line of the ball
+		#On a ball island it lands beside the ball line
 		for ball: Dictionary in BALLS:
 			if ball["island"] == start:
 				return centre + Vector3(-sin(float(ball["angle"])), 0.0, cos(float(ball["angle"]))) * 2.6
 		return centre
 	if not SPINNERS.has(start):
-		#Off the run of whatever rolls over the plate: on the half of the plate where nothing rolls
+		#On the half of the plate where nothing rolls
 		var ahead := centre + away * DECK_LANDING_IN
 		return centre - away * DECK_LANDING_IN if run_at(ahead, 0.5) >= 0 else ahead
 	var side := Vector3(-away.z, 0.0, away.x)
@@ -489,7 +456,7 @@ static func deck_landing(start: StringName, away: Vector3) -> Vector3:
 	return centre + (away + side) * (PLATE / 2.0 - DECK_CORNER)
 
 
-#How far a point of the ground plan lies from the edge of the floor of a deck (round corners included): negative inside
+#Distance to the deck edge, negative inside
 static func deck_distance(deck: Dictionary, point: Vector3) -> float:
 	var size: Vector2 = deck["size"]
 	var local := Basis(Vector3.UP, float(deck["yaw"])).inverse() * (point - (deck["center"] as Vector3))
@@ -497,12 +464,12 @@ static func deck_distance(deck: Dictionary, point: Vector3) -> float:
 	return Vector2(maxf(corner.x, 0.0), maxf(corner.y, 0.0)).length() + minf(maxf(corner.x, corner.y), 0.0) - DECK_ROUND
 
 
-#Whether a point of the ground plan lies inside the floor of the deck, "inset" meters from its edge
+#Inside the deck floor, "inset" from its edge
 static func deck_holds(deck: Dictionary, point: Vector3, inset := 0.0) -> bool:
 	return deck_distance(deck, point) <= -inset
 
 
-#The way out of the floor of a deck at a point of its edge
+#Outward direction at a deck edge point
 static func deck_normal(deck: Dictionary, point: Vector3) -> Vector3:
 	var size: Vector2 = deck["size"]
 	var basis := Basis(Vector3.UP, float(deck["yaw"]))
@@ -514,7 +481,7 @@ static func deck_normal(deck: Dictionary, point: Vector3) -> Vector3:
 	return basis * Vector3(out.x, 0.0, out.y)
 
 
-#Every deck, in the order of soft_edges
+#Every deck in soft_edges order
 static func all_decks() -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
 	for edge in soft_edges():
@@ -522,8 +489,7 @@ static func all_decks() -> Array[Dictionary]:
 	return found
 
 
-#The bubble that catches whoever stands on (or falls onto) the decks at "point", or an empty dictionary off them. Where decks overlap, the
-#one that goes furthest back wins: the decks of a way make one floor, and walking under the course must never lead past an obstacle
+#Bubble that catches whoever is on the decks at "point"; overlaps pick the one going furthest back
 static func deck_catching(decks: Array[Dictionary], point: Vector3) -> Dictionary:
 	var best: Dictionary = {}
 	for deck in decks:
@@ -536,8 +502,7 @@ static func deck_catching(decks: Array[Dictionary], point: Vector3) -> Dictionar
 	return best
 
 
-#The line of the rim of a deck, DECK_TUBE in from its edge all around: points on the floor with the way out there and whether they lie on a
-#round corner. The straight sides get a point every DECK_RIM_STEP meters; the corners, DECK_CORNER_STEPS pieces
+#Deck rim line with outward directions and corner flags
 static func _rim_loop(deck: Dictionary) -> Array[Dictionary]:
 	var size: Vector2 = deck["size"]
 	var basis := Basis(Vector3.UP, float(deck["yaw"]))
@@ -562,9 +527,7 @@ static func _rim_loop(deck: Dictionary) -> Array[Dictionary]:
 	return found
 
 
-#The stretches of the rim of the deck of "edge" that stand: where its edge lies inside another deck at the same height there is no rim. Where
-#two edges lie on the same line only the deck that comes first keeps its rim. Each stretch is a list of points on the floor, and "closed" when
-#it goes all around
+#Rim stretches that stand; none inside another deck at the same height
 static func deck_rim(edge: Array) -> Array[Dictionary]:
 	var edges := soft_edges()
 	var own := edges.find(edge)
@@ -607,7 +570,7 @@ static func deck_rim(edge: Array) -> Array[Dictionary]:
 	return found
 
 
-#The points of a stretch of the rim, without the ones in the middle of a straight side
+#Stretch points without the middle of straight sides
 static func _rim_points(loop: Array[Dictionary], run: Array) -> PackedVector3Array:
 	var points := PackedVector3Array()
 	for at in run.size():
@@ -618,13 +581,12 @@ static func _rim_points(loop: Array[Dictionary], run: Array) -> PackedVector3Arr
 	return points
 
 
-#The walls of the rim of a deck, one box per piece of its stretches: where each one stands (on the floor of the deck), how big it is (along
-#its own turn) and how it is turned. The pieces at the ends of a stretch reach out as far as its round end
+#Rim wall boxes along the stretches
 static func deck_walls(edge: Array) -> Array[Dictionary]:
 	return rim_walls(deck_rim(edge))
 
 
-#The walls of the stretches of a rim, as deck_walls gives them
+#Walls of the rim stretches
 static func rim_walls(rim: Array[Dictionary]) -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
 	for stretch in rim:
@@ -646,7 +608,7 @@ static func rim_walls(rim: Array[Dictionary]) -> Array[Dictionary]:
 	return found
 
 
-#The pads of the decks, which the graph does not know
+#Deck pads, unknown to the graph
 static func deck_lifts() -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
 	for edge in soft_edges():
@@ -654,7 +616,7 @@ static func deck_lifts() -> Array[Dictionary]:
 	return found
 
 
-#The unit vector across the bridge between a and b: to the left of whoever goes from the first vertex of its edge to the second
+#Unit vector across a bridge, to the left going forward
 static func across_of(a: StringName, b: StringName) -> Vector3:
 	for edge in EDGES:
 		if (edge[0] == a and edge[1] == b) or (edge[0] == b and edge[1] == a):
@@ -667,7 +629,7 @@ static func _same_edge(edge: Array, a: StringName, b: StringName) -> bool:
 	return (edge[0] == a and edge[1] == b) or (edge[0] == b and edge[1] == a)
 
 
-#The rows of axes, the punchers and the fan of the bridge between a and b
+#Axe rows, punchers and fan of a bridge
 static func axes_of(a: StringName, b: StringName) -> Dictionary:
 	for row: Dictionary in AXES:
 		if _same_edge(row["edge"], a, b):
@@ -690,8 +652,7 @@ static func fan_of(a: StringName, b: StringName) -> Dictionary:
 	return {}
 
 
-#The way of a run, from the middle of its far plate to the middle of the near one: where it starts and ends (on the floor), the unit vector
-#it rolls along and the one across it
+#Run line from the far plate middle to the near one, with along and across vectors
 static func run_line(run: Dictionary) -> Dictionary:
 	var from: Vector3 = POSITIONS[run["from"]]
 	var to: Vector3 = POSITIONS[run["to"]]
@@ -701,7 +662,7 @@ static func run_line(run: Dictionary) -> Dictionary:
 	return {"from": from, "to": to, "along": along, "across": Vector3(-along.z, 0.0, along.x), "length": length}
 
 
-#The run a point of the ground stands on, "margin" meters around it, or -1 when it is on none
+#Run under a point with "margin", or -1
 static func run_at(point: Vector3, margin := 0.0) -> int:
 	for index in RUNS.size():
 		var line := run_line(RUNS[index])
@@ -712,7 +673,7 @@ static func run_at(point: Vector3, margin := 0.0) -> int:
 	return -1
 
 
-#The tiles of a plate of stories, by index: the middle of each one on its floor and its side
+#Tile centres of a story plate
 static func tile_centers(id: StringName) -> Array[Vector3]:
 	var centre: Vector3 = POSITIONS[id]
 	var step := PLATE / TILE_GRID

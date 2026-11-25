@@ -3,7 +3,7 @@ shader_type canvas_item;
 uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_nearest;
 uniform int mode = 0;
 
-//Simulates what the eye misses and pushes that error into the channels it still sees
+//Simulates the missing colour and moves that error to the visible channels
 void fragment() {
 	vec3 color = texture(screen_texture, SCREEN_UV).rgb;
 	vec3 seen = color;

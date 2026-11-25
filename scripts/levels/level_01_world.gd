@@ -1,11 +1,9 @@
 class_name Level01World
 extends Node3D
 
-#Builds level 1 from Level01Layout: a square plate or a round island per vertex, a bridge per edge (plain, conveyor belt, slide or fragile),
-#the decks under the ways with the pads of their bubbles, the spinners, blocks, balls and comments, the new obstacles (Level01TrapView) and
-#the arches with the name of each way and each slide
+#Builds level 1 from Level01Layout: plates, islands, bridges, decks and every obstacle
 
-#Start and goal stand out from the lilac course: cool mint to leave, warm sun to arrive
+#Start mint and goal sun stand out from the lilac course
 const MINT := Color("86e8c6")
 const MINT_DARK := Color("4cb797")
 const SUN := Color("ffd27a")
@@ -21,9 +19,7 @@ const TANGERINE := Color("ffa84f")
 const CYAN := Color("4fd6e8")
 const MAGENTA := Color("ee4fb8")
 const AMBER := Color("ffc857")
-#The colour of each island follows its stretch of the course, from mint at the start to gold at the goal
-#The colour of each platform: one per way (Likes rose, Avisos sky, Scroll violet; Algoritmo tangerine, Viral lime, Historias aqua),
-#mint at the start, sunny at the plazas and the goal and pale aqua in the cups of the slides
+#Island colours by stretch, from mint at the start to gold at the goal, one per way
 const TIERS := {
 	&"N": MINT, &"Aw": ROSE, &"A1": ROSE, &"A2": ROSE, &"A3": ROSE, &"A4": ROSE, &"Ax": ROSE,
 	&"B1": SKY, &"B2": SKY, &"B3": SKY, &"Ce": VIOLET, &"C1": VIOLET, &"C2": VIOLET, &"C3": VIOLET, &"C4": VIOLET, &"Cx": VIOLET,
@@ -32,7 +28,7 @@ const TIERS := {
 	&"Bn": LIME, &"B5": LIME, &"B6": LIME, &"B7": LIME, &"B8": LIME, &"Cn": AQUA, &"C5": AQUA, &"C6": AQUA, &"C7": AQUA, &"C8": AQUA, &"Cy": AQUA,
 	&"E": SUN, &"M": SUN,
 }
-#Bridges are pale so the coloured islands stand out
+#Pale bridges so the islands stand out
 const BRIDGE_COLOR := Color("fff2f7")
 const EDGE_SHADER: Shader = preload("res://assets/shaders/edge_light.gdshader")
 const CANDY_VERTEX: Shader = preload("res://assets/shaders/candy_vertex.gdshader")
@@ -41,62 +37,61 @@ const BOARD_TEXTURE: Texture2D = preload("res://assets/textures/board_checker.pn
 const BELT_TEXTURE: Texture2D = preload("res://assets/textures/belt_chevrons.png")
 const SLIDE_TEXTURE: Texture2D = preload("res://assets/textures/slide_chevrons.png")
 
-#How far into a platform a bridge reaches, so there is no seam
+#Bridge overlap into a platform, so there is no seam
 const BRIDGE_OVERLAP := 0.25
-#A bridge lies this much under the platforms it joins, so where they overlap there is no flicker and the step is too small to feel
+#Bridges sit a hair low to avoid flicker
 const SEAM_DROP := 0.02
 const THICKNESS := 0.6
-#The lights along the sides of a bridge: they say where its edge is, and flash when the bridge is about to fall
+#Edge lights mark the bridge edge and flash before a fall
 const EDGE_WIDTH := 0.2
 const EDGE_HEIGHT := 0.07
-#A light strip stands a little out of the side of its bridge and stops short of the islands, so it never shares a face with anything
+#Light strips stand out a little and stop short of islands
 const EDGE_LIFT := 0.012
 const EDGE_TRIM := 0.2
-#Where the marks of a belt or a fragile bridge sit: just past the rim of the island
+#Belt and fragile marks just past the island rim
 const MARK_INSET := 0.45
 const FALL_Y := -12.0
-#Meters of bridge that one chevron of the belt covers
+#Bridge meters per belt chevron
 const BELT_TILE := 3.0
-#The rails of a slide are this thick; the gate over its mouth is a ring this wide and this far in from the island
+#Slide rail thickness and mouth ring size
 const RAIL_THICKNESS := 0.3
 const GATE_RADIUS := 2.15
 const GATE_INSET := 1.4
-#The safety decks under the ways: a soft tray with round corners and a bumper of two soft rings, like an inflatable pool, so a fall reads
-#as a catch and not as the floor of the course; the upper ring is this thick; and how wide the pad of its bubble is
+#Safety decks look like inflatable pools so a fall reads as a catch
 const DECK_COLOR := Color("8fe3cf")
 const DECK_RING := Color("4fc6e8")
 const DECK_RING_TOP := Color("ff8fc4")
 const DECK_RING_TOP_TUBE := 0.32
 const LIFT_PAD_RADIUS := 1.4
-#The name over the goal and the warning over a bridge about to fall are letters with volume this tall and this thick
+#Solid letters of the goal name and of the fall warning
 const GOAL_WORD_HEIGHT := 3.4
 const GOAL_WORD_DEPTH := 0.6
 const SATURATED_DEPTH := 0.2
-#How long a fragile bridge takes to drop out of sight or to come back, and how far it drops
+#Fragile bridge drop time and depth
 const DROP_TIME := 0.5
 const DROP_DEPTH := 9.0
-#The padded block that sweeps a bridge: across the bridge, high and along it, which is what the hit test measures
+#Sweeping block size across, high and along
 const BLOCK_SIZE := Vector3(1.6, 0.9, 1.0)
 const BELL_HEIGHT := 1.0
-#How far the block leans toward where it goes, at the most, in radians
+#Block lean toward its way, in radians
 const BLOCK_LEAN := 0.16
 
-#How tall and how wide at the most the word of a comment is on the sides of its bubble
+#Comment word size on its bubble
 const COMMENT_WORD_HEIGHT := 0.8
 const COMMENT_WORD_WIDTH := 1.6
 const BUBBLE_SHADER: Shader = preload("res://assets/shaders/bubble.gdshader")
-#The bubble that carries a racer back up from a deck, and the small one that floats over each pad of a deck to say what it does
+#Ride bubble and the small bubble over each pad
 const LIFT_BUBBLE_RADIUS := 0.95
 const PAD_BUBBLE_RADIUS := 0.5
 const PAD_BUBBLE_HEIGHT := 1.9
-#How high over the floor the board of the arch of a way and of a slide hangs (its bottom edge)
+#Board height of the way and slide arches
 const WAY_SIGN_HEIGHT := 4.7
 const SLIDE_SIGN_HEIGHT := 4.7
-#The candy bumper around each island and the lights on it
+#Island bumper and its lights
 const RIM_TUBE := 0.22
 const RIM_HEIGHT := 0.4
 const RIM_STRIPE := 1.5
-#Room left in the bumper at the mouth of each bridge, on each side of it
+#Bumper gap beside each bridge mouth
 const RIM_GAP := 0.3
 const BULB_SPACING := 1.6
 const BULB_HEIGHT := 0.44
@@ -106,18 +101,18 @@ var _props: Level01Props
 var _traps: Level01TrapView
 var _belt_speed := 2.6
 var _clock := 0.0
-#"a|b" with the two ids in order -> what the bridge is made of
+#"a|b" -> bridge parts
 var _bridges: Dictionary = {}
 var _belts: Array[StandardMaterial3D] = []
 var _slides: Array[StandardMaterial3D] = []
-#The pad of the bubble of every deck, by the bridge over it
+#Pad of each deck by its bridge
 var _lift_pads: Dictionary = {}
 var _flashing: Dictionary = {}
 var _spinners: Dictionary = {}
 var _blocks: Array[Dictionary] = []
-#The rolling balls with their lanes, the trampolines by island and the belts about to turn around
+#Rolling balls, trampolines and belts about to turn
 var _balls: Array[Dictionary] = []
-#The speech bubbles of the comments, and the signs that say a route is saturated, by bridge
+#Comment bubbles and saturated signs per bridge
 var _comments: Array[Dictionary] = []
 var _saturated: Dictionary = {}
 var _belt_warning: Dictionary = {}
@@ -125,17 +120,17 @@ var _set: Level01Set
 var _bulb_spots: Array[Transform3D] = []
 var _bulb_colors: Array[Color] = []
 var _bulb_phases: Array[float] = []
-#The light strips of the bridges that do not fall: one box per side, drawn together
+#Light strips of bridges that never fall, drawn together
 var _edge_spots: Array[Transform3D] = []
 var _edge_colors: Array[Color] = []
-#Islands and plain bridges are joined in a few meshes per stretch of the course, painted by vertex
+#Islands and plain bridges joined per stretch, painted by vertex
 var _merger := MeshMerger.new()
 var _merged_materials: Dictionary = {}
-#The plates of the ways and the walls of the cups are drawn and built with the candy ground of the game
+#Way plates and cup walls use the candy ground
 var _terrain: CandyTerrain
 
 
-#Every racer has its own locator; the sensors tell each of them where it is
+#Each racer has its own locator fed by the sensors
 func build(locators: Array[PlayerLocator], belt_speed: float, tiles: Level01Tiles) -> void:
 	_belt_speed = belt_speed
 	_terrain = CandyTerrain.new(self)
@@ -171,7 +166,7 @@ func build(locators: Array[PlayerLocator], belt_speed: float, tiles: Level01Tile
 	_terrain.commit()
 
 
-#The three lights of the gantry over the start follow the countdown, and the crowd roars when somebody arrives
+#Gantry lights follow the countdown; the crowd roars at arrivals
 func set_start_lights(count: int, go: bool) -> void:
 	_set.set_start_lights(count, go)
 
@@ -188,14 +183,14 @@ func set_checkpoint_active(vertex: StringName, active: bool) -> void:
 	_props.set_checkpoint_active(vertex, active)
 
 
-#Everything that moves follows the clock of the round, the same one the rules use to hit
+#Everything moves with the round clock the rules use
 func update_hazards(time: float, tiles: Level01Tiles) -> void:
 	_traps.update(time, tiles)
 	for block in _blocks:
 		var node: Node3D = block["node"]
 		var pusher: Dictionary = block["pusher"]
 		node.global_position = Level01Hazards.block_center(pusher, time)
-		#It leans toward where it is going, like a padded thing that is being pushed along
+		#Leans toward its way like something pushed
 		var lean := cos(TAU * time / float(pusher["period"]) + float(pusher["phase"])) * BLOCK_LEAN
 		node.basis = (block["basis"] as Basis) * Basis(Vector3.BACK, lean)
 	for id: StringName in _spinners:
@@ -207,7 +202,7 @@ func update_hazards(time: float, tiles: Level01Tiles) -> void:
 		_update_comment(entry, time)
 
 
-#A belt flows from its first island to its second or, after turning around, the other way: its chevrons point where it goes
+#Chevrons point where the belt flows
 func set_belt_direction(a: StringName, b: StringName, forward: bool) -> void:
 	var record: Dictionary = _bridges.get(_key(a, b), {})
 	if record.is_empty() or record["kind"] != Level01Layout.BELT:
@@ -215,7 +210,7 @@ func set_belt_direction(a: StringName, b: StringName, forward: bool) -> void:
 	(record["material"] as StandardMaterial3D).uv1_scale.y = (-1.0 if forward else 1.0) * float(record["length"]) / BELT_TILE
 
 
-#The arrows of a belt blink while it is about to turn around
+#Belt arrows blink before turning
 func warn_belt(a: StringName, b: StringName, on: bool) -> void:
 	var key := _key(a, b)
 	if on:
@@ -227,7 +222,7 @@ func warn_belt(a: StringName, b: StringName, on: bool) -> void:
 		(record["material"] as StandardMaterial3D).emission_enabled = false
 
 
-#The block of that bridge squashes when it hits somebody and springs back
+#The block squashes on a hit
 func pulse_block(pusher: Dictionary) -> void:
 	for block in _blocks:
 		if block["pusher"] != pusher:
@@ -238,7 +233,7 @@ func pulse_block(pusher: Dictionary) -> void:
 		tween.tween_property(model, "scale", Vector3.ONE, 0.55).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
 
-#The bubble that carries a racer back up from a deck: a soap bubble around its body that swells in when it forms
+#Ride bubble that swells in around the body
 func lift_bubble() -> Node3D:
 	var ball := SphereMesh.new()
 	ball.radius = LIFT_BUBBLE_RADIUS
@@ -255,7 +250,7 @@ func lift_bubble() -> Node3D:
 	return bubble
 
 
-#The bubble pops with a ring of confetti and a soft plop where it drops its rider
+#Pop with confetti and a plop
 func pop_bubble(bubble: Node3D) -> void:
 	if not is_instance_valid(bubble):
 		return
@@ -272,7 +267,7 @@ func _bubble_material() -> ShaderMaterial:
 	return shell
 
 
-#The pad of a deck squashes, blows a burst of confetti and sounds when its bubble takes somebody
+#Deck pad squash, confetti and sound
 func squash_lift_pad(lift: Dictionary) -> void:
 	var pad: Node3D = _lift_pads.get(_key(lift["edge"][0], lift["edge"][1]))
 	if pad == null:
@@ -284,7 +279,7 @@ func squash_lift_pad(lift: Dictionary) -> void:
 	SynthSound.play(self, SynthSound.tone(150.0, 0.4, 480.0, 0.6), -4.0, 1.0)
 
 
-#A fragile bridge flashes while it is about to fall, and a sign over it says its route is saturated until it comes back
+#A fragile bridge flashes with a saturated sign until it returns
 func flash_bridge(a: StringName, b: StringName, on: bool) -> void:
 	var key := _key(a, b)
 	if on:
@@ -298,7 +293,7 @@ func flash_bridge(a: StringName, b: StringName, on: bool) -> void:
 		(record["edge_material"] as StandardMaterial3D).emission_energy_multiplier = 1.0
 
 
-#A fragile bridge drops out of sight (no floor) or comes back
+#Fragile bridge drops out of sight or comes back
 func set_bridge_open(a: StringName, b: StringName, open: bool) -> void:
 	var record: Dictionary = _bridges.get(_key(a, b), {})
 	if record.is_empty():
@@ -353,8 +348,7 @@ func _material(color: Color, emission := 0.0, alpha := 1.0) -> StandardMaterial3
 	return material
 
 
-#A game-show floor: the checker texture tinted with the colour of the piece, mapped in world space
-#A material of its own that can be changed later, unlike the shared ones of _material
+#Own material that can change later
 func _material_copy(color: Color, emission: float, alpha: float) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(color, alpha)
@@ -441,7 +435,7 @@ func _build_platform(id: StringName, locators: Array[PlayerLocator]) -> void:
 	var is_goal := id == Level01Layout.GOAL
 	var top_color: Color = TIERS[id]
 	var skirt_color := top_color.darkened(0.35)
-	#The rim is white and one more colour that warns: gold to arrive, hot pink where a bar sweeps the island, the colour of the island elsewhere
+	#White rim plus a warning colour: gold to arrive, hot pink with a bar
 	var rim_b := top_color.darkened(0.12)
 	if is_goal:
 		rim_b = AMBER
@@ -466,7 +460,7 @@ func _build_platform(id: StringName, locators: Array[PlayerLocator]) -> void:
 	skirt.rings = 1
 	_merger.add(&"skirt", _merged(&"skirt"), false, skirt, Transform3D(Basis.IDENTITY, body_at + Vector3(0.0, -THICKNESS / 2.0 - 0.8, 0.0)), skirt_color)
 
-	#Two flat discs in the middle make a bullseye in lighter and plain tones of the colour of the island
+	#Bullseye of two discs
 	for ring in [[0.46, 0.28, 0.02], [0.3, 0.0, 0.027]]:
 		var disc := CylinderMesh.new()
 		disc.top_radius = radius * float(ring[0])
@@ -480,7 +474,7 @@ func _build_platform(id: StringName, locators: Array[PlayerLocator]) -> void:
 	_build_rim(body_at, id, radius, rim_b)
 	_rim_lights(id, centre, radius)
 
-	#A ring of light under the skirt, so the island hovers
+	#Light ring under the skirt so the island hovers
 	var underglow := TorusMesh.new()
 	underglow.outer_radius = radius * 0.52
 	underglow.inner_radius = radius * 0.52 - 0.22
@@ -507,9 +501,7 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 	var distance := direction.length()
 	direction = direction.normalized()
 
-	#The surface is a straight ramp from the edge of one platform to the edge of the other. On a round island it reaches in until its sides
-	#meet the rim, so a wide bridge leaves no notch, but a ramp stops at the rim of its higher end, where a flat apron fills the notch, so
-	#nothing sticks up out of the floor. It lies a hair under the platforms where they overlap
+	#Straight ramp between platform edges, reaching round rims without notches
 	var run := distance - radius_a - radius_b
 	var slope := (to.y - from.y) / maxf(run, 0.1)
 	var inset_a := radius_a if slope < -0.001 else _bridge_inset(a, width)
@@ -530,7 +522,7 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 	var material: StandardMaterial3D = null
 	var visual: MeshInstance3D = null
 	if kind == Level01Layout.WALK or kind == Level01Layout.NARROW:
-		#A bridge that never moves is part of the joined mesh of its stretch
+		#Still bridges join the stretch mesh
 		_merger.add(&"board", _merged(&"board"), true, _box(shape.size), Transform3D(basis, centre), _bridge_color(a, b))
 	else:
 		material = _bridge_material(kind, length)
@@ -538,7 +530,7 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 	var edge_material := _edge_material(kind)
 	var edge_length := shape.size.z - 2.0 * (BRIDGE_OVERLAP + EDGE_TRIM)
 	if kind == Level01Layout.BELT:
-		#A belt has the soft candy rails and the drums of every belt of the game instead of the lit edges
+		#Belts get candy rails and drums
 		var trim := Node3D.new()
 		trim.position = Vector3(0.0, THICKNESS / 2.0, 0.0)
 		visual.add_child(trim)
@@ -553,7 +545,7 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 
 	if kind == Level01Layout.SLIDE:
 		_build_slide_rails(basis, centre, width, length)
-	#Marks where a belt, a slide or a fragile bridge starts, lying on the ramp just past each island
+	#Marks where belts, slides and fragile bridges start
 	var strips: Array[Node3D] = []
 	if kind == Level01Layout.BELT or kind == Level01Layout.FRAGILE or kind == Level01Layout.SLIDE:
 		var strip_color := MINT_DARK if kind == Level01Layout.BELT else MAGENTA
@@ -567,7 +559,7 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 		"visual": visual, "collider": body.get_child(0), "strips": strips, "material": material, "kind": kind,
 		"edge_material": edge_material, "rest_y": centre.y, "length": length}
 
-	#The sensor covers only the part of the bridge outside both platforms, as high as the ramp needs
+	#Sensor only on the bridge part outside both platforms
 	var sensor_shape := BoxShape3D.new()
 	sensor_shape.size = Vector3(width, 9.0, maxf(length - 2.0 * BRIDGE_OVERLAP, 0.5))
 	var sensor_centre := (start + end) / 2.0 + basis.y * 3.8
@@ -579,8 +571,7 @@ func _build_bridge(a: StringName, b: StringName, kind: StringName, locators: Arr
 		_build_block(pusher)
 
 
-#The rails of a slide keep whoever rides it on: a padded wall on each side, a light along its top and a ring over the mouth
-#A bridge of a way takes the colour of its way, much lighter, so the way reads as one lane; between two ways it stays pale
+#Slide rails with lights and a mouth ring; way bridges take a light tone of their way
 func _bridge_color(a: StringName, b: StringName) -> Color:
 	var one: Color = TIERS[a]
 	var other: Color = TIERS[b]
@@ -589,7 +580,7 @@ func _bridge_color(a: StringName, b: StringName) -> Color:
 	return BRIDGE_COLOR
 
 
-#The flat piece between the rim of a round island and the point where the sides of a ramp "width" wide meet it, at the height of the island
+#Flat piece between a round rim and a ramp side
 func _build_apron(id: StringName, outward: Vector3, width: float) -> void:
 	var radius := Level01Layout.radius_of(id)
 	var inset := _bridge_inset(id, width)
@@ -603,7 +594,7 @@ func _build_apron(id: StringName, outward: Vector3, width: float) -> void:
 	_merger.add(&"board", _merged(&"board"), true, _box(shape.size), place, TIERS[id])
 
 
-#How far from the middle of a platform a bridge "width" wide starts: at the edge of a plate, or where its sides meet the rim of an island
+#Bridge start distance from a platform middle
 func _bridge_inset(id: StringName, width: float) -> float:
 	var radius := Level01Layout.radius_of(id)
 	if Level01Layout.is_plate(id):
@@ -611,8 +602,7 @@ func _bridge_inset(id: StringName, width: float) -> float:
 	return sqrt(maxf(radius * radius - width * width / 4.0, 0.0)) - 0.05
 
 
-#A plate of a way: a square of the colour of its way laid along it, with a striped bumper and bulbs on its two sides and open at both
-#ends, where the bridges come in; a bar that sweeps it makes its bumper hot pink
+#Way plate with bumpers and bulbs on two sides, open at both ends
 func _build_plate(id: StringName, locators: Array[PlayerLocator]) -> void:
 	var centre: Vector3 = Level01Layout.POSITIONS[id]
 	var half := Level01Layout.PLATE / 2.0
@@ -621,7 +611,7 @@ func _build_plate(id: StringName, locators: Array[PlayerLocator]) -> void:
 	var color: Color = TIERS[id]
 	var rim := MAGENTA if Level01Layout.SPINNERS.has(id) else color.darkened(0.12)
 	var mouths: Array[Vector3] = [Vector3(centre.x, centre.z - half, half - 0.05), Vector3(centre.x, centre.z + half, half - 0.05)]
-	#A plate of stories has no floor of its own: its tiles are the floor (Level01TrapView)
+	#Story plates use their tiles as the floor
 	if not Level01Layout.TILE_PLATES.has(id):
 		_terrain.island(outline, centre.y, color, rim, mouths)
 	var sensor_shape := BoxShape3D.new()
@@ -631,7 +621,7 @@ func _build_plate(id: StringName, locators: Array[PlayerLocator]) -> void:
 		locator.watch_platform(id, area)
 
 
-#The cup of a slide turn: an unseen wall all around its rim but where its slides come in and go out
+#Invisible cup wall except at the slide mouths
 func _build_cup_wall(id: StringName) -> void:
 	var centre: Vector3 = Level01Layout.POSITIONS[id]
 	var radius := Level01Layout.radius_of(id)
@@ -661,7 +651,7 @@ func _build_slide_rails(basis: Basis, centre: Vector3, width: float, length: flo
 		var light_at := Vector3(side * (width / 2.0 - RAIL_THICKNESS / 2.0), THICKNESS / 2.0 + Level01Layout.SLIDE_RAIL + EDGE_HEIGHT / 2.0, 0.0)
 		_edge_spots.append(Transform3D(basis.scaled_local(Vector3(RAIL_THICKNESS * 0.7, EDGE_HEIGHT, rail_length)), centre + basis * light_at))
 		_edge_colors.append(Color("b8dcff"))
-	#A glowing ring marks the mouth, and the slide goes through it
+	#Glowing ring at the mouth
 	var ring := TorusMesh.new()
 	ring.inner_radius = GATE_RADIUS - 0.14
 	ring.outer_radius = GATE_RADIUS + 0.14
@@ -697,7 +687,7 @@ func _commit_edge_lights() -> void:
 		add_child(instance)
 
 
-#The thing a sweeping block is: a like, two notification bells side by side or a hashtag, as wide as the blow of the block
+#Block model: a like, two bells or a hashtag
 func _block_model(look: StringName) -> Node3D:
 	if look == &"bell":
 		var pair := Node3D.new()
@@ -718,7 +708,7 @@ func _has_block(pusher: Dictionary) -> bool:
 	return false
 
 
-#The block that sweeps a bridge: the thing of its way, going from one side to the other along a rail with a yellow bumper at each end
+#Sweeping block on a rail with yellow bumpers
 func _build_block(pusher: Dictionary) -> void:
 	var track := Level01Hazards.block_track(pusher)
 	var tangent: Vector3 = track["tangent"]
@@ -729,14 +719,14 @@ func _build_block(pusher: Dictionary) -> void:
 	var holder := Node3D.new()
 	add_child(holder)
 	var model := _block_model(pusher.get("look", &"foam_block"))
-	#Its face looks back toward the start of the course, where the racers come from
+	#Faces the start of the course
 	if tangent.z > 0.0:
 		model.rotation.y = PI
 	holder.add_child(model)
 	_blocks.append({"node": holder, "model": model, "pusher": pusher, "basis": ramp})
 	holder.global_position = Level01Hazards.block_center(pusher, 0.0)
 	holder.basis = ramp
-	#The rail lies on the surface across the whole path of the block and the bumpers stand at its ends
+	#Rail across the block's whole path
 	var rail_width := (reach + BLOCK_SIZE.x / 2.0 + 0.15) * 2.0
 	var rail := _mesh(self, _box(Vector3(rail_width, 0.03, BLOCK_SIZE.z + 0.45)), PartyKit.paint(PartyKit.INK, 0.0, 0.6), centre + ramp.y * 0.02)
 	rail.basis = ramp
@@ -751,7 +741,7 @@ func _build_block(pusher: Dictionary) -> void:
 		post.basis = ramp
 
 
-#One light colour per kind of bridge: cool for a plain one, mint for a belt and coral for a fragile one
+#Edge light colour per bridge kind
 func _edge_material(kind: StringName) -> StandardMaterial3D:
 	var color := Color("7ae6ff")
 	if kind == Level01Layout.SLIDE:
@@ -769,7 +759,7 @@ func _edge_material(kind: StringName) -> StandardMaterial3D:
 	return material
 
 
-#A belt flows from its first vertex to its second: the chevrons run that way
+#Chevrons run from the first vertex to the second
 func _bridge_material(kind: StringName, length: float) -> StandardMaterial3D:
 	if kind == Level01Layout.BELT:
 		var belt := StandardMaterial3D.new()
@@ -797,7 +787,7 @@ func _bridge_material(kind: StringName, length: float) -> StandardMaterial3D:
 	return _board(BRIDGE_COLOR)
 
 
-#The bumper around an island, in the colour of what the island is for, with a gap where each bridge comes in
+#Island bumper in its colour with gaps for bridges
 func _build_rim(body_at: Vector3, id: StringName, radius: float, color: Color) -> void:
 	var arcs := _free_arcs(_mouths(id, radius, RIM_GAP))
 	if arcs.is_empty():
@@ -811,7 +801,7 @@ func _build_rim(body_at: Vector3, id: StringName, radius: float, color: Color) -
 		Vector2(roundf(TAU * radius / RIM_STRIPE), 1.0))
 
 
-#The materials of the joined meshes: they read the colour of each vertex, so one serves every island and bridge
+#Vertex-colour materials shared by every island and bridge
 func _merged(kind: StringName) -> Material:
 	if _merged_materials.has(kind):
 		return _merged_materials[kind]
@@ -837,7 +827,7 @@ func _merged(kind: StringName) -> Material:
 	return material
 
 
-#Where the bridges of an island start on its rim: the angle toward each one and half of the angle it covers, with "margin" meters on each side
+#Bridge mouths on an island rim with "margin"
 func _mouths(id: StringName, radius: float, margin: float) -> Array[Vector2]:
 	var found: Array[Vector2] = []
 	var centre: Vector3 = Level01Layout.POSITIONS[id]
@@ -851,7 +841,7 @@ func _mouths(id: StringName, radius: float, margin: float) -> Array[Vector2]:
 	return found
 
 
-#The stretches of the circle that no mouth covers, as (from, to) angles; the one that crosses the zero angle goes past TAU
+#Circle stretches no mouth covers, as angle pairs
 func _free_arcs(mouths: Array[Vector2]) -> Array[Vector2]:
 	var covered: Array[Vector2] = []
 	for mouth in mouths:
@@ -880,7 +870,7 @@ func _free_arcs(mouths: Array[Vector2]) -> Array[Vector2]:
 	return free.filter(func(arc: Vector2) -> bool: return arc.y - arc.x > 0.08)
 
 
-#Little lights along the rim of an island, left out where a bridge comes in
+#Rim lights except at bridge mouths
 func _rim_lights(id: StringName, centre: Vector3, radius: float) -> void:
 	var mouths := _mouths(id, radius, 0.5)
 	var count := roundi(TAU * radius / BULB_SPACING)
@@ -907,7 +897,7 @@ func _build_start_marks() -> void:
 		arrow.rotation_degrees.x = -90.0
 
 
-#The bars of each spinner island: striped tubes that sweep the floor around a pole, one per bar the hazard counts (two cross at right angles)
+#Spinner bars sweeping around a pole
 func _build_spinners() -> void:
 	for id: StringName in Level01Layout.SPINNERS:
 		var spinner: Dictionary = Level01Layout.SPINNERS[id]
@@ -922,7 +912,7 @@ func _build_spinners() -> void:
 		_spinners[id] = pivot
 
 
-#Each rolling ball: a faint track on the floor along a diameter of its island, a bright stud at each end and a candy sphere that rolls along it
+#Rolling ball track, end studs and candy sphere
 func _build_balls() -> void:
 	for ball: Dictionary in Level01Layout.BALLS:
 		var island: Vector3 = Level01Layout.POSITIONS[ball["island"]]
@@ -953,7 +943,7 @@ func _build_balls() -> void:
 		_place_ball(entry, 0.0)
 
 
-#The ball rolls along its diameter, turning as far as it has gone
+#Rolls along its diameter, turning with distance
 func _place_ball(entry: Dictionary, time: float) -> void:
 	var ball: Dictionary = entry["ball"]
 	var node: MeshInstance3D = entry["ball_node"]
@@ -964,7 +954,7 @@ func _place_ball(entry: Dictionary, time: float) -> void:
 	node.basis = Basis(Vector3.UP.cross(along).normalized(), (centre - island).dot(along) / Level01Layout.BALL_RADIUS)
 
 
-#The pad of the bubble of each deck: a cushion with an arrow toward the platform it goes back to and a small bubble floating over it
+#Deck pads with an arrow and a small bubble
 func _build_lift_pads() -> void:
 	var cushion := CylinderMesh.new()
 	cushion.top_radius = LIFT_PAD_RADIUS
@@ -1013,13 +1003,13 @@ func _build_lift_pads() -> void:
 	add_child(bubbles)
 
 
-#Under every bridge of the ways lies a soft deck: a fall lands on it and costs the way back, not an attempt. Decks that overlap are one floor
+#Soft decks under every way bridge; overlapping decks share one floor
 func _build_decks() -> void:
 	for edge in Level01Layout.soft_edges():
 		var deck := Level01Layout.deck_of(edge)
 		var centre: Vector3 = deck["center"]
 		var top: float = deck["top"]
-		#Every deck has the same colour: decks that overlap lie at the same height and their faces share a plane
+		#Same colour and height for overlapping decks
 		var outline := CandyTerrain.rounded_box(Vector2(centre.x, centre.z), deck["size"], Level01Layout.DECK_ROUND, -float(deck["yaw"]), 6)
 		_terrain.tray(outline, top, DECK_COLOR)
 		var rim := Level01Layout.deck_rim(edge)
@@ -1035,7 +1025,7 @@ func _build_decks() -> void:
 				upper.append(upper[0])
 			_terrain.rail(lower, DECK_RING, false, Level01Layout.DECK_TUBE, true, 8)
 			_terrain.rail(upper, DECK_RING_TOP, false, DECK_RING_TOP_TUBE, true, 8)
-		#The walls the body leans on follow the rings
+		#Walls follow the rings
 		var walls := StaticBody3D.new()
 		add_child(walls)
 		for piece in Level01Layout.rim_walls(rim):
@@ -1048,7 +1038,7 @@ func _build_decks() -> void:
 			walls.add_child(collider)
 
 
-#A speech bubble for each comment, and the light on the bridge that says where it will come from
+#Comment bubbles and their source lights
 func _build_comments() -> void:
 	for comment: Dictionary in Level01Layout.COMMENTS:
 		var holder := Node3D.new()
@@ -1074,7 +1064,7 @@ func _build_comments() -> void:
 		_comments.append({"comment": comment, "holder": holder, "shape": shape, "word": "", "strip": strip, "strip_material": strip_material})
 
 
-#A bubble is typed letter by letter on its side, flashes, sweeps across the bridge and deflates
+#Typed, flashing, sweeping and deflating
 func _update_comment(entry: Dictionary, time: float) -> void:
 	var comment: Dictionary = entry["comment"]
 	var state := Level01Hazards.comment_state(comment, time)
@@ -1110,7 +1100,7 @@ func _update_comment(entry: Dictionary, time: float) -> void:
 	(entry["strip_material"] as StandardMaterial3D).emission_energy_multiplier = 0.5 + (2.2 * absf(sin(time * 12.0)) if warning else 0.0)
 
 
-#A sign over a bridge the feed is about to take down: the word in letters with volume, facing whoever comes from the start
+#Saturated sign facing the start
 func _show_saturated(a: StringName, b: StringName) -> void:
 	var key := _key(a, b)
 	if not _saturated.has(key):
@@ -1132,15 +1122,14 @@ func _scatter_decor() -> void:
 	backdrop.build()
 
 
-#The names of the course: an arch with a board over the entrance of each way and over the mouth of each slide, facing whoever comes, and
-#the goal with its name in big letters with volume over it (each checkpoint has its board on its pole)
+#Course names: arches over each way and slide, and META over the goal
 func _build_name_labels() -> void:
 	var goal: Vector3 = Level01Layout.POSITIONS[Level01Layout.GOAL]
-	#Whoever races sees it from the course, so it faces the course
+	#Faces the course
 	var goal_word := Word3D.make("META", GOAL_WORD_HEIGHT, GOAL_WORD_HEIGHT * 4.0, AMBER.darkened(0.5), GOAL_WORD_DEPTH, AMBER)
 	goal_word.position = goal + Vector3(0.0, 9.6, 0.0)
 	add_child(goal_word)
-	#The arches never move: they are joined into a few meshes once they are all up
+	#Still arches join into a few meshes
 	var signs := Node3D.new()
 	add_child(signs)
 	for vertex: StringName in Level01Layout.WAY_NAMES:

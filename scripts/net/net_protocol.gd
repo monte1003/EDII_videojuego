@@ -1,15 +1,12 @@
 class_name NetProtocol
 extends RefCounted
 
-#The language the computers of a game speak over their sockets: every message is a JSON object with its type in "t", sent with its length
-#in 4 bytes in front (big endian) so the other side knows where it ends. Anything too long, broken or unknown is thrown away.
-#The types from "snapshot" to "final" only go to the fair screen, which says hello with "role": "watch"; "rnd" carries what the server
-#decides inside a round (the bridges of level 1, the bubbles of the trend war) and what a player asks of it there
+#Messages are JSON objects with their type in "t", prefixed by a 4-byte big-endian length
 
-#2 since the fair screen (23/11/2026): a room of version 1 would take the screen for a player. 3 since the rounds decided by the server
+#2 since the fair screen, 3 since server-decided rounds
 const VERSION := 3
 const GAME := "rumblenet"
-#TCP port of the room and UDP port where rooms announce themselves on the local network
+#TCP port of the room and UDP port of the announcements
 const PORT := 47820
 const DISCOVERY_PORT := 47821
 const MAX_MESSAGE := 65536
@@ -23,24 +20,24 @@ static func pack(message: Dictionary) -> PackedByteArray:
 	var bytes := PackedByteArray()
 	bytes.resize(4)
 	bytes.encode_u32(0, body.size())
-	#encode_u32 writes little endian: the protocol says big endian
+	#encode_u32 is little endian; the protocol is big endian
 	bytes.reverse()
 	bytes.append_array(body)
 	return bytes
 
 
-#The value of a JSON text, or null when it is broken (without an error on the console: a broken message is normal on a network)
+#JSON value, or null when broken (no console error: normal on a network)
 static func parse(text: String) -> Variant:
 	var json := JSON.new()
 	return json.data if json.parse(text) == OK else null
 
 
-#A message is good when it is an object with a known type
+#Valid when it is an object with a known type
 static func is_valid(message: Variant) -> bool:
 	return message is Dictionary and (message as Dictionary).get("t") is String and TYPES.has((message as Dictionary)["t"])
 
 
-#Joins the bytes that arrive in pieces and gives back the whole messages; "broken" goes true when the other side sends garbage
+#Joins incoming pieces into whole messages; "broken" marks garbage
 class Reader:
 	var broken := false
 	var _buffer := PackedByteArray()

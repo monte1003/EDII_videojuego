@@ -1,10 +1,7 @@
 class_name CandyTerrain
 extends RefCounted
 
-#The floating candy ground of the game, drawn the way the feed race first drew its islands: a checkered top of any round or straight
-#outline, a skirt that narrows under it, a striped bumper along the rim with bulbs that chase each other and a ring of light below;
-#ramps with light strips on their sides; flat inlays on the floor. Everything is joined in a few meshes painted by vertex and collides
-#as convex shapes. An unseen wall along a rim keeps everybody on the island when it is asked for, except where a mouth opens it
+#Floating candy ground: checkered tops, skirts, striped bumpers with bulbs, ramps and inlays
 
 const BOARD_TEXTURE: Texture2D = preload("res://assets/textures/board_checker.png")
 const CANDY_VERTEX: Shader = preload("res://assets/shaders/candy_vertex.gdshader")
@@ -12,10 +9,10 @@ const GLOW_VERTEX: Shader = preload("res://assets/shaders/tint_glow.gdshader")
 const EDGE_SHADER: Shader = preload("res://assets/shaders/edge_light.gdshader")
 
 const THICKNESS := 0.6
-#The skirt under an island: how deep it hangs and how much narrower its bottom is
+#Skirt depth and how much narrower its bottom is
 const SKIRT_DEPTH := 1.6
 const SKIRT_NARROW := 0.55
-#The bumper: a tube this thick, a little over the floor and inside the rim, striped every RIM_STRIPE meters
+#Bumper tube thickness, lift and stripe length
 const RIM_TUBE := 0.22
 const RIM_LIFT := 0.1
 const RIM_INSET := 0.12
@@ -23,7 +20,7 @@ const RIM_STRIPE := 1.5
 const RIM_STEP := 0.6
 const BULB_SPACING := 1.6
 const BULB_LIFT := 0.42
-#The unseen wall of a rim is higher than a jump and a dive can clear
+#The invisible rim wall is higher than a jump plus dive
 const WALL_HEIGHT := 1.6
 const WALL_THICKNESS := 0.4
 const EDGE_WIDTH := 0.2
@@ -31,7 +28,7 @@ const EDGE_HEIGHT := 0.07
 const RAMP_THICKNESS := 0.5
 
 var merger := MeshMerger.new()
-#How high the unseen walls of the rims rise: a map with raised pieces near its rim asks for more than a jump from them
+#Rim wall height; raised pieces near a rim need more
 var wall_height := WALL_HEIGHT
 
 var _root: Node3D
@@ -44,17 +41,16 @@ var _edge_colors: Array[Color] = []
 var _bulb_palette: Array[Color] = PartyKit.PALETTE
 
 
-#"root" holds the bodies and, on commit, the joined meshes
+#"root" holds the bodies and the joined meshes
 func _init(root: Node3D) -> void:
 	_root = root
 
 
-#The colours the bulbs take in turn
 func set_bulb_palette(colors: Array[Color]) -> void:
 	_bulb_palette = colors
 
 
-#A round outline of "steps" corners
+#Round outline of "steps" corners
 static func circle(center: Vector2, radius: float, steps := 48) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	for step in steps:
@@ -63,7 +59,7 @@ static func circle(center: Vector2, radius: float, steps := 48) -> PackedVector2
 	return points
 
 
-#A box with round corners of "corner" meters, turned "yaw" radians; with "corner" at half its short side it is a stadium
+#Rounded box turned "yaw"; corner at half the short side makes a stadium
 static func rounded_box(center: Vector2, size: Vector2, corner: float, yaw := 0.0, steps := 8) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	var half := size / 2.0 - Vector2.ONE * corner
@@ -78,27 +74,26 @@ static func rounded_box(center: Vector2, size: Vector2, corner: float, yaw := 0.
 	return points
 
 
-#A convex island: its top at "top", checkered in "color", with a striped bumper of "rim" along its outline. A mouth (x, z, half
-#width) leaves out the bumper, the bulbs and the wall over that stretch of the rim; "walled" puts the unseen wall on the rest
+#Convex island with a striped bumper; a mouth (x, z, half width) leaves the rim open
 func island(outline: PackedVector2Array, top: float, color: Color, rim: Color, mouths: Array[Vector3] = [], walled := false, bulbs := true) -> void:
 	slab(outline, top, top - THICKNESS, color, true)
 	_skirt(outline, top - THICKNESS, color.darkened(0.35))
 	_rim(outline, top, rim, mouths, walled, bulbs)
 
 
-#A floor with no bumper of its own, for floors that join one another and draw their rim apart: the checkered top, its sides and the skirt
+#Floor without its own bumper, for joined floors
 func tray(outline: PackedVector2Array, top: float, color: Color) -> void:
 	slab(outline, top, top - THICKNESS, color, true)
 	_skirt(outline, top - THICKNESS, color.darkened(0.35))
 
 
-#A raised block standing on a floor: checkered top, darker sides and its striped bumper with bulbs, but no skirt under it
+#Raised block on a floor, with bumper and no skirt
 func platform(outline: PackedVector2Array, top: float, bottom: float, color: Color, rim: Color, mouths: Array[Vector3] = [], bulbs := true) -> void:
 	slab(outline, top, bottom, color, true)
 	_rim(outline, top, rim, mouths, false, bulbs)
 
 
-#A solid prism of a convex outline from "bottom" to "top", with the lighter checkered colour on top and darker sides
+#Solid prism from "bottom" to "top"
 func slab(outline: PackedVector2Array, top: float, bottom: float, color: Color, collide := true, sides := Color.TRANSPARENT) -> void:
 	if collide:
 		var points := PackedVector3Array()
@@ -118,7 +113,7 @@ func slab(outline: PackedVector2Array, top: float, bottom: float, color: Color, 
 	_add(&"board", true, skin, sides if sides.a > 0.0 else color.darkened(0.18), outline)
 
 
-#A flat shape lying on a floor, lighter or darker than it: lanes, marks and carpets that do not collide
+#Flat non-colliding shape on a floor: lanes, marks and carpets
 func inlay(outline: PackedVector2Array, height: float, color: Color, glow := false) -> void:
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -126,7 +121,7 @@ func inlay(outline: PackedVector2Array, height: float, color: Color, glow := fal
 	_add(&"glow" if glow else &"plain", false, tool, color, outline)
 
 
-#A straight walkway from "from" to "to" (its floor), "width" wide, with a light strip along each side. It collides as a box under its floor
+#Straight walkway with light strips; collides as a box under its floor
 func ramp(from: Vector3, to: Vector3, width: float, color: Color, edge: Color = Color("7ae6ff"), overlap := 0.3) -> void:
 	var way := (to - from).normalized()
 	var low := from - way * overlap
@@ -146,8 +141,7 @@ func ramp(from: Vector3, to: Vector3, width: float, color: Color, edge: Color = 
 		_edge_colors.append(edge)
 
 
-#A solid slope from the floor "bottom" at "low" up to "high" (the middle of its two ends), "width" wide: a wedge filled down to the
-#floor, with light strips along its sides
+#Solid slope from "low" to "high" with light strips
 func wedge(low: Vector3, high: Vector3, width: float, color: Color, bottom: float, edge: Color = Color("7ae6ff")) -> void:
 	var run := Vector3(high.x - low.x, 0.0, high.z - low.z)
 	var way := run.normalized()
@@ -189,9 +183,7 @@ func wedge(low: Vector3, high: Vector3, width: float, color: Color, bottom: floa
 		_edge_colors.append(edge)
 
 
-#A bumper tube along a line (a railing, a ring, the edge of a ramp), striped like a rim and bent smoothly at its corners, with or
-#without bulbs on it. A line whose last point is its first is a closed ring; an open one may end in two round ends. A long soft tube
-#seen from far can do with fewer "sides"
+#Striped bumper tube along a line; closed when the last point is the first
 func rail(points: PackedVector3Array, color: Color, bulbs := false, radius := RIM_TUBE, round_ends := false, sides := 10) -> void:
 	var line: Array[Vector3] = []
 	for point in points:
@@ -210,7 +202,7 @@ func rail(points: PackedVector3Array, color: Color, bulbs := false, radius := RI
 	merger.add(&"rim", material(&"rim"), false, _commit(tool), Transform3D.IDENTITY, color, Vector2.ONE, (points[0].z + points[-1].z) / 2.0)
 
 
-#An unseen wall from "from" to "to" on the ground, from "bottom" up to WALL_HEIGHT over it
+#Invisible wall from "from" to "to"
 func wall(from: Vector2, to: Vector2, bottom: float, height := WALL_HEIGHT) -> void:
 	var along := to - from
 	var length := along.length()
@@ -222,14 +214,14 @@ func wall(from: Vector2, to: Vector2, bottom: float, height := WALL_HEIGHT) -> v
 	_body(shape, Transform3D(Basis(Vector3.UP, atan2(along.x, along.y)), Vector3(middle.x, bottom + height / 2.0, middle.y)))
 
 
-#Bulbs on any spots, painted in turn with the bulb colours
+#Bulbs on any spots in the bulb colours
 func add_bulb(at: Vector3, phase: float) -> void:
 	_bulb_spots.append(Transform3D(Basis.IDENTITY, at))
 	_bulb_colors.append(_bulb_palette[_bulb_spots.size() % _bulb_palette.size()])
 	_bulb_phases.append(phase)
 
 
-#The materials of the joined meshes: they read the colour of each vertex, so one serves every piece of the map
+#Materials read the vertex colour, so one serves the whole map
 func material(kind: StringName) -> Material:
 	if _materials.has(kind):
 		return _materials[kind]
@@ -261,7 +253,7 @@ func material(kind: StringName) -> Material:
 	return made
 
 
-#Joins everything under the root: the meshes, the bulbs and the light strips
+#Joins meshes, bulbs and light strips under the root
 func commit() -> void:
 	merger.commit(_root)
 	if not _bulb_spots.is_empty():
@@ -286,7 +278,7 @@ func commit() -> void:
 	_root.add_child(instance)
 
 
-#The skirt hangs from the bottom of the top and narrows toward a ring of light, so the island hovers
+#Skirt narrowing toward a ring of light
 func _skirt(outline: PackedVector2Array, at: float, color: Color) -> void:
 	var middle := _middle(outline)
 	var upper := _scaled(outline, middle, 0.97)
@@ -305,8 +297,7 @@ func _skirt(outline: PackedVector2Array, at: float, color: Color) -> void:
 	_add(&"glow", false, glow, color.lightened(0.55), outline)
 
 
-#The bumper, its bulbs and its wall along the rim, leaving out the mouths. The rim is sampled every RIM_STEP meters; each stretch
-#with no mouth is one smooth tube (the whole rim is one ring when there is no mouth at all)
+#Bumper, bulbs and wall along the rim, skipping the mouths
 func _rim(outline: PackedVector2Array, top: float, color: Color, mouths: Array[Vector3], walled: bool, bulbs: bool) -> void:
 	var middle := _middle(outline)
 	var samples: Array[Vector3] = []
@@ -362,7 +353,7 @@ func _in_mouth(point: Vector2, mouths: Array[Vector3]) -> bool:
 	return false
 
 
-#Bulbs along a line, every BULB_SPACING meters, raised by "lift"
+#Bulbs every BULB_SPACING meters
 func _bulbs_on(line: Array[Vector3], closed: bool, lift: Vector3, travelled: float) -> void:
 	var count := line.size() if closed else line.size() - 1
 	var along := travelled
@@ -382,7 +373,7 @@ func _bulbs_along(from: Vector3, to: Vector3, travelled: float) -> void:
 		along += BULB_SPACING
 
 
-#A flat face over the outline (a fan: the outline is convex), seen from "facing"
+#Flat fan over a convex outline
 func _cap(tool: SurfaceTool, outline: PackedVector2Array, height: float, facing: Vector3) -> void:
 	var middle := _middle(outline)
 	var centre := Vector3(middle.x, height, middle.y)
@@ -393,7 +384,7 @@ func _cap(tool: SurfaceTool, outline: PackedVector2Array, height: float, facing:
 		_triangle(tool, centre, a, b, facing)
 
 
-#The side walls between an upper outline at "top" and a lower one at "bottom" with as many corners
+#Side walls between two outlines
 func _sides(tool: SurfaceTool, upper: PackedVector2Array, top: float, bottom: float, lower: PackedVector2Array) -> void:
 	var middle := _middle(upper)
 	for index in upper.size():
@@ -408,8 +399,7 @@ func _sides(tool: SurfaceTool, upper: PackedVector2Array, top: float, bottom: fl
 		_triangle(tool, a, c, d, outward)
 
 
-#A smooth tube along a line of points: one ring of corners at each point, turned halfway between the stretch before and the one after,
-#so the corners bend instead of breaking. The stripes are counted along it from "u_from"; it returns its length
+#Smooth tube with rings turned halfway at each point; returns its length
 func _sweep(tool: SurfaceTool, line: Array[Vector3], closed: bool, radius: float, sides: int, u_from: float) -> float:
 	var count := line.size()
 	if count < 2:
@@ -451,8 +441,7 @@ func _sweep(tool: SurfaceTool, line: Array[Vector3], closed: bool, radius: float
 	return travelled
 
 
-#A half ball out of the end ring of an open tube that runs along "along", bulging forward ("out" 1) or backward (-1); its rings line up with
-#the ones of _sweep, so the end has no seam
+#Half ball closing an open tube without a seam
 func _round_end(tool: SurfaceTool, at: Vector3, along: Vector3, out: float, radius: float, sides: int, u: float) -> void:
 	var up := Vector3.UP if absf(along.y) < 0.95 else Vector3.RIGHT
 	var across := up.cross(along).normalized()
@@ -484,7 +473,7 @@ func _round_end(tool: SurfaceTool, at: Vector3, along: Vector3, out: float, radi
 					tool.add_vertex(at + normals[corner] * radius)
 
 
-#A triangle whose front looks along "facing" (the engine draws the side where the corners turn clockwise)
+#Triangle whose front looks along "facing"
 func _triangle(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, facing: Vector3) -> void:
 	var corners: Array[Vector3] = [a, b, c]
 	if (b - a).cross(c - a).dot(facing) > 0.0:
@@ -513,7 +502,7 @@ func _commit(tool: SurfaceTool) -> ArrayMesh:
 	return tool.commit()
 
 
-#Adds a mesh drawn in place to the joined meshes, in the stretch of the course where the middle of "outline" lies
+#Adds a mesh to the stretch where its outline lies
 func _add(kind: StringName, shadow: bool, tool: SurfaceTool, color: Color, outline: PackedVector2Array) -> void:
 	merger.add(kind, material(kind), shadow, _commit(tool), Transform3D.IDENTITY, color, Vector2.ONE, _middle(outline).y)
 

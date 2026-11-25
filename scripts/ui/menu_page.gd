@@ -16,7 +16,7 @@ func _ready() -> void:
 	_back_button.pressed.connect(ScreenFlow.back)
 
 
-#A setting: its name on the left and the choices on the right
+#A setting: name on the left, choices on the right
 func add_choice(title: String, options: Array[String], selected: int, on_change: Callable) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 28)
@@ -47,7 +47,7 @@ func add_choice(title: String, options: Array[String], selected: int, on_change:
 	row.add_child(picker)
 
 
-#La caja del desplegable va translucida y redonda como las pildoras de los botones
+#Dropdown box translucent and round like the button pills
 func _picker_box() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(Palette.PAPER, 0.7)

@@ -4,11 +4,11 @@ extends Control
 const PATTERN := preload("res://assets/ui/textures/social_pattern.png")
 const PATTERN_SHADER := preload("res://assets/ui/shaders/social_pattern.gdshader")
 
-#Lado de la baldosa en unidades de lienzo y avance del patron por segundo: a la derecha y arriba
+#Tile side in canvas units and pattern drift per second, right and up
 @export var tile_size := 540.0
 @export var drift := Vector2(9.0, -13.0)
 @export var strength := 0.2
-#Se dibuja un poco mas grande que la pantalla para que al moverse no asome el borde
+#Drawn a little larger than the screen so the edge never shows
 @export var overscan := 26.0
 
 var _pattern: ShaderMaterial
@@ -29,7 +29,7 @@ func _ready() -> void:
 	_on_resized()
 
 
-#El avance se acumula aqui y no con TIME en el shader: da la vuelta justo en una baldosa y nunca salta
+#Drift accumulated here, not with TIME, so it wraps on a tile and never jumps
 func _process(delta: float) -> void:
 	_offset = (_offset + drift * delta).posmod(tile_size)
 	_pattern.set_shader_parameter("offset", _offset)
@@ -45,7 +45,7 @@ func _add_layer(node: Control) -> void:
 	add_child(node)
 
 
-#En diagonal, como la referencia: lavanda azulada arriba a la izquierda y melocoton abajo a la derecha
+#Diagonal sky: blue lavender top left, peach bottom right
 func _make_sky() -> TextureRect:
 	var gradient := Gradient.new()
 	gradient.set_color(0, Palette.SKY_TOP)
@@ -61,7 +61,7 @@ func _make_sky() -> TextureRect:
 	return _make_rect(texture)
 
 
-#Un halo claro a la izquierda, donde la referencia tiene la luz
+#Light halo on the left
 func _make_glow() -> TextureRect:
 	var gradient := Gradient.new()
 	gradient.set_color(0, Color(1, 1, 1, 0.18))

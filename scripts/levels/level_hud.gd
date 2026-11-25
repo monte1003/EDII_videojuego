@@ -1,7 +1,7 @@
 class_name LevelHud
 extends RoundHud
 
-#The race screen: the clock, the attempts left as dots, your place when more than one race and a line for the doors of the goal
+#Race screen: clock, attempt dots, your place and the goal doors line
 
 var _dots: HBoxContainer
 var _dot_styles: Array[StyleBoxFlat] = []
@@ -27,7 +27,7 @@ func set_attempts(left: int, total: int) -> void:
 	_dots.tooltip_text = "%d de %d intentos" % [left, total]
 
 
-#Your place in the race, as in "2/4"; it only shows when someone else races
+#Your place, as in "2/4", only with other racers
 func set_place(place: int, total: int) -> void:
 	_place_label.text = "%d/%d" % [place, total]
 	_place_label.visible = total > 1
@@ -73,7 +73,6 @@ func _build_status() -> void:
 	_window_label.hide()
 	_top.add_child(_window_label)
 
-	#The place sits alone in the top left corner
 	var corner := Control.new()
 	corner.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	corner.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -84,7 +83,7 @@ func _build_status() -> void:
 	corner.add_child(_place_label)
 
 
-#The route debug panel (F3): a developer tool, it stays plain
+#F3 route debug panel, kept plain
 func _build_debug_panel() -> void:
 	_debug_panel = PanelContainer.new()
 	_debug_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -1,8 +1,7 @@
 class_name DecisionTree
 extends RefCounted
 
-#Decision tree of a session: each level is a round and each child a minigame that can be
-#played in it. A session is a path from the root to a leaf.
+#Session decision tree: each level a round, each child a minigame; a session is a root-to-leaf path
 
 class DecisionNode:
 	var value: StringName
@@ -17,15 +16,14 @@ class DecisionNode:
 var root := DecisionNode.new(&"start", 0)
 
 
-#The children of a node are the minigames not played yet on its path. When all of them were
-#played (fewer minigames than rounds) any but the last one can come back.
+#Children are the minigames not yet played on the path; if all were, any but the last can return
 static func build(pool: Array[StringName], rounds: int) -> DecisionTree:
 	var tree := DecisionTree.new()
 	tree._grow(tree.root, pool, rounds, [])
 	return tree
 
 
-#From the root to a leaf, drawing one child at random in every level
+#Root to leaf drawing one child at random per level
 func random_path(rng: RandomNumberGenerator) -> Array[StringName]:
 	var path: Array[StringName] = []
 	var node := root

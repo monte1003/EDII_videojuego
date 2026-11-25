@@ -1,7 +1,7 @@
 class_name LevelHelp
 extends CanvasLayer
 
-#Help of a round with a fixed-size card, so the buttons never move between pages
+#Round help with a fixed-size card so the buttons never move
 
 signal finished
 

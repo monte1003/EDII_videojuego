@@ -1,13 +1,10 @@
 class_name StaticBatch
 extends RefCounted
 
-#Joins the meshes under a node that never move into one mesh per material, shadow setting and render layer: the same picture with far
-#fewer draw calls, and nothing hidden. With a "cell" size the pieces are joined by patches of ground of that side, so what is out of a
-#camera stays out of its drawing (the engine decides it for each camera on its own). Whatever hangs from a node of "moving" (or is hidden
-#for now) keeps its own mesh. The joined pieces keep their nodes, only empty
+#Joins still meshes per material, shadow and layer; with "cell" they join by patches of ground
 
 
-#With "shadows" off the joined meshes cast no shadow: for scenery whose shadow nobody needs, it saves drawing it again for the light
+#"shadows" off: the joined meshes cast no shadow
 static func join(root: Node3D, moving: Array[Node], shadows := true, cell := 0.0) -> void:
 	var skip: Dictionary = {}
 	for node in moving:
@@ -25,7 +22,7 @@ static func join(root: Node3D, moving: Array[Node], shadows := true, cell := 0.0
 		for surface in piece.mesh.get_surface_count():
 			var key := _key_of(piece, surface)
 			keys.append("" if key == "" else patch + key)
-		#A piece goes whole or not at all: a surface that cannot join keeps the piece as it is
+		#A piece joins whole or not at all
 		if keys.has(""):
 			continue
 		for surface in keys.size():
@@ -46,8 +43,7 @@ static func join(root: Node3D, moving: Array[Node], shadows := true, cell := 0.0
 		root.add_child(joined)
 
 
-#What a surface joins with: its material, its shadow and the kinds of vertex data it has; empty when it cannot join (no material of its
-#own, not triangles, or skinned)
+#Join key: material, shadow and vertex format; empty when it cannot join
 static func _key_of(piece: MeshInstance3D, surface: int) -> String:
 	var material := piece.get_active_material(surface)
 	if material == null or piece.material_overlay != null:
@@ -63,8 +59,7 @@ static func _key_of(piece: MeshInstance3D, surface: int) -> String:
 	return "%d|%d|%d|%s" % [material.get_instance_id(), piece.cast_shadow, piece.layers, data]
 
 
-#Whether a piece hangs from something that moves (or is it), from something hidden for now or from a node with a script of its own,
-#which may move what it holds
+#Pieces under something that moves, is hidden or has its own script stay apart
 static func _moves(piece: Node, root: Node, skip: Dictionary) -> bool:
 	var at := piece
 	while at != null and at != root:
@@ -74,7 +69,7 @@ static func _moves(piece: Node, root: Node, skip: Dictionary) -> bool:
 	return false
 
 
-#Where a piece is seen from "root", whether or not the tree is ready
+#Transform seen from "root", tree ready or not
 static func _place_in(piece: Node3D, root: Node3D) -> Transform3D:
 	var place := Transform3D.IDENTITY
 	var at: Node = piece

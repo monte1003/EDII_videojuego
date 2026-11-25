@@ -1,8 +1,7 @@
 class_name CrowdField
 extends Node3D
 
-#A crowd of cheering fans, each a flat avatar tile like the picture of an account with no photo: add every place, then commit once.
-#The fans are split in stretches of the course with one draw call each, so the engine skips the stretches that are out of view
+#Cheering fans as flat avatar tiles; one draw call per stretch
 
 const SHADER: Shader = preload("res://assets/shaders/crowd_bob.gdshader")
 const CARD_SIZE := 1.1
@@ -15,19 +14,19 @@ var _colors: Array[Color] = []
 var _material: ShaderMaterial
 
 
-#A fan standing at "at", looking where "yaw" says (0 looks toward +Z), "size" times the normal height
+#Fan at "at" facing "yaw" (0 is +Z), "size" times normal height
 func add_fan(at: Vector3, yaw: float, size: float, color: Color) -> void:
 	_spots.append(Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * size), at))
 	_colors.append(color)
 
 
-#The whole crowd jumps higher while "amount" is above 1
+#The crowd jumps higher above 1
 func set_excitement(amount: float) -> void:
 	if _material != null:
 		_material.set_shader_parameter("excitement", amount)
 
 
-#A wave of standing fans whose crest is at "front" along Z; "lift" is how high they rise (0 puts it away)
+#Wave of standing fans at "front" along Z; "lift" 0 puts it away
 func set_wave(front: float, lift: float) -> void:
 	if _material != null:
 		_material.set_shader_parameter("wave_front", front)
@@ -58,7 +57,7 @@ func commit() -> void:
 		add_child(instance)
 
 
-#A flat card standing on its feet, with the same look from both sides
+#Flat card standing on its feet, same from both sides
 func _fan_mesh(material: Material) -> QuadMesh:
 	var card := QuadMesh.new()
 	card.size = Vector2(CARD_SIZE, CARD_SIZE)

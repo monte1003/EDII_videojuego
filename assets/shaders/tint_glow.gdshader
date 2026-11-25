@@ -1,7 +1,7 @@
 shader_type spatial;
 render_mode unshaded;
 
-//A glow in the colour of each vertex, for the rings of light under the islands that are joined in one mesh
+//Glow in the vertex colour for the rings under joined islands
 uniform float energy = 1.9;
 
 vec3 to_linear(vec3 c) {

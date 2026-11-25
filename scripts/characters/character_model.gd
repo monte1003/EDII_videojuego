@@ -1,14 +1,14 @@
 class_name CharacterModel
 extends Node3D
 
-#The dive, in its three parts, the shove and the stagger of whoever takes it, and the poses and dances of a photo
+#Dive in three parts, shove, stagger and photo poses
 const DIVE := &"dive/Dive"
 const SLIDE := &"dive/Slide"
 const RISE := &"dive/Rise"
 const SHOVE := &"shove/Shove"
 const STAGGER := &"shove/Stagger"
 const POSES: Array[StringName] = [&"poses/Tada", &"poses/Lean", &"poses/Letters", &"poses/Jazz", &"poses/Funny", &"poses/Beats"]
-#The extra moves of a character live next to its model, one library per file: <id>_dive.res, <id>_shove.res and <id>_poses.res
+#Extra moves next to the model: <id>_dive.res, <id>_shove.res and <id>_poses.res
 const MOVE_LIBRARIES: Array[StringName] = [&"dive", &"shove", &"poses"]
 
 @export var idle_animation: StringName
@@ -16,13 +16,13 @@ const MOVE_LIBRARIES: Array[StringName] = [&"dive", &"shove", &"poses"]
 @export var jump_animation: StringName
 @export var land_animation: StringName
 @export var blend_time := 0.15
-#El salto y la caida entran casi de golpe: con la mezcla normal llegan tarde
+#Jump and fall blend in almost at once
 @export var snap_blend_time := 0.06
-#La carrera va mas rapida que como viene: a su ritmo original los pies patinan mucho
+#Run sped up so the feet do not slide
 @export var move_speed_scale := 1.6
 
 var _was_airborne := false
-#The extra move that plays over the four states, and whether it stays until somebody stops it
+#Extra move over the four states, and whether it is held
 var _move: StringName = &""
 var _move_held := false
 
@@ -40,7 +40,6 @@ func _ready() -> void:
 
 func set_state(moving: bool, airborne: bool) -> void:
 	if _move != &"":
-		#A move that is not held gives way to the states as soon as it ends
 		if _move_held or _animation_player.is_playing():
 			_was_airborne = airborne
 			return
@@ -53,8 +52,7 @@ func set_state(moving: bool, airborne: bool) -> void:
 	elif _is_landing() and not moving:
 		return
 	_was_airborne = airborne
-	#Se compara con la animacion asignada y no con la que suena: asi un salto largo
-	#no vuelve a empezar cuando su animacion ya termino y el personaje sigue cayendo
+	#Compare with the assigned animation so a long jump does not restart while falling
 	if _animation_player.assigned_animation != target:
 		var blend := snap_blend_time if target in [jump_animation, land_animation] else blend_time
 		var speed := move_speed_scale if target == move_animation else 1.0
@@ -65,8 +63,7 @@ func has_move(move: StringName) -> bool:
 	return _animation_player.has_animation(move)
 
 
-#Plays an extra move over the states. Held, it stays in its last frame (or keeps looping) until stop_move; otherwise the states
-#come back when it ends. False when this character does not have it
+#Plays an extra move; held, it stays until stop_move; false if missing
 func play_move(move: StringName, held := false, blend := 0.08, speed := 1.0) -> bool:
 	if not has_move(move):
 		return false
@@ -85,7 +82,6 @@ func is_in_move() -> bool:
 	return _move != &""
 
 
-#How many poses and dances this character has for a photo
 func pose_count() -> int:
 	var count := 0
 	for pose in POSES:
@@ -106,7 +102,7 @@ func _load_moves() -> void:
 			_animation_player.add_animation_library(library, load(path) as AnimationLibrary)
 
 
-#Some animations scale the hips, which changes the character size
+#Some animations scale the hips
 func _prepare(animation_name: StringName, loop: Animation.LoopMode) -> void:
 	var animation := _animation_player.get_animation(animation_name)
 	if animation == null:

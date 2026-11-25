@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode unshaded, fog_disabled;
 
-// The glass of a giant screen of SocialDrop: a deep gradient with slow slanted bands in the colour of the screen, fine scanlines, a vignette
-// and a glowing border, so the numbers and icons that are drawn in front of it stand out
+//SocialDrop giant screen glass: gradient, bands, scanlines and glowing border
 uniform vec4 accent : source_color = vec4(1.0, 0.36, 0.54, 1.0);
 
 void fragment() {

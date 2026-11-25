@@ -1,7 +1,7 @@
 class_name WarmupWorld
 extends Node3D
 
-#The warm-up room: a plaza, low bars, a gap and a console, all sized from the real jump of the player
+#Warm-up plaza: low bars, a gap and a console sized from the real jump
 
 const SLAB_RADIUS := 13.0
 const SLAB_THICKNESS := 0.6
@@ -11,7 +11,7 @@ const CYAN := Color("4fd6e8")
 const MAGENTA := Color("ee4fb8")
 const AMBER := Color("ffc857")
 const BOARD_TEXTURE: Texture2D = preload("res://assets/textures/board_checker.png")
-#Giant pieces floating around the plaza: model, how many, size range and whether the size is the height
+#Floating giant decor: model, count, size range and fit
 const DECOR: Array[Dictionary] = [
 	{"id": &"cloud", "count": 8, "size": Vector2(14.0, 24.0), "tall": false},
 	{"id": &"heart", "count": 4, "size": Vector2(4.0, 7.0), "tall": true},
@@ -43,7 +43,7 @@ func build(jump_height: float, jump_reach: float) -> void:
 	_scatter_decor()
 
 
-#The console lights up when the player uses it
+#The console lights up while used
 func set_station_active(active: bool) -> void:
 	for material in _station_materials:
 		material.emission_enabled = active
@@ -139,7 +139,7 @@ func _cylinder_body(center: Vector3, radius: float, material: Material) -> void:
 	add_child(body)
 
 
-#A low striped bumper: the box is what stops the player and the models are laid end to end along it
+#Low striped bumper: a box with models laid along it
 func _bar(at: Vector3, yaw: float, height: float) -> void:
 	var body := StaticBody3D.new()
 	body.position = at + Vector3(0.0, height / 2.0, 0.0)
@@ -210,7 +210,7 @@ func _register_decor(node: Node3D, yaw: float, phase: float, speed: float) -> vo
 	_decor.append({"node": node, "base_y": node.position.y, "yaw": yaw, "phase": phase, "speed": speed})
 
 
-#A game-show floor: the checker texture tinted with the colour of the piece, mapped in world space
+#Checker texture tinted per piece in world space
 func _board(color: Color) -> StandardMaterial3D:
 	var key := color.to_html()
 	if _board_materials.has(key):

@@ -5,7 +5,7 @@ extends Node3D
 @export var stick_speed := Vector2(2.6, 1.7)
 @export_range(-89.0, 0.0) var min_pitch_degrees := -55.0
 @export_range(0.0, 89.0) var max_pitch_degrees := 25.0
-#The shake fades out in 1 / shake_decay seconds; offsets are in meters and the roll in radians
+#Shake fades in 1 / shake_decay seconds; offsets in meters, roll in radians
 @export var shake_decay := 2.2
 @export var shake_offset := 0.3
 @export var shake_roll := 0.045
@@ -44,7 +44,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	_turn(motion.relative.x * mouse_sensitivity, motion.relative.y * mouse_sensitivity)
 
 
-#The right stick turns it like the mouse, in radians per second at full tilt, only while the round holds the mouse
+#Right stick turns it in radians per second, only while the round holds the mouse
 func _physics_process(delta: float) -> void:
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
@@ -63,13 +63,13 @@ func get_yaw_basis() -> Basis:
 	return Basis(Vector3.UP, global_rotation.y)
 
 
-#How far behind and how steeply above it looks; a round with a wide stage frames it wider
+#Distance and pitch; wide stages frame it wider
 func frame(distance: float, pitch_degrees: float) -> void:
 	_spring_arm.spring_length = distance
 	_pitch_pivot.rotation.x = deg_to_rad(pitch_degrees)
 
 
-#The view opens "degrees" wider at once and comes back in "seconds": a small kick for a burst of speed
+#FOV kick of "degrees" that returns in "seconds"
 func kick(degrees: float, seconds: float) -> void:
 	if _kick != null and _kick.is_valid():
 		_kick.kill()
@@ -78,7 +78,7 @@ func kick(degrees: float, seconds: float) -> void:
 	_kick.tween_property(_camera, "fov", _base_fov, seconds).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
-#A knock to the camera, from 0 to 1; a bigger one while it still shakes adds up to the limit
+#Camera knock 0 to 1; stacks up to the limit
 func shake(amount: float) -> void:
 	_trauma = minf(maxf(_trauma, amount), 1.0)
 	set_process(true)

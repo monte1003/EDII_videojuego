@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode unshaded;
 
-//The big screen of a set: a soft gradient between two colours with wide bands that drift across it and a lighter glow in the middle,
-//inside a thin bright border. It needs no texture
+//Set screen: soft gradient with drifting bands and a bright border
 uniform vec4 color_a : source_color = vec4(1.0, 0.45, 0.55, 1.0);
 uniform vec4 color_b : source_color = vec4(1.0, 0.76, 0.42, 1.0);
 uniform vec4 border : source_color = vec4(1.0, 0.97, 0.92, 1.0);

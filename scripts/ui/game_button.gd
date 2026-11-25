@@ -3,12 +3,12 @@ extends Button
 
 @export var base_color := Palette.PILL
 @export var label_color := Palette.PAPER
-#Late despacio para llamar la atencion; se usa en la accion principal de la pantalla
+#Slow beat for the main action of a screen
 @export var pulse := false
 
 var _tween: Tween
 var _beat: Tween
-#The pad has this button selected, so it looks as under the mouse
+#Selected by the pad, so it looks hovered
 var _pad_hover := false
 
 @onready var _ring: Panel = %Ring
@@ -20,7 +20,7 @@ var _pad_hover := false
 
 
 func _ready() -> void:
-	#El Button solo recibe el clic: la pildora y el texto son sus hijos, que se dibujan encima
+	#The Button only takes the click; the pill and text are children drawn on top
 	for box in ["normal", "hover", "pressed", "focus", "disabled"]:
 		add_theme_stylebox_override(box, StyleBoxEmpty.new())
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color",
@@ -51,7 +51,6 @@ func _ready() -> void:
 		_start_beat()
 
 
-#Changes the icon after the button is on screen
 func set_icon(texture: Texture2D) -> void:
 	icon = texture
 	if _icon != null:
@@ -59,7 +58,7 @@ func set_icon(texture: Texture2D) -> void:
 		_icon.visible = texture != null
 
 
-#Changes the text after the button is on screen (the label is a child, not the button's own)
+#The label is a child, not the button's own text
 func set_caption(new_text: String) -> void:
 	text = new_text
 	if _caption != null:
@@ -71,7 +70,7 @@ func _on_resized() -> void:
 	_ring.pivot_offset = _ring.size / 2.0
 
 
-#La pildora recorta un degradado vertical: filo claro arriba y canto oscuro al pie
+#The pill clips a vertical gradient: light edge on top, dark at the bottom
 func _paint(color: Color) -> void:
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
@@ -79,7 +78,7 @@ func _paint(color: Color) -> void:
 	style.corner_detail = 12
 	_body.add_theme_stylebox_override("panel", style)
 
-	#Hacia abajo gana saturacion y pierde brillo, como el JUGAR de la referencia
+	#Downward: more saturation, less brightness
 	var gradient := Gradient.new()
 	gradient.set_color(0, color.lightened(0.45))
 	gradient.set_color(1, Color.from_hsv(color.h, minf(color.s * 1.25, 1.0), color.v * 0.86))
@@ -95,7 +94,7 @@ func _paint(color: Color) -> void:
 	_shade.texture = texture
 
 
-#La sombra va aparte: dentro de la pildora el recorte la taparia
+#The shadow goes apart or the clip would hide it
 func _drop_shadow() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color.TRANSPARENT
@@ -117,7 +116,7 @@ func _outline(color: Color) -> StyleBoxFlat:
 	return style
 
 
-#Un latido: la pildora crece un poco y vuelve, y un anillo sale de ella y se desvanece
+#Beat: the pill grows a little and a ring fades out
 func _start_beat() -> void:
 	_beat = create_tween().set_loops()
 	_beat.tween_property(self, "scale", Vector2.ONE * 1.035, 0.22).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -134,7 +133,7 @@ func _ping() -> void:
 	ring.tween_property(_ring, "modulate:a", 0.0, 1.1)
 
 
-#With the pad, the selected button grows and stops beating as it does under the mouse; the keyboard keeps its lighter colour only
+#With the pad the selected button grows like under the mouse
 func _on_focus_changed() -> void:
 	var wanted := has_focus() and InputHints.uses_pad()
 	if wanted == _pad_hover:
@@ -150,7 +149,7 @@ func _on_device_changed(_kind: int) -> void:
 	_on_focus_changed()
 
 
-#Con el mouse encima deja de latir y se queda un poco mas grande
+#Hovered: stops beating and stays a little bigger
 func _on_enter() -> void:
 	UiSound.play_hover()
 	if _beat:

@@ -1,14 +1,12 @@
 class_name NetLink
 extends RefCounted
 
-#One TCP connection with its own thread: the thread is the only one that touches the socket; it reads whole messages into the inbox and
-#writes what waits in the outbox. The main thread only puts messages in the outbox and takes them from the inbox, each behind the Mutex,
-#so it never waits for the network
+#One TCP connection with its own thread: only it touches the socket; inbox and outbox behind a Mutex
 
 const CONNECT_TIMEOUT := 5000
-#The thread itself says "still here" this often, so the other side hears it even while this game is busy loading a round
+#The thread pings this often so the other side hears it while a round loads
 const PING_EVERY := 1000
-#Bytes a link to the fair screen may keep waiting for it before giving it up (about half a minute of game)
+#Bytes a fair screen link may keep waiting before it is dropped
 const MAX_BACKLOG := 262144
 
 var id := 0
@@ -23,12 +21,12 @@ var _running := false
 var _open := false
 var _closed := false
 var _reader := NetProtocol.Reader.new()
-#Last time any byte came from the other side, written by the thread
+#Last time a byte arrived, written by the thread
 var _heard := 0
-#A link to the fair screen never waits for the network: what the socket does not take yet waits in the backlog (thread only)
+#A fair screen link never blocks: unsent bytes wait in the backlog
 var _watcher := false
 var _backlog := PackedByteArray()
-#What went through, counted by the thread: messages and bytes each way, and the messages of each type that came in
+#Traffic counted by the thread: messages and bytes each way, and types received
 var _messages_in := 0
 var _bytes_in := 0
 var _messages_out := 0
@@ -36,7 +34,7 @@ var _bytes_out := 0
 var _kinds_in: Dictionary = {}
 
 
-#A link over a socket the server already accepted
+#Link over a socket the server accepted
 static func accepted(peer: StreamPeerTCP) -> NetLink:
 	var link := NetLink.new()
 	link._peer = peer
@@ -45,7 +43,7 @@ static func accepted(peer: StreamPeerTCP) -> NetLink:
 	return link
 
 
-#A link that connects to a room; the thread waits for the connection
+#Link that connects to a room; the thread waits for the connection
 static func connecting(host: String, port: int) -> NetLink:
 	var link := NetLink.new()
 	link._peer = StreamPeerTCP.new()
@@ -77,7 +75,6 @@ func take() -> Array[Dictionary]:
 	return messages
 
 
-#Milliseconds since anything came from the other side
 func heard_ago() -> int:
 	_mutex.lock()
 	var heard := _heard
@@ -99,14 +96,14 @@ func is_closed() -> bool:
 	return closed
 
 
-#The server marks the link of the fair screen: from now on its thread sends without waiting and cuts it if the screen stops reading
+#Server marks the fair screen link: send without waiting, cut it if it stops reading
 func set_watcher() -> void:
 	_mutex.lock()
 	_watcher = true
 	_mutex.unlock()
 
 
-#Messages and bytes that went through this link so far, each way, and how many messages of each type came in
+#Messages and bytes each way, and received messages per type
 func traffic() -> Dictionary:
 	_mutex.lock()
 	var counted := {"messages_in": _messages_in, "bytes_in": _bytes_in, "messages_out": _messages_out, "bytes_out": _bytes_out,
@@ -142,7 +139,7 @@ func _loop() -> void:
 		if status != StreamPeerTCP.STATUS_CONNECTED:
 			break
 		if not tuned:
-			#Small messages go out at once instead of waiting to be joined with others: less delay on a busy Wi-Fi
+			#Send small messages at once: less delay on a busy Wi-Fi
 			_peer.set_no_delay(true)
 			tuned = true
 		_mutex.lock()
@@ -189,8 +186,7 @@ func _loop() -> void:
 	_mutex.unlock()
 
 
-#Thread: writes what the socket takes right now and keeps the rest for the next turn. A screen that stops reading for long (a Wi-Fi that
-#froze) is cut instead of making the server wait; it comes back by itself with a fresh picture of the game
+#Thread: writes what the socket takes now; a screen that stops reading is cut
 func _send_without_waiting(outgoing: Array[PackedByteArray]) -> void:
 	for bytes in outgoing:
 		_backlog.append_array(bytes)

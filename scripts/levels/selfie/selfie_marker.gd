@@ -1,13 +1,11 @@
 class_name SelfieMarker
 extends Control
 
-#Where the next photo is, on the screen of a player: a round badge with a camera over the set and the meters left to it under it.
-#When the set is out of sight the badge waits at the edge of the screen with a tip that points toward it. While the frame blinks
-#before the shot the badge turns gold and beats; it fades out while its player is already in the photo. Every screen has its own
+#Next photo badge with the meters left; waits at the screen edge pointing when out of sight
 
 const RADIUS := 25.0
 const OUTLINE := 3.0
-#Room the badge keeps to the edges of the screen, and how long the tip that points out of it is
+#Edge margin and tip length
 const EDGE := 70.0
 const TIP := 14.0
 const FADE := 0.18
@@ -31,8 +29,7 @@ func _ready() -> void:
 	_body.set_corner_radius_all(4)
 
 
-#Puts the badge over "screen" when that point is in sight, or else at the edge of the screen on the way toward it. "behind" says the
-#point is behind the camera, where its spot on the screen comes out mirrored
+#Over "screen" when in sight, else at the edge toward it; "behind" mirrors the point
 func point_at(screen: Vector2, behind: bool, meters: float, hot: bool) -> void:
 	var screen_size := get_viewport_rect().size
 	if screen_size.x <= EDGE * 2.0 or screen_size.y <= EDGE * 2.0:
@@ -87,7 +84,7 @@ func _draw() -> void:
 	draw_string(UiKit.BUTTON_FONT, spot, text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, Palette.PAPER)
 
 
-#A little photo camera: its body with rounded corners, the bump of the shutter on top and the lens in the middle
+#Little photo camera icon
 func _draw_camera(centre: Vector2, half: float, ink: Color, fill: Color) -> void:
 	_body.bg_color = ink
 	draw_style_box(_body, Rect2(centre + Vector2(-half * 0.45, -half * 0.95), Vector2(half * 0.7, half * 0.5)))

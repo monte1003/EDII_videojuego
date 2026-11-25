@@ -1,12 +1,7 @@
 class_name SelfieStage
 extends ArenaGround
 
-#"El Plató" built from its layout with the candy ground of the game: a long island floating over a warm sea of clouds at sunset,
-#each set with its own floor, backdrop, piece and name on a board (the turntable under a giant ring light, the raised runway with its
-#belt and screen, the podium with its trophy, the dance floor of lit tiles under a mirror ball, the red carpet before a photo wall, the
-#pool of balls, the live set with a giant phone, the troll zone with its pads and curb, the gift boxes of the unboxing, the treadmills
-#and the dumbbell of the gym and the selfie sticks), and the studio around it: grandstands with an audience, light towers with sweeping
-#beams, TV cameras and an on-air sign. Nothing here decides a rule
+#"El Plató" built from its layout over a sunset sea of clouds
 
 const DECK_COLOR := Color("ffe2c2")
 const DECK_RIM := Color("ff6f86")
@@ -19,11 +14,11 @@ const PEACH := Color("ffb48a")
 const RED := Color("e8364f")
 const PLUM := Color("8d5bd6")
 const TROLL_GREEN := Color("7df27a")
-#How soon the props of the studio take their simpler shapes (1 is what the engine does by itself)
+#LOD bias of the studio props
 const PROP_LOD := 0.5
 const TROLL_FLOOR := Color("b79cf2")
 const GIFT_COLORS: Array[Color] = [Color("ff5c8a"), Color("3fd3ea"), Color("ffcf3f"), Color("8a63f5"), Color("5fdc9c"), Color("ff9340")]
-#The name of each set on its board, from the language of the photos and the networks
+#Board names from the language of photos and networks
 const SET_NAMES := {&"T": "GIRO 360", &"P": "TOP 3", &"W": "RETO DE BAILE", &"C": "ALFOMBRA ROJA", &"F": "PISCINA", &"D": "EN DIRECTO",
 	&"A": "PASARELA", &"Z": "ZONA TROL", &"U": "UNBOXING", &"G": "GIMNASIO FIT", &"S": "PALOS SELFIE"}
 const STUDIO_BULBS: Array[Color] = [Color("ffd27a"), Color("ff8a8a"), Color("fff1dc"), Color("5fdcc0")]
@@ -40,7 +35,7 @@ const BELT_TILE := 3.0
 const BELT_WARNING := 1.5
 const POP_TIME := 0.5
 const BLOCK_SIZE := Vector3(ArenaHazards.BLOCK_ACROSS, 0.9, ArenaHazards.BLOCK_ALONG)
-#How deep the tall pillars reach into the clouds
+#Depth of the tall pillars into the clouds
 const PILLAR_FOOT := -26.0
 const RIG_HEIGHT := 14.5
 
@@ -63,7 +58,6 @@ var _cheer: Tween
 var _on_air: StandardMaterial3D
 var _stage := -1
 var _beat := -1
-#The lids of the gift boxes, by cell
 var _lids: Array[Node3D] = []
 
 
@@ -73,7 +67,7 @@ func build(arena: ArenaLayout) -> void:
 	_terrain = CandyTerrain.new(self)
 	_terrain.set_bulb_palette(STUDIO_BULBS)
 	_build_sky()
-	#The runway and the podium stand near the rim: its wall is higher than a jump from them
+	#The rim wall is higher than a jump from the runway or podium
 	_terrain.wall_height = 4.5
 	_terrain.island(layout.outline, ArenaLayout.GROUND, DECK_COLOR, DECK_RIM, [], true)
 	_terrain.wall_height = CandyTerrain.WALL_HEIGHT
@@ -97,7 +91,7 @@ func build(arena: ArenaLayout) -> void:
 		_build_sensor(id)
 	_terrain.commit()
 	set_stage(0, false)
-	#The props of the studio take their simpler shapes sooner while they are small on screen; nothing is hidden
+	#Props switch to simpler shapes sooner when small; nothing is hidden
 	for piece in find_children("*", "MeshInstance3D", true, false):
 		(piece as MeshInstance3D).lod_bias = PROP_LOD
 
@@ -107,7 +101,7 @@ func watch(locator: PlayerLocator) -> void:
 		locator.watch_platform(id, _place_areas[id])
 
 
-#Shows what starts at this stage of the round; with "pop" the new pieces grow in instead of just appearing
+#Shows what starts at this stage; "pop" grows new pieces in
 func set_stage(stage: int, pop := true) -> void:
 	if stage == _stage:
 		return
@@ -119,7 +113,7 @@ func set_stage(stage: int, pop := true) -> void:
 		_reveal(block["rail"], ArenaLayout.is_on(block["sweeper"], stage), false)
 
 
-#Puts everything that moves where it is at "time" seconds of the round
+#Puts every moving piece where it is at "time"
 func update(time: float) -> void:
 	_turntable.rotation.y = SelfieLayout.TURNTABLE_SPIN * time
 	_disco.rotation.y = time * 0.6
@@ -159,7 +153,6 @@ func update(time: float) -> void:
 	_live_glow.emission_energy_multiplier = lerpf(_live_glow.emission_energy_multiplier, 0.35, 0.08)
 
 
-#The trampoline dips and springs back
 func bounce_pad(index: int) -> void:
 	if index < 0 or index >= _pads.size():
 		return
@@ -169,7 +162,6 @@ func bounce_pad(index: int) -> void:
 	tween.tween_property(pad, "scale", Vector3.ONE, 0.4).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
 
-#The audience jumps higher for a moment
 func cheer(power: float) -> void:
 	if _cheer != null and _cheer.is_valid():
 		_cheer.kill()
@@ -187,7 +179,7 @@ func _process(_delta: float) -> void:
 	_on_air.emission_energy_multiplier = 1.6 if fmod(clock, 1.6) < 1.1 else 0.3
 
 
-#The live set thumps: the speakers pump and the stage flashes
+#Live set thump: speakers pump and the stage flashes
 func _thump() -> void:
 	for speaker in _speakers:
 		var tween := create_tween()
@@ -196,7 +188,7 @@ func _thump() -> void:
 	_live_glow.emission_energy_multiplier = 1.4
 
 
-#A warm sky of a late afternoon over a sea of clouds, a sun low on one side and a soft haze far away
+#Late afternoon sky over clouds with a low sun and haze
 func _build_sky() -> void:
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Color(0.46, 0.6, 0.98)
@@ -239,7 +231,7 @@ func _build_sky() -> void:
 	add_child(sun)
 
 
-#The turntable: a striped disc that turns flush with the floor, a gold hub, a coral band around it and a ring of bulbs on the floor
+#Turntable disc with a gold hub, coral band and floor bulbs
 func _build_turntable() -> void:
 	var radius := SelfieLayout.TURNTABLE_RADIUS
 	var tool := SurfaceTool.new()
@@ -270,8 +262,7 @@ func _build_turntable() -> void:
 	_terrain.rail(rail, CORAL, true)
 
 
-#The raised runway along the north side: a teal deck on candy pillars, two solid ramps down from its ends, the belt along it and a big
-#screen behind it
+#Raised runway on pillars with ramps, belt and screen
 func _build_runway() -> void:
 	var box := SelfieLayout.RUNWAY
 	var outline := _rect_outline(box)
@@ -297,8 +288,7 @@ func _build_runway() -> void:
 	_screen(Vector3(0.0, SelfieLayout.UPPER + 3.0, box.position.y - 0.55), Vector2(15.0, 5.2), 0.0, CORAL, AMBER)
 
 
-#The podium: gold for the first place, coral for the second (with its step) and teal for the third, each with its number; a trophy
-#on its own little island behind, and two confetti cannons at its front corners
+#Podium blocks with numbers, a trophy island and confetti cannons
 func _build_podium() -> void:
 	var blocks: Array[Array] = [[SelfieLayout.PODIUM, SelfieLayout.PODIUM_TOP, GOLD, "1"], [SelfieLayout.SECOND, SelfieLayout.SECOND_TOP, CORAL, "2"],
 		[SelfieLayout.SECOND_STEP, SelfieLayout.LOW_TOP, CORAL.lightened(0.25), ""], [SelfieLayout.THIRD, SelfieLayout.LOW_TOP, TEAL, "3"]]
@@ -307,7 +297,7 @@ func _build_podium() -> void:
 		_terrain.platform(_rect_outline(box), float(entry[1]), ArenaLayout.GROUND, entry[2], CREAM)
 		if String(entry[3]) == "":
 			continue
-		#The place in a number with volume on the face toward the middle of the studio
+		#Place number facing the middle
 		var number := Word3D.make(entry[3], float(entry[1]) * 0.72, box.size.y * 0.6, (entry[2] as Color).darkened(0.35), 0.14, CREAM)
 		number.position = Vector3(box.end.x + 0.07, float(entry[1]) * 0.5, box.get_center().y)
 		number.rotation.y = PI / 2.0
@@ -324,8 +314,7 @@ func _build_podium() -> void:
 		add_child(cannon)
 
 
-#The dance floor: a disc of tiles that light up with the beat inside a gold rail with bulbs, a mirror ball hanging from a boom over
-#it and a screen on the far side of the island
+#Dance floor with a gold rail, mirror ball and screen
 func _build_dance_floor() -> void:
 	var center := Vector3(SelfieLayout.DANCE_CENTER.x, ArenaLayout.GROUND, SelfieLayout.DANCE_CENTER.y)
 	var tiles := CylinderMesh.new()
@@ -353,7 +342,7 @@ func _build_dance_floor() -> void:
 	_screen(Vector3(center.x + 10.6, 4.6, 0.0), Vector2(9.0, 5.0), -PI / 2.0, PLUM, CORAL)
 
 
-#The red carpet between gold velvet ropes, ending at a photo wall of little icons
+#Red carpet between velvet ropes ending at a photo wall
 func _build_carpet() -> void:
 	var box := SelfieLayout.CARPET
 	_terrain.inlay(_rect_outline(box), 0.018, RED)
@@ -406,14 +395,14 @@ func _build_carpet() -> void:
 		paints.append(icon)
 	for row in rows:
 		for column in columns:
-			#The same icons on both faces: the wall is seen from the audience too
+			#Icons on both faces of the wall
 			for face: float in [-1.0, 1.0]:
 				var spot := Vector3((column - (columns - 1) / 2.0) * 0.98, 0.75 + row * 1.0 + (0.15 if column % 2 == 1 else 0.0), face * (panel.size.y / 2.0 + 0.02))
 				var tile := _piece(wall, quad, paints[(row * 2 + column) % paints.size()], spot)
 				tile.rotation.y = PI if face < 0.0 else 0.0
-	#The wall never moves: its pieces join into one mesh per icon
+	#The still wall joins into one mesh per icon
 	StaticBatch.join(wall, [])
-	#A soft gold frame over both faces rounds its edges
+	#Soft gold frame rounding the edges
 	var edge := panel.size.x / 2.0 + 0.05
 	for face: float in [-0.2, 0.2]:
 		var rim := PackedVector3Array([wall_at + Vector3(-edge, 0.1, face), wall_at + Vector3(-edge, SelfieLayout.PHOTO_WALL_TOP + 0.1, face),
@@ -421,7 +410,7 @@ func _build_carpet() -> void:
 		_terrain.rail(rim, GOLD, face < 0.0)
 
 
-#The pool: a striped wall to hop over, a soft teal floor that bounces and hundreds of coloured balls; a rainbow stands behind it
+#Ball pool with a striped wall, bouncy floor and a rainbow
 func _build_pool() -> void:
 	var center := SelfieLayout.POOL_CENTER
 	var pieces := 28
@@ -472,8 +461,7 @@ func _build_pool() -> void:
 		add_child(puff)
 
 
-#The live set: a round coral stage with its ramp, a giant phone behind it that shows the live, a ring light on a tripod and two
-#speakers that pump to the beat of the stage
+#Live set: round stage, giant phone, ring light and speakers
 func _build_live_set() -> void:
 	var center := SelfieLayout.LIVE_CENTER
 	var ramp: Array = SelfieLayout.LIVE_RAMP
@@ -510,8 +498,7 @@ func _build_live_set() -> void:
 	_ring_light(Vector3(light_at.x, ArenaLayout.GROUND, light_at.y), Vector3(center.x, 1.6, center.y), 0.85, 2.3)
 
 
-#The light rig over the middle: a candy arch across the island with a giant ring light hanging over the turntable and little
-#spotlights along its bar
+#Candy arch with the giant ring light and spotlights
 func _build_rig() -> void:
 	var ends: Array[Vector3] = [Vector3(0.0, RIG_HEIGHT, -25.6), Vector3(0.0, RIG_HEIGHT, 25.6)]
 	for end in ends:
@@ -552,8 +539,7 @@ func _build_rig() -> void:
 		_piece(self, lens, PartyKit.paint(Color("fff1c4"), 3.0, 0.2), Vector3(0.0, RIG_HEIGHT - 0.47, z))
 
 
-#A trampoline is a dark base, a pink ring and a yellow skin that glows; the cannon is gold, with an arrow toward where it throws and
-#hoops along its arc up to the runway
+#Trampoline and gold cannon with an arrow and hoops along its arc
 func _build_pads() -> void:
 	var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 	for pad in layout.pads:
@@ -592,7 +578,7 @@ func _build_pads() -> void:
 			loop.basis = Basis.looking_at(heading.normalized(), Vector3.UP) * Basis(Vector3.RIGHT, PI / 2.0)
 
 
-#The boom of microphones over the dance floor and the prop boxes that sweep the runway, each on a dark rail with yellow stops
+#Microphone boom over the dance floor and prop boxes on the runway
 func _build_hazards() -> void:
 	for spinner in layout.spinners:
 		var pivot := Node3D.new()
@@ -605,7 +591,7 @@ func _build_hazards() -> void:
 			holder.rotation.y = PI / 2.0 * bar
 			pivot.add_child(holder)
 			if gym:
-				#A dumbbell: a striped bar with a big weight at each end
+				#Striped dumbbell
 				holder.add_child(PropKit.make(&"bumper", Vector3(arm * 2.0, 0.42, 0.42), Color("c9c4d8")))
 				for side: float in [-1.0, 1.0]:
 					var weight := _piece(holder, _disc(0.62, 0.62, 0.34), PartyKit.candy(Color("3c3350"), CORAL, 12.0), Vector3(side * (arm - 0.2), 0.45, 0.0))
@@ -629,7 +615,7 @@ func _build_hazards() -> void:
 		var holder := Node3D.new()
 		add_child(holder)
 		if sweeper.get("stick", false):
-			#A giant selfie stick: a soft base that does the pushing, a striped pole and a phone on top that looks at the set
+			#Giant selfie stick: soft base, striped pole and phone
 			holder.add_child(PropKit.make(&"foam_block", BLOCK_SIZE, PartyKit.PINK.lightened(0.2)))
 			var pole := _piece(holder, _disc(0.07, 0.09, 2.6), PartyKit.candy(CREAM, CORAL, 2.0, 10.0), Vector3(0.0, 2.2, 0.0))
 			pole.rotation.x = -0.25
@@ -652,8 +638,7 @@ func _build_hazards() -> void:
 		_blocks.append({"node": holder, "rail": rail, "sweeper": sweeper})
 
 
-#The studio audience on two floating grandstands along the long sides, with balloons at their ends, and four light towers with
-#sweeping beams joined by bunting
+#Audience grandstands with balloons and light towers with beams
 func _build_audience() -> void:
 	_crowd = CrowdField.new()
 	add_child(_crowd)
@@ -689,8 +674,7 @@ func _build_audience() -> void:
 			[CORAL, GOLD, TEAL, CREAM, PEACH]))
 
 
-#Around the studio: TV cameras on floating pedestals at both ends, the on-air sign over the north grandstand, a sea of clouds below
-#and big clouds on the horizon
+#TV cameras, on-air sign, cloud sea and horizon clouds
 func _build_scenery() -> void:
 	for side: float in [-1.0, 1.0]:
 		var at := Vector3(side * 50.0, -0.5, 8.0 * side)
@@ -721,8 +705,7 @@ func _build_scenery() -> void:
 		var distance := _rng.randf_range(95.0, 125.0)
 		var at := Vector3(cos(angle) * distance, _rng.randf_range(4.0, 16.0), sin(angle) * distance)
 		var size := _rng.randf_range(9.0, 14.0)
-		#The ring on the horizon does not drift, or one of its clouds would cross the set sooner or later; its speed is still drawn so the
-		#rest of the set comes out as before
+		#Static horizon ring; its speed is still drawn so the rest comes out the same
 		_rng.randf()
 		sea.add_cloud(at, size, tones[index % tones.size()], 0.0, _rng)
 	add_child(sea)
@@ -730,7 +713,7 @@ func _build_scenery() -> void:
 	add_child(PartyKit.sparkles(Vector3(42.0, 8.0, 24.0), 70))
 
 
-#A belt with its moving surface a little over the floor it lies on, its candy rails and drums
+#Belt over the floor with rails and drums
 func _build_belt(belt: Dictionary) -> void:
 	var from: Vector3 = belt["a"]
 	var to: Vector3 = belt["b"]
@@ -751,8 +734,7 @@ func _build_belt(belt: Dictionary) -> void:
 	_belts.append({"belt": belt, "material": material, "tiles": length / BELT_TILE})
 
 
-#The troll zone: a plum floor walled by a striped curb that a player hops over, low pads with a high one in the middle, and angry
-#comments that float over it on poles
+#Troll zone: plum floor, striped curb, pads and floating angry comments
 func _build_troll_zone() -> void:
 	var box := SelfieLayout.TROLL
 	_terrain.inlay(_rect_outline(box.grow(-SelfieLayout.CURB_THICKNESS)), 0.016, TROLL_FLOOR)
@@ -780,14 +762,13 @@ func _build_troll_zone() -> void:
 		bubble.position = spot + Vector3(0.0, 3.4 + float(index % 2) * 0.8, 0.0)
 		bubble.rotation.y = atan2(box.get_center().x - spot.x, box.get_center().y - spot.z)
 		add_child(bubble)
-		#The word is on the face that looks into the zone, where the players and the camera of its photo are
+		#Words face into the zone
 		var word := Word3D.make(words[index], 0.62, 1.5, PLUM)
 		word.position = Vector3(0.0, 0.65, 0.5)
 		bubble.add_child(word)
 
 
-#The unboxing: a grid of gift boxes flush with the floor, each with a ribbon and a bow on its lid; the lid rattles and pops up with a
-#spring when its box throws whoever stands on it
+#Gift box grid with lids that rattle and pop
 func _build_unboxing() -> void:
 	var side := SelfieLayout.UNBOX_CELL - 0.18
 	for cell in SelfieLayout.UNBOX_GRID * SelfieLayout.UNBOX_GRID:
@@ -815,7 +796,7 @@ func _build_unboxing() -> void:
 		_lids.append(lid)
 
 
-#The gym: a rubber mat under the two treadmills, stacks of weights at its corners and a mirror on its far side
+#Gym mat, weights and a mirror
 func _build_gym() -> void:
 	var centre := SelfieLayout.GYM_CENTER
 	_terrain.inlay(_rect_outline(Rect2(centre.x - 4.8, centre.y - 3.8, 9.6, 7.6)), 0.012, Color("4c5b7a"))
@@ -826,8 +807,7 @@ func _build_gym() -> void:
 			plate.rotation.y = level * 0.4
 
 
-#A board with the name of each set hanging from two cables over the side of the set farthest from the middle, high enough to stay out
-#of the photos and out of the way, facing the middle (the runway has its screen instead)
+#Set name boards hanging high on the far side, facing the middle
 func _build_set_names() -> void:
 	var signs := Node3D.new()
 	add_child(signs)
@@ -847,11 +827,11 @@ func _build_set_names() -> void:
 		for way: float in [-1.0, 1.0]:
 			var top := board.position + side * way * 2.6 + Vector3(0.0, 1.25, 0.0)
 			_cable(top, top + Vector3(0.0, 14.0, 0.0), 0.035, null, signs)
-	#The boards and their cables never move: they are joined into a few meshes
+	#Still boards and cables join into a few meshes
 	StaticBatch.join(signs, [])
 
 
-#A big screen standing on its long edge at "at" (its middle), turned "yaw", in a candy frame with bulbs
+#Big screen in a candy frame with bulbs
 func _screen(at: Vector3, size: Vector2, yaw: float, a: Color, b: Color) -> void:
 	var holder := Node3D.new()
 	holder.position = at
@@ -873,7 +853,7 @@ func _screen(at: Vector3, size: Vector2, yaw: float, a: Color, b: Color) -> void
 	_terrain.rail(corners, CREAM, true)
 
 
-#A pillar that rises from the clouds and an arm over to "tip", with a cable down to what hangs there
+#Pillar from the clouds with an arm and a cable to "tip"
 func _boom(foot: Vector3, tip: Vector3, color: Color) -> void:
 	var top := tip.y + 6.0
 	var pillar := PartyKit.pillar(top - PILLAR_FOOT, 0.6, color, CREAM)
@@ -883,7 +863,7 @@ func _boom(foot: Vector3, tip: Vector3, color: Color) -> void:
 	_cable(tip + Vector3(0.0, 1.0, 0.0), Vector3(tip.x, top - 0.6, tip.z))
 
 
-#A mirror ball: a faceted sphere that shines, with a little cap
+#Faceted shining sphere with a cap
 func _mirror_ball(radius: float) -> Node3D:
 	var root := Node3D.new()
 	var tool := SurfaceTool.new()
@@ -917,7 +897,7 @@ func _mirror_ball(radius: float) -> Node3D:
 	return root
 
 
-#A ring light on a tripod: a glowing ring facing "look_at" and three thin legs
+#Ring light on a tripod facing "look_at"
 func _ring_light(foot: Vector3, look_at: Vector3, radius: float, height: float) -> void:
 	var holder := Node3D.new()
 	holder.position = foot + Vector3(0.0, height, 0.0)
@@ -939,7 +919,7 @@ func _ring_light(foot: Vector3, look_at: Vector3, radius: float, height: float) 
 	_cable(foot + Vector3(0.0, height - radius - 0.1, 0.0), holder.position + Vector3(0.0, -radius + 0.1, 0.0), 0.05, dark)
 
 
-#A thin straight line between two points: a cable, a rope or a leg
+#Thin line between two points
 func _cable(from: Vector3, to: Vector3, radius := 0.035, material: Material = null, parent: Node3D = null) -> void:
 	var length := from.distance_to(to)
 	if length < 0.01:
@@ -954,14 +934,14 @@ func _cable(from: Vector3, to: Vector3, radius := 0.035, material: Material = nu
 	cable.basis = Basis(Quaternion(Vector3.UP, (to - from).normalized()))
 
 
-#A soft rope that hangs between posts
+#Rope between posts
 func _rope(points: PackedVector3Array, color: Color) -> void:
 	var material := PartyKit.paint(color, 0.1, 0.5)
 	for index in points.size() - 1:
 		_cable(points[index], points[index + 1], 0.05, material)
 
 
-#A slice of a ring on the floor between two radii and two angles, painted one colour, "height" over the floor
+#Floor ring slice between two radii and angles
 func _fan(tool: SurfaceTool, inner: float, outer: float, from: float, to: float, color: Color, height: float) -> void:
 	var corners: Array[Vector3] = [Vector3(cos(from) * inner, height, sin(from) * inner), Vector3(cos(from) * outer, height, sin(from) * outer),
 		Vector3(cos(to) * outer, height, sin(to) * outer), Vector3(cos(to) * inner, height, sin(to) * inner)]

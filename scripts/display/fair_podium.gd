@@ -1,13 +1,11 @@
 class_name FairPodium
 extends PodiumCeremony
 
-#The podium ceremony of the game on the fair screen, the same as on the computers of the players but with no way to skip it: no key hint,
-#no key at all, and nothing after it but the signal that it is over. The players and their totals are the ones the server counted at
-#the end of the game ("final"), since this screen did not play
+#Podium ceremony on the fair screen, unskippable, with the final totals from the server
 
 signal done
 
-#Seconds everybody stays posing on the stage after the last crown
+#Seconds posing on the stage after the last crown
 const LAST_SHOT := 4.5
 
 #{"id", "name", "character", "total", "best"} of everybody in the room

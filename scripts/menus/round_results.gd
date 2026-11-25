@@ -1,6 +1,6 @@
 extends Screen
 
-#What happened in the round that just ended: the medal, the points, what is missing for the next one, and the way on
+#Round result: medal, points, what is missing for the next one and the way on
 
 const BUTTON_WIDTH := 340.0
 const BADGE_SIZE := 118.0
@@ -29,7 +29,7 @@ func _ready() -> void:
 		_count_down()
 
 
-#In a room the results stay NET_RESULTS_SECONDS and then the server moves everybody on; the button shows the seconds left
+#In a room the results stay NET_RESULTS_SECONDS, then the server moves on
 func _count_down() -> void:
 	var tween := create_tween()
 	for left in range(GameSession.NET_RESULTS_SECONDS, 0, -1):
@@ -40,7 +40,7 @@ func _count_down() -> void:
 			GameSession.advance())
 
 
-#Going back makes no sense here: Enter goes on
+#No going back here: Enter goes on
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("menu_confirm") and (not GameSession.is_networked() or GameSession.practice):
 		get_viewport().set_input_as_handled()
@@ -111,7 +111,7 @@ func _build() -> void:
 		_column.add_child(leave)
 
 
-#The medal on the left and, next to it, the points with the name of the medal under them
+#Medal with the points and its name beside it
 func _build_score_row() -> Control:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -161,7 +161,7 @@ func _next_text() -> String:
 	return "VER RESULTADOS" if GameSession.is_last_round() else "SIGUIENTE RONDA"
 
 
-#One dot per round with the colour of the medal it gave
+#One dot per round in its medal colour
 func _build_progress() -> Control:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -191,7 +191,7 @@ func _animate_in() -> void:
 	tween.chain().tween_callback(_land_medal)
 
 
-#The medal drops on its place: it squashes, a ring of light opens around it and the screen shakes a little; then the points count up
+#The medal lands with a squash, a ring and a shake, then the points count up
 func _land_medal() -> void:
 	_badge.modulate.a = 1.0
 	_badge.scale = Vector2.ONE * 2.4
@@ -216,7 +216,6 @@ func _on_medal_landed() -> void:
 	count.tween_callback(_after_count)
 
 
-#A ring that opens from the medal and fades
 func _burst() -> void:
 	var ring := Panel.new()
 	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -253,6 +252,6 @@ func _after_count() -> void:
 	SynthSound.play(self, SynthSound.tone(1318.0, 0.4, 0.0, 0.4), -9.0)
 
 
-#The key on the main button follows the device in use: Enter or the cross of the pad
+#Key hint follows the device in use
 func _on_device_changed(_kind: int) -> void:
 	_button.set_icon(InputHints.confirm_icon())

@@ -1,8 +1,6 @@
 extends SceneTree
 
-#Checks the tables of level 1, the feed events, the spinners, the turning belt, the slides, the decks, the rolling balls and the new obstacles (axes, likes,
-#scroll wheels, giant balls, fans and stories) with no scene;
-#run: godot --headless --path . --script res://scripts/tests/feed_check.gd
+#Checks the level 1 tables, feed events and obstacles with no scene; run headless with --script
 
 var _failures := 0
 var _log: Array[String] = []
@@ -111,7 +109,7 @@ func _check_connectivity() -> void:
 	_expect(from_every_vertex, "desde cualquier isla se llega a la meta")
 
 
-#Simple routes from the start to the goal that cost at most "slack" more than the best one
+#Simple routes to the goal at most "slack" over the best one
 func _check_routes() -> void:
 	var graph := Level01Layout.build_graph()
 	var best := graph.shortest_path(Level01Layout.START, Level01Layout.GOAL).cost
@@ -144,7 +142,7 @@ func _check_events() -> void:
 	var settings := Level01Settings.new()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
-	#The feed itself, on the three bridges it used to take down (today plain), so the mechanism stays checked
+	#The feed mechanism on the three bridges it used to take down
 	var events := Level01Events.new(settings, rng, [[&"C2", &"C3"], [&"A6", &"A7"], [&"C7", &"C8"]])
 	_log.clear()
 	events.warned.connect(func(a: StringName, b: StringName, seconds: float) -> void: _log.append("aviso %s-%s %.0f" % [a, b, seconds]))
@@ -265,7 +263,7 @@ func _check_balls() -> void:
 		var period: float = ball["period"]
 		placed = placed and Level01Layout.POSITIONS.has(island) and not busy.has(island) and half >= 2.0
 		placed = placed and half + Level01Layout.BALL_RADIUS <= Level01Layout.radius_of(island)
-		#Over one period the ball reaches both ends of its diameter, passes the middle and turns around
+		#The ball reaches both ends, passes the middle and turns around
 		var low := 0.0
 		var high := 0.0
 		var turns := 0
@@ -315,7 +313,7 @@ func _check_surges() -> void:
 	_expect(surged == 3 and surge_ok, "tres barras tienen arranques: nunca se paran ni dan marcha atrás y su velocidad cambia al menos al doble")
 
 
-#A slide only goes down: it leaves a high island for a lower one, carries along its direction and has no arc back in the graph
+#Slides only go down, along their direction, with no arc back
 func _check_slides() -> void:
 	var graph := Level01Layout.build_graph()
 	var count := 0
@@ -341,7 +339,7 @@ func _check_slides() -> void:
 		"un puente común no arrastra y una cinta arrastra a la velocidad de la cinta")
 
 
-#The three ways of each part take about the same: their costs in the graph are within a couple of units of each other
+#The three ways of each part cost about the same
 func _check_lanes() -> void:
 	var graph := Level01Layout.build_graph()
 	var parts := {
@@ -362,7 +360,7 @@ func _check_lanes() -> void:
 		_expect(highest - lowest <= 3.0, "los tres caminos de la %s cuestan casi lo mismo: de %.1f a %.1f" % [part, lowest, highest])
 
 
-#The comments: on a bridge of the course, a cycle with its parts in order, a push that only hits on the ground and across its path
+#Comments: a cycle in order, pushing only on the ground and across the path
 func _check_comments() -> void:
 	var placed := true
 	var cycle := true
@@ -384,7 +382,7 @@ func _check_comments() -> void:
 		while time < period * 4.0:
 			var state := Level01Hazards.comment_state(comment, time)
 			var stage := int(state["stage"])
-			#The parts only go forward inside a cycle: typing, warning, push, fading and then idle (which ranks last)
+			#Parts only go forward inside a cycle
 			var rank := 5 if stage == Level01Hazards.COMMENT_IDLE else stage
 			if rank < last and int(state["cycle"]) == floori((time - step + float(comment["phase"])) / period):
 				order = false
@@ -418,7 +416,7 @@ func _check_comments() -> void:
 	_expect(waits, "la espera hasta el próximo barrido nunca supera el periodo y durante el aviso es menor que el aviso")
 
 
-#The decks: under the lower end of their bridge, wider and longer than it, clear of the islands, with a pad that lifts back to the start
+#Decks under the lower bridge end, wider than it, clear of islands, with a return pad
 func _check_decks() -> void:
 	var edges := Level01Layout.soft_edges()
 	var under := true
@@ -445,10 +443,10 @@ func _check_decks() -> void:
 		var pad: Vector3 = lift["pad"]
 		var local_pad := basis.inverse() * (pad - centre)
 		covers = covers and absf(local_pad.z) <= size.y / 2.0 - 1.0 and absf(pad.y - top) < 0.01
-		#The pad stands out of the side of the bridge, so its bubble rises clear of it, and inside the rim of the deck
+		#The pad stands outside the bridge and inside the deck rim
 		var bridge_half := Level01Layout.width_of(Level01Layout.kind_of(edge[0], edge[1])) / 2.0
 		covers = covers and absf(local_pad.x) >= bridge_half + 0.9 and absf(local_pad.x) <= size.x / 2.0 - 1.0
-		#The bubble lands on the platform of the bridge that is closer to the start of the course: inside it, and out of reach of its bar
+		#The bubble lands on the start-side platform, inside it and away from its bar
 		var start: StringName = lift["to"]
 		var other: StringName = edge[1] if start == edge[0] else edge[0]
 		var own: bool = start == edge[0] or start == edge[1] or Level01Layout.LIFT_BACK.get("%s|%s" % edge, &"") == start
@@ -474,7 +472,7 @@ func _check_decks() -> void:
 			if absf(local_island.x) <= size.x / 2.0 + Level01Layout.radius_of(id) and absf(local_island.z) <= size.y / 2.0 + Level01Layout.radius_of(id) and (Level01Layout.POSITIONS[id] as Vector3).y - 2.5 < top + 2.0:
 				clear = false
 				print("  la cubierta %s-%s toca la isla %s" % [edge[0], edge[1], id])
-		#Decks that overlap are one floor: they lie at the same height, so there is no step between them
+		#Overlapping decks share one height
 		var outline := PackedVector2Array()
 		for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
 			var spot := centre + basis * Vector3(corner.x * size.x / 2.0, 0.0, corner.y * size.y / 2.0)
@@ -498,9 +496,7 @@ func _check_decks() -> void:
 	_expect(hit, "la plataforma de la cubierta responde a quien la pisa y no a quien está lejos")
 
 
-#The floor of the decks has no pocket: from the pad of any deck a racer can walk to every free spot of every deck that touches it, around the
-#pieces of the rim (a body is about 0.45 m wide); no piece of the rim stands inside another deck, the rim has no gap along the edge of the
-#joined floor, and the bubble that catches a fall never goes to a bridge further on than the one above
+#Deck floors have no pockets or rim gaps: every free spot is walkable from the pad
 func _check_deck_floors() -> void:
 	var edges := Level01Layout.soft_edges()
 	var decks: Array[Dictionary] = []
@@ -542,7 +538,7 @@ func _check_deck_floors() -> void:
 			if not held:
 				gaps += 1
 				print("  hueco en el borde de la cubierta en ", spot)
-	#The bubble that catches a fall from the middle of a bridge goes to its start or further back, never ahead
+	#A bubble from mid bridge goes to its start or further back
 	var ahead := 0
 	for edge in edges:
 		var deck := Level01Layout.deck_of(edge)
@@ -557,7 +553,7 @@ func _check_deck_floors() -> void:
 		var pad: Vector3 = deck["lift"]["pad"]
 		var size: Vector2 = deck["size"]
 		var basis := Basis(Vector3.UP, float(deck["yaw"]))
-		#A grid of one meter in the frame of the deck, from the cell of the pad outward over the floors of all the decks at that height
+		#One-meter grid flood from the pad over the decks at that height
 		var reached: Dictionary = {}
 		var free: Dictionary = {}
 		var columns := ceili(size.x)
@@ -601,8 +597,7 @@ func _check_deck_floors() -> void:
 	_expect(trapped == 0 and cells > 200, "desde el cañón de cada cubierta se camina a todo su piso, sin rincones cerrados (%d de %d celdas sin alcanzar)" % [trapped, cells])
 
 
-#The axes of a row swing over their bridge: they hit whoever stands under them when they pass low, not whoever waits between two, and a jump
-#does not clear them; they push across the bridge the way they swing
+#Axes hit only when low over the bridge, not between two; a jump does not clear them
 func _check_axes() -> void:
 	var placed := true
 	var reach := true
@@ -651,8 +646,7 @@ func _axe_low(row: Dictionary, index: int) -> float:
 	return time
 
 
-#A like flies out across the bridge after shaking, holds and goes back: it only hits while out, never the far strip of the bridge, and it
-#throws toward the side away from its barrel
+#A like flies across after shaking, hits only while out and throws away from its barrel
 func _check_punchers() -> void:
 	var cycle := true
 	var hits := true
@@ -678,8 +672,7 @@ func _check_punchers() -> void:
 	_expect(hits, "el like golpea el medio del puente solo cuando sale, tiembla antes, nunca alcanza la orilla de enfrente y lanza lejos de su caja")
 
 
-#Scroll wheels and giant balls roll from the middle of the far plate to the middle of the near one; a wheel is jumped, a ball is not, and the
-#balls never fill the three lanes at once and light their lane before they come
+#Wheels and balls roll plate to plate; wheels can be jumped, balls never fill all three lanes
 func _check_runs() -> void:
 	var placed := true
 	var rolls := true
@@ -719,7 +712,7 @@ func _check_runs() -> void:
 	_expect(lanes, "las bolas gigantes nunca llenan los tres carriles y el carril se enciende justo antes de su bola")
 
 
-#A fan blows only after spinning up, across its bridge toward the side away from it, on the floor and over it, and not off its bridge
+#A fan blows only after spinning up, across its bridge and not off it
 func _check_fans() -> void:
 	var blows := true
 	for fan: Dictionary in Level01Layout.FANS:
@@ -737,7 +730,7 @@ func _check_fans() -> void:
 	_expect(Level01Layout.FANS.size() == 2 and blows, "dos ventiladores: giran antes de soplar y soplan de lado, en el piso y en el aire, solo sobre su puente")
 
 
-#A tile of stories shakes when somebody stands on it, drops after its shake and comes back after a while; the bubble puts back the one under its landing
+#A story tile shakes when stepped on, drops and comes back; the bubble restores the one it lands on
 func _check_tiles() -> void:
 	var tiles := Level01Tiles.new()
 	var plate: StringName = Level01Layout.TILE_PLATES[0]
@@ -767,8 +760,7 @@ func _check_tiles() -> void:
 	_expect(Level01Layout.TILE_PLATES.size() == 2 and centres.size() == Level01Layout.TILE_GRID * Level01Layout.TILE_GRID, "dos plataformas de historias de 3 x 3 baldosas")
 	_expect(shaking and dropped and back, "la baldosa pisada tiembla, cae después de su temblor y vuelve después de un rato; las demás no se mueven: %s" % [states])
 	_expect(restored and tiles.state_of(plate, 4) == Level01Tiles.State.UP, "la burbuja devuelve la baldosa donde aterriza, y nadie la sacude desde el aire")
-	#In a room: a tile that a racer of another computer stepped on shakes, drops and comes back here too, without being told back to the
-	#others; told again while it shakes, it is not started over; a tile that does not exist is ignored
+	#In a room a tile stepped elsewhere also drops here, without echo, restart or unknown tiles
 	var shared := Level01Tiles.new()
 	var told: Array[String] = []
 	var seen: Array[String] = []
@@ -807,7 +799,7 @@ func _middle_time(ball: Dictionary) -> float:
 	return time
 
 
-#No two bridges cross or overlap, and no bridge goes through an island that is not its end: bodies that share a place trap a racer
+#No bridges cross or pass through islands that are not their ends
 func _check_crossings() -> void:
 	var crossings := 0
 	var through := 0
@@ -840,7 +832,7 @@ func _check_crossings() -> void:
 				widths.append(Level01Layout.width_of(edge[4]))
 		for a in angles.size():
 			for b in range(a + 1, angles.size()):
-				#A plate is open only at its two ends, so its two bridges come in straight from opposite sides
+				#A plate is open only at its two ends
 				if Level01Layout.is_plate(id):
 					if absf(angle_difference(angles[a], angles[b])) < PI - 0.01:
 						tight += 1
@@ -853,7 +845,7 @@ func _check_crossings() -> void:
 	_expect(tight == 0, "los puentes de una isla salen con espacio entre ellos y no se montan (%d pares justos)" % tight)
 
 
-#The bridge as a segment on the ground, from the rim of one island to the rim of the other
+#Bridge as a ground segment between island rims
 func _bridge_line(edge: Array) -> Array[Vector2]:
 	var from: Vector3 = Level01Layout.POSITIONS[edge[0]]
 	var to: Vector3 = Level01Layout.POSITIONS[edge[1]]

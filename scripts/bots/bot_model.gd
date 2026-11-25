@@ -1,7 +1,7 @@
 class_name BotModel
 extends BotLook
 
-#Final bot model: idle and run while it walks, a wind-up while it warns and a shove when it hits
+#Final bot model: idle, run, wind-up and shove
 
 @export var idle_animation: StringName = &"idle/Idle"
 @export var run_animation: StringName = &"run/Running"

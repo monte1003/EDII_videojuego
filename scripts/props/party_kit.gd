@@ -1,8 +1,7 @@
 class_name PartyKit
 extends RefCounted
 
-#Pieces of a game-show set built from code: banners, candy pillars, light beams, rainbows, grandstands and lights.
-#Anything that repeats goes in a MultiMesh or a single mesh, so a whole set costs a handful of draw calls
+#Game-show set pieces from code; repeats go in MultiMesh or one mesh
 
 const CANDY: Shader = preload("res://assets/shaders/candy_stripes.gdshader")
 const BUNTING: Shader = preload("res://assets/shaders/bunting.gdshader")
@@ -22,13 +21,13 @@ const PALETTE: Array[Color] = [PINK, YELLOW, CYAN, VIOLET, GREEN, ORANGE]
 const STAND_STEP := 0.9
 const STAND_DEPTH := 1.3
 const FAN_SPACING := 1.3
-#How far the rope of the bunting stands from the plane of its flags
+#Rope offset from the flag plane
 const ROPE_LIFT := 0.02
 
 static var _cache: Dictionary = {}
 
 
-#Two colours in alternate stripes around a shape; the same material is shared by every piece that asks for it
+#Shared two-colour stripe material
 static func candy(a: Color, b: Color, stripes: float, twist := 0.0, glow := 0.0) -> ShaderMaterial:
 	var key := "candy_%s_%s_%s_%s_%s" % [a.to_html(), b.to_html(), stripes, twist, glow]
 	if _cache.has(key):
@@ -44,7 +43,7 @@ static func candy(a: Color, b: Color, stripes: float, twist := 0.0, glow := 0.0)
 	return material
 
 
-#A plain painted material, shared; "glow" above 0 makes it shine on its own
+#Shared plain material; "glow" above 0 shines
 static func paint(color: Color, glow := 0.0, roughness := 0.5) -> StandardMaterial3D:
 	var key := "paint_%s_%s_%s" % [color.to_html(), glow, roughness]
 	if _cache.has(key):
@@ -60,7 +59,7 @@ static func paint(color: Color, glow := 0.0, roughness := 0.5) -> StandardMateri
 	return material
 
 
-#A unit cylinder or box (along Y) stretched so that it goes from "from" to "to"
+#Unit cylinder or box stretched from "from" to "to"
 static func stretch(from: Vector3, to: Vector3) -> Transform3D:
 	var length := from.distance_to(to)
 	var direction := (to - from) / maxf(length, 0.001)
@@ -73,7 +72,7 @@ static func stretch(from: Vector3, to: Vector3) -> Transform3D:
 	return Transform3D(basis.scaled_local(Vector3(1.0, length, 1.0)), (from + to) / 2.0)
 
 
-#Flags hanging from a rope between two points; the rope sags by "sag" meters in the middle
+#Flags on a rope sagging "sag" meters in the middle
 static func bunting(from: Vector3, to: Vector3, sag: float, flags: int, size: float, colors: Array[Color]) -> MeshInstance3D:
 	var flat := Vector3(to.x - from.x, 0.0, to.z - from.z)
 	var run := flat.length()
@@ -91,7 +90,7 @@ static func bunting(from: Vector3, to: Vector3, sag: float, flags: int, size: fl
 		var tip := (a + b) / 2.0 + Vector3(0.0, -size, 0.0)
 		var flag := colors[index % colors.size()]
 		_triangle(tool, a, tip, b, Color(flag, 0.0), Color(flag, 1.0), Color(flag, 0.0))
-		#The rope is a ribbon in front of and behind the flags, so it never shares their plane
+		#The rope is a ribbon in front of and behind the flags
 		var thick := Vector3(0.0, 0.05, 0.0)
 		for lift: Vector3 in [Vector3(0.0, 0.0, ROPE_LIFT), Vector3(0.0, 0.0, -ROPE_LIFT)]:
 			_triangle(tool, a + thick + lift, b + thick + lift, a - thick + lift, rope, rope, rope)
@@ -105,7 +104,7 @@ static func bunting(from: Vector3, to: Vector3, sag: float, flags: int, size: fl
 	return instance
 
 
-#A pole with a flag that flutters
+#Pole with a fluttering flag
 static func pennant(height: float, color: Color) -> Node3D:
 	var root := Node3D.new()
 	var pole := MeshInstance3D.new()
@@ -133,7 +132,7 @@ static func pennant(height: float, color: Color) -> Node3D:
 	return root
 
 
-#A tall striped column with a glowing cap; it stands on its base point
+#Striped column with a glowing cap
 static func pillar(height: float, radius: float, a: Color, b: Color) -> Node3D:
 	var root := Node3D.new()
 	var shaft := MeshInstance3D.new()
@@ -172,7 +171,7 @@ static func pillar(height: float, radius: float, a: Color, b: Color) -> Node3D:
 	return root
 
 
-#A spotlight beam that goes up from the origin; it is only a soft glow, never solid
+#Soft upward light beam
 static func beam(color: Color, length: float, radius: float, strength := 0.4) -> MeshInstance3D:
 	var cone := CylinderMesh.new()
 	cone.top_radius = radius
@@ -195,7 +194,7 @@ static func beam(color: Color, length: float, radius: float, strength := 0.4) ->
 	return instance
 
 
-#A flat arch of colour bands, "radius" to the outer edge of the first band
+#Flat arch of colour bands
 static func rainbow(radius: float, band: float, colors: Array[Color]) -> MeshInstance3D:
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -224,7 +223,7 @@ static func rainbow(radius: float, band: float, colors: Array[Color]) -> MeshIns
 	return instance
 
 
-#Little round lights, one draw call per stretch of the course so the engine skips the ones out of view; each phase says when its light is on
+#Round lights, one draw call per stretch; each phase sets when it is on
 static func bulbs(spots: Array[Transform3D], colors: Array[Color], phases: Array[float]) -> Node3D:
 	var ball := SphereMesh.new()
 	ball.radius = 0.13
@@ -259,8 +258,7 @@ static func bulbs(spots: Array[Transform3D], colors: Array[Color], phases: Array
 	return root
 
 
-#Adds to "tool" a candy tube along an arc of a circle on the XZ plane, for the bumper of an island that has gaps where the bridges come in.
-#"radius" is the middle of the tube and the angles go from +X toward +Z; the stripes run along u = angle / TAU like those of a full torus
+#Candy tube along an arc on XZ, for bumpers with gaps for bridges
 static func add_arc_tube(tool: SurfaceTool, radius: float, tube: float, from: float, to: float, steps: int, sides: int) -> void:
 	for step in steps:
 		var angle_a := lerpf(from, to, float(step) / steps)
@@ -291,7 +289,7 @@ static func _tube_point(radius: float, tube: float, angle: float, turn: float) -
 	return {"at": out * radius + normal * tube, "normal": normal, "uv": Vector2(angle / TAU, turn / TAU)}
 
 
-#Adds a triangle whose front side looks along "facing" (the average of its normals when it is not given)
+#Triangle facing "facing", or its normals' average
 static func _tube_triangle(tool: SurfaceTool, a: Dictionary, b: Dictionary, c: Dictionary, facing := Vector3.ZERO) -> void:
 	var wanted := facing
 	if wanted == Vector3.ZERO:
@@ -305,7 +303,7 @@ static func _tube_triangle(tool: SurfaceTool, a: Dictionary, b: Dictionary, c: D
 		tool.add_vertex(corner["at"] as Vector3)
 
 
-#A slow drift of little coloured stars inside a box, so the air is never empty; the box is centred on the node
+#Slow coloured stars drifting in a box
 static func sparkles(extents: Vector3, amount: int) -> CPUParticles3D:
 	var sparks := CPUParticles3D.new()
 	sparks.amount = amount
@@ -341,7 +339,7 @@ static func sparkles(extents: Vector3, amount: int) -> CPUParticles3D:
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	material.vertex_color_use_as_albedo = true
 	material.albedo_texture = ImpactFx.star_texture()
-	#The ones next to the camera fade out, so none looks like a blot over the racer
+	#Stars near the camera fade out
 	material.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
 	material.distance_fade_min_distance = 6.0
 	material.distance_fade_max_distance = 16.0
@@ -351,7 +349,7 @@ static func sparkles(extents: Vector3, amount: int) -> CPUParticles3D:
 	return sparks
 
 
-#Little hearts that float up slowly inside a box and fade, like the likes of a crowd; the box is centred on the node
+#Hearts floating up in a box
 static func hearts(extents: Vector3, amount: int) -> CPUParticles3D:
 	var rising := CPUParticles3D.new()
 	rising.amount = amount
@@ -393,7 +391,7 @@ static func hearts(extents: Vector3, amount: int) -> CPUParticles3D:
 	return rising
 
 
-#Grandstand tiers facing +Z of "place": stepped blocks in one mesh with a fan on every step, added to "crowd"
+#Stepped grandstand facing +Z with a fan on every step
 static func stand(crowd: CrowdField, place: Transform3D, width: float, tiers: int, color: Color, rng: RandomNumberGenerator) -> MeshInstance3D:
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -420,7 +418,7 @@ static func stand(crowd: CrowdField, place: Transform3D, width: float, tiers: in
 	return instance
 
 
-#A confetti cannon aimed up and forward; "muzzle" is where the confetti comes out, in its own space
+#Confetti cannon; "muzzle" is where confetti leaves
 static func cannon(a: Color, b: Color) -> Node3D:
 	var root := Node3D.new()
 	var tube := MeshInstance3D.new()
@@ -462,7 +460,7 @@ static func _bunting_material() -> ShaderMaterial:
 	return material
 
 
-#Godot draws the clockwise side of a triangle, so the normal comes from the opposite turn
+#Godot draws the clockwise side, so the normal comes from the opposite turn
 static func _triangle(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, color_a: Color, color_b: Color, color_c: Color,
 		facing := Vector3.ZERO) -> void:
 	var normal := facing if facing != Vector3.ZERO else (c - a).cross(b - a).normalized()
@@ -472,7 +470,7 @@ static func _triangle(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, col
 		tool.add_vertex(entry[0])
 
 
-#A solid box with its own colour, wound so that its faces look outward
+#Solid box wound outward
 static func _box(tool: SurfaceTool, center: Vector3, size: Vector3, color: Color) -> void:
 	var half := size / 2.0
 	for normal: Vector3 in [Vector3.UP, Vector3.DOWN, Vector3.RIGHT, Vector3.LEFT, Vector3.BACK, Vector3.FORWARD]:

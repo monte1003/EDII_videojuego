@@ -1,21 +1,18 @@
 class_name SelfieCamera
 extends Node
 
-#The camera of the drone, over the same world the players see: a small live picture of the set while a photo is coming, and the
-#photo itself, drawn once at the shot in a bigger picture of its own. Both look with an isometric view (orthogonal, tilted and
-#turned 45 degrees from the frame) into the back corner of the set, and leave out what only guides the players
+#Drone camera: live picture while a photo comes and the photo drawn once, both isometric
 
 signal developed(index: int, photo: Texture2D)
 
-#Render layers of what the photo leaves out: the frame on the floor and the beam of the drone (the live picture keeps them), the
-#guides of each player (nobody's camera of the drone shows them) and the arrow over each player that only the live picture shows
+#Render layers the photo leaves out: frame, beam, guides and the live-only arrow
 const FRAME_LAYER := 11
 const GUIDE_LAYER := 12
 const MONITOR_LAYER := 13
 const PHOTO_PIXELS := Vector2i(960, 540)
 const PREVIEW_PIXELS := Vector2i(480, 270)
 const PREVIEW_RATE := 20.0
-#The photo keeps at least this patch of floor around the middle of the frame, with this room around what it shows
+#Floor patch kept around the frame middle and the margin
 const PATCH := 2.0
 const MARGIN := 1.08
 
@@ -38,8 +35,7 @@ static func layer_bit(layer: int) -> int:
 	return 1 << (layer - 1)
 
 
-#The view of a photo: the frame of "frame_side" meters around "center" when nobody is in it, or else everybody whose feet are in
-#"feet" with a little floor around the middle. "turn_degrees" says from which corner it looks
+#Photo view: the empty frame, or everybody inside with floor around
 static func compose(center: Vector3, feet: Array[Vector3], turn_degrees: float, frame_side: float, aspect := 16.0 / 9.0) -> IsoFrame:
 	var patch := Vector2.ONE * (PATCH if not feet.is_empty() else frame_side)
 	return IsoFrame.fit(center, patch, feet, aspect, 0.0, IsoFrame.DEFAULT_PITCH, turn_degrees, MARGIN)
@@ -49,7 +45,7 @@ func preview_texture() -> Texture2D:
 	return _preview_view.get_texture()
 
 
-#The live picture draws (20 times a second) only while a photo is coming
+#The live picture draws 20 times a second only while a photo comes
 func set_live(on: bool) -> void:
 	_live = on
 	_since = 1.0
@@ -61,16 +57,14 @@ func is_live() -> bool:
 	return _live
 
 
-#Points the live picture at the frame as it is now, with the frame drawn on the floor. "clip" is how far in front of the middle of
-#the frame it still draws things: what stands closer to the drone (a catwalk between it and the set) is left out
+#Aims the live picture; "clip" leaves out what stands closer to the drone
 func aim(center: Vector3, frame_side: float, turn_degrees: float, clip: float) -> void:
 	var view := compose(center, [], turn_degrees, frame_side, float(PREVIEW_PIXELS.x) / PREVIEW_PIXELS.y)
 	view.apply(_preview_camera)
 	_preview_camera.near = clip_near(clip)
 
 
-#The shot: the photo is drawn once with this view and comes out as a picture of its own when the frame is done. With no screen
-#nothing is drawn, and the photo comes out at once
+#Draws the photo once; headless it comes out at once
 func take(index: int, view: IsoFrame, clip: float) -> void:
 	view.apply(_photo_camera)
 	_photo_camera.near = clip_near(clip)
@@ -82,7 +76,7 @@ func take(index: int, view: IsoFrame, clip: float) -> void:
 	developed.emit(index, _develop())
 
 
-#The near plane of a camera of the drone that draws only what is less than "clip" meters in front of the middle of its view
+#Near plane that draws only "clip" meters in front of the view middle
 static func clip_near(clip: float) -> float:
 	return clampf(IsoFrame.DISTANCE - clip, 0.5, IsoFrame.DISTANCE)
 
@@ -100,8 +94,7 @@ func _process(delta: float) -> void:
 		_preview_view.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
-#A still copy of the photo with its smaller sizes ready, so it shrinks on screen without flicker. With no screen nothing is drawn,
-#and the photo is a plain picture of the same size
+#Still copy with mipmaps so it shrinks without flicker
 func _develop() -> Texture2D:
 	var image: Image = null
 	if DisplayServer.get_name() != "headless":

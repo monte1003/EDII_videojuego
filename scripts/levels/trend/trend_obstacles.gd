@@ -1,32 +1,28 @@
 class_name TrendObstacles
 extends RefCounted
 
-#What moves in the zones of La Plaza, with no nodes: where each platform of the archipelago is, which screens of the maze are up and
-#where the likes of the tower fall, and who is inside the glass of the gravity or in the pond. The platforms that sink keep their own
-#state, set off by whoever stands on them; everything else is a function of the seconds of the round, so it can be drawn, hit and
-#planned for from the time alone
+#Moving parts of La Plaza zones with no nodes: platforms, maze screens, tower likes, glass and pond
 
 enum Sink { REST, SHAKE, FALL, UNDER, RISE }
 enum Light { OPEN, SHUT, WARN }
 
-#A platform that sinks shakes for a moment after somebody steps on it, goes down under the water, waits there and comes back up
+#Sinking platform: shakes, goes under, waits and comes back
 const SINK_SHAKE := 0.7
 const SINK_FALL := 0.6
 const SINK_UNDER := 2.6
 const SINK_RISE := 0.9
 const SINK_DEPTH := 1.8
-#How far over a platform the feet may be to stand on it, and how low over the pond they must be to have fallen in
+#Feet height to stand on a platform and to count as fallen in
 const ISLET_FEET := 0.3
 const POND_FEET := 0.7
-#The screens of the maze: seconds each group stays up, seconds it takes to go up or down, and the warning before it moves
+#Maze screen up time, move time and warning
 const SCREEN_UP := 3.0
 const SCREEN_MOVE := 0.5
 const SCREEN_WARN := 1.0
-#From how high a screen blocks the way, and how close to it a player is pushed aside while it rises
+#Screen blocking height and push-out distance while rising
 const SCREEN_BLOCKS := 0.25
 const SCREEN_CLEAR := 0.35
-#The likes of the tower: on each floor one falls every few seconds, a little further around than the last one. Its mark shows
-#LIKE_WARN seconds before it lands, it drops in the last LIKE_FALL of them and hits for LIKE_HIT seconds after landing
+#Tower likes: one per floor every few seconds, warned, dropped and hitting briefly
 const LIKE_EVERY: Array[float] = [1.5, 1.9, 2.5]
 const LIKE_START: Array[float] = [0.4, 1.1, 1.8]
 const LIKE_STEP: Array[int] = [3, 5, 1]
@@ -38,7 +34,7 @@ const LIKE_DROP := 8.0
 const LIKE_REACH := 1.3
 
 var layout: TrendLayout
-#The state of every platform that sinks: {index: {"state": Sink, "left": seconds}}
+#{index: {"state": Sink, "left": seconds}}
 var sinks: Dictionary = {}
 
 
@@ -49,7 +45,7 @@ func _init(plaza: TrendLayout) -> void:
 			sinks[index] = {"state": Sink.REST, "left": 0.0}
 
 
-#Moves the platforms that sink on: one at rest starts shaking when somebody stands on it. "feet" are the points where the players stand
+#Sinking platforms start shaking when someone stands on them
 func tick(delta: float, time: float, feet: Array[Vector3]) -> void:
 	for index: int in sinks:
 		var entry: Dictionary = sinks[index]
@@ -78,7 +74,7 @@ func _sink_to(entry: Dictionary, state: Sink, seconds: float) -> void:
 	entry["left"] = seconds
 
 
-#How far a platform has gone under, from 0 (at rest) to 1 (all the way down)
+#How far under a platform is, 0 to 1
 func sink_share(index: int) -> float:
 	if not sinks.has(index):
 		return 0.0
@@ -97,7 +93,7 @@ func is_shaking(index: int) -> bool:
 	return sinks.has(index) and int(sinks[index]["state"]) == Sink.SHAKE
 
 
-#Where a platform is at "time": the middle of its top and how it is turned
+#Platform top middle and turn at "time"
 func islet_transform(index: int, time: float) -> Transform3D:
 	var islet := layout.islets[index]
 	var at: Vector3 = islet["at"]
@@ -113,7 +109,7 @@ func islet_transform(index: int, time: float) -> Transform3D:
 	return Transform3D(Basis(Vector3.UP, yaw), at)
 
 
-#Whether a point stands on the top of a platform at "time"; "margin" widens it
+#Whether a point stands on a platform top; "margin" widens it
 func islet_holds(index: int, point: Vector3, time: float, margin := 0.1) -> bool:
 	var place := islet_transform(index, time)
 	if absf(point.y - place.origin.y) > ISLET_FEET:
@@ -121,7 +117,7 @@ func islet_holds(index: int, point: Vector3, time: float, margin := 0.1) -> bool
 	return islet_covers(index, point, time, margin)
 
 
-#Whether a point is over the top of a platform, whatever its height
+#Whether a point is over a platform at any height
 func islet_covers(index: int, point: Vector3, time: float, margin := 0.0) -> bool:
 	var islet := layout.islets[index]
 	var place := islet_transform(index, time)
@@ -132,7 +128,7 @@ func islet_covers(index: int, point: Vector3, time: float, margin := 0.0) -> boo
 	return absf(local.x) <= size.x / 2.0 + margin and absf(local.z) <= size.y / 2.0 + margin
 
 
-#How far apart (meters, edge to edge) two platforms are at "time"; a negative index is the dock
+#Edge to edge gap between two platforms; negative index is the dock
 func islet_gap(a: int, b: int, time: float) -> float:
 	var best := INF
 	for point in _rim(a, time):
@@ -141,7 +137,7 @@ func islet_gap(a: int, b: int, time: float) -> float:
 	return best
 
 
-#Points along the edge of a platform (or along the edge of the dock), for distances
+#Edge points of a platform or the dock
 func _rim(index: int, time: float) -> Array[Vector3]:
 	var points: Array[Vector3] = []
 	if index < 0:
@@ -167,12 +163,11 @@ func _rim(index: int, time: float) -> Array[Vector3]:
 	return points
 
 
-#Whether a player standing at this point has fallen into the pond
 func in_pond(point: Vector3) -> bool:
 	return point.y < POND_FEET and layout.over_pond(point, -0.2)
 
 
-#Where somebody that fell into the pond comes back: the point of the dock closest to where it fell
+#Closest dock point to the fall
 func pond_exit(point: Vector3) -> Vector3:
 	var best := layout.docks[0]
 	for spot in layout.docks:
@@ -181,7 +176,7 @@ func pond_exit(point: Vector3) -> Vector3:
 	return best
 
 
-#How far up a group of screens is at "time", from 0 (sunk in the floor) to 1 (all the way up). The two groups take turns
+#Screen group rise, 0 sunk to 1 up; the groups take turns
 func screen_rise(group: int, time: float) -> float:
 	var cycle := 2.0 * (SCREEN_UP + SCREEN_MOVE)
 	var beat := fposmod(time + (SCREEN_UP + SCREEN_MOVE) * group, cycle)
@@ -194,7 +189,7 @@ func screen_rise(group: int, time: float) -> float:
 	return (beat - cycle + SCREEN_MOVE) / SCREEN_MOVE
 
 
-#Seconds until a group of screens starts to move again
+#Seconds until a screen group moves again
 func screen_change_in(group: int, time: float) -> float:
 	var cycle := 2.0 * (SCREEN_UP + SCREEN_MOVE)
 	var beat := fposmod(time + (SCREEN_UP + SCREEN_MOVE) * group, cycle)
@@ -207,7 +202,7 @@ func screen_change_in(group: int, time: float) -> float:
 	return 0.0
 
 
-#The light of a group: green while it is down, red while it is up, and it blinks before it moves and while it moves
+#Group light: green down, red up, blinking around moves
 func screen_light(group: int, time: float) -> Light:
 	var rise := screen_rise(group, time)
 	if (rise > 0.0 and rise < 1.0) or screen_change_in(group, time) <= SCREEN_WARN:
@@ -219,17 +214,17 @@ func screen_blocks(index: int, time: float) -> bool:
 	return screen_rise(int(layout.screens[index]["group"]), time) > SCREEN_BLOCKS
 
 
-#Whether the border between two cells of the maze can be crossed at "time"
+#Whether a maze border is open at "time"
 func maze_open(link: Array, time: float) -> bool:
 	return int(link[2]) < 0 or not screen_blocks(int(link[2]), time)
 
 
-#A player standing where a screen is rising is moved out of it at once: the way out toward the closer side, or zero
+#Push out of a rising screen toward the closer side, or zero
 func screen_nudge(point: Vector3, time: float) -> Vector3:
 	return _screen_way(point, time, false)
 
 
-#A player standing where a screen is about to rise is told to leave: the way out toward the closer side, or zero
+#Warning direction away from a screen about to rise, or zero
 func screen_warning(point: Vector3, time: float) -> Vector3:
 	return _screen_way(point, time, true)
 
@@ -261,8 +256,7 @@ func _screen_way(point: Vector3, time: float, waking: bool) -> Vector3:
 	return Vector3.ZERO
 
 
-#The likes that are falling or just landed at "time": {"at": Vector3 (where it lands), "level": int, "left": seconds until it
-#lands (negative once it has)}
+#Falling or landed likes: {"at", "level", "left"}
 func likes(time: float) -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
 	for level in LIKE_EVERY.size():
@@ -276,7 +270,7 @@ func likes(time: float) -> Array[Dictionary]:
 	return found
 
 
-#Where a like that lands on a player throws it: outward from the middle of the tower, or zero when no like hits this point now
+#Outward throw of a landing like, or zero
 func like_push(point: Vector3, time: float) -> Vector3:
 	for like in likes(time):
 		var left: float = like["left"]
@@ -291,14 +285,13 @@ func like_push(point: Vector3, time: float) -> Vector3:
 	return Vector3.ZERO
 
 
-#Whether a point is inside the glass of the gravity zone
 func in_glass(point: Vector3) -> bool:
 	var centre := layout.zone_center(TrendLayout.Zone.GRAVITY)
 	return Vector2(point.x - centre.x, point.z - centre.z).length() <= TrendLayout.GRAVITY_RADIUS \
 		and point.y > -0.5 and point.y < TrendLayout.GRAVITY_CEILING + 0.5
 
 
-#The pad a player is on: on the floor when its feet are on it, under the glass when its head is; -1 when there is none
+#Pad under the feet or over the head under the glass; -1 for none
 func floor_pad_at(point: Vector3) -> int:
 	if point.y > 0.35:
 		return -1

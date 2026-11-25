@@ -1,7 +1,7 @@
 class_name BotVisual
 extends BotLook
 
-#Provisional bot made of primitives; a final model replaces it through BotAppearance.model_scene
+#Provisional bot made of primitives
 
 #Materials are shared between every bot of the same colour
 static var _materials: Dictionary = {}
@@ -40,7 +40,6 @@ func build(appearance: BotAppearance) -> void:
 		_add(SphereMesh.new(), dark, Vector3(side * 0.14, 0.06, 0.04), Vector3(1, 0.7, 1.3), func(m: SphereMesh) -> void:
 			m.radius = 0.13
 			m.height = 0.26)
-		#Eyes: white with a dark pupil, on the +Z face
 		_add(SphereMesh.new(), Color("fdfbff"), Vector3(side * 0.13, 1.02, 0.25), Vector3.ONE, func(m: SphereMesh) -> void:
 			m.radius = 0.085
 			m.height = 0.17)

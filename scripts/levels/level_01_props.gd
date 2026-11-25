@@ -1,7 +1,7 @@
 class_name Level01Props
 extends Node3D
 
-#The pieces of level 1 with a job, each shaped like what it does: the heart of each checkpoint and the power symbol of the goal
+#Level 1 pieces with a job: checkpoint hearts and the power symbol of the goal
 
 const LILAC_DARK := Color("6d55c2")
 const CYAN := Color("4fd6e8")
@@ -10,10 +10,9 @@ const AMBER := Color("ffc857")
 const INK := Color("372c58")
 const PAPER := Color("fdfbff")
 
-#Where each checkpoint is, by vertex
 var checkpoint_positions: Dictionary = {}
 
-#Vertex of a checkpoint -> the materials of its heart and of its ring
+#Checkpoint -> heart and ring materials
 var _heart_materials: Dictionary = {}
 var _ring_materials: Dictionary = {}
 
@@ -24,7 +23,7 @@ func build() -> void:
 	_goal()
 
 
-#The heart is grey-lilac until the progress is saved and then lights up
+#Grey-lilac heart that lights up once saved
 func set_checkpoint_active(vertex: StringName, active: bool) -> void:
 	if not _heart_materials.has(vertex):
 		return
@@ -39,7 +38,7 @@ func set_checkpoint_active(vertex: StringName, active: bool) -> void:
 	ring_material.emission = ring
 
 
-#Checkpoint: a flag pole with a heart; it lights up once the player has saved the progress
+#Checkpoint: flag pole with a heart
 func _checkpoint(vertex: StringName) -> void:
 	var centre: Vector3 = Level01Layout.POSITIONS[vertex]
 	checkpoint_positions[vertex] = centre
@@ -61,7 +60,7 @@ func _checkpoint(vertex: StringName) -> void:
 	pole.height = 3.2
 	pole.radial_segments = 8
 	_add(pole, _mat(LILAC_DARK), centre + Vector3(0, 1.6, 0))
-	#A small board on the pole with the word, both faces, under the heart
+	#Two-faced board under the heart
 	var board := SignBoard.board("CHECKPOINT", Color("f2a93b"), 3.4, 0.85)
 	board.position = centre + Vector3(0.0, 2.0, 0.0)
 	add_child(board)
@@ -78,7 +77,7 @@ func _checkpoint(vertex: StringName) -> void:
 	bob.tween_property(heart, "position:y", centre.y + 3.5, 1.1)
 
 
-#Goal: an inflatable arch with the power symbol floating inside it, because arriving means switching off
+#Goal: inflatable arch with a floating power symbol, since arriving means switching off
 func _goal() -> void:
 	var centre: Vector3 = Level01Layout.POSITIONS[Level01Layout.GOAL]
 	var arch := PropKit.make(&"arch", Vector3(8.6, 0.0, 0.0))
@@ -96,7 +95,7 @@ func _goal() -> void:
 	for index in 6:
 		var light := index % 2 == 0
 		_add(_box(Vector3(1.0, 0.04, 0.8)), _mat(PAPER if light else INK), centre + Vector3(-2.5 + index * 1.0, 0.03, 1.2))
-	#A faint beam that can be seen from the start
+	#Faint beam visible from the start
 	var beam := CylinderMesh.new()
 	beam.top_radius = 0.9
 	beam.bottom_radius = 1.2

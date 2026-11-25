@@ -1,6 +1,6 @@
 extends CanvasLayer
 
-#The wipe that covers every change of screen, so all the transitions look the same
+#Wipe used by every screen change
 
 const WIPE_SHADER := preload("res://assets/ui/shaders/screen_wipe.gdshader")
 const MARK := preload("res://assets/ui/textures/mark.png")
@@ -36,7 +36,6 @@ func _ready() -> void:
 	_material.set_shader_parameter("progress", 2.0)
 
 
-#Covers the screen, loads the scene and uncovers the new one
 func change_scene(path: String) -> void:
 	if busy:
 		return

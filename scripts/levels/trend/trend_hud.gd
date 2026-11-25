@@ -1,13 +1,11 @@
 class_name TrendHud
 extends RoundHud
 
-#The trend war screen: the clock of the zone and, under it, the trend the player follows now as one big chip with the count of the trends
-#completed beside it. When a zone is announced its name shows for a moment, and an arrow on the edge points to the zone while it is out
-#of view. Nothing else
+#Trend war screen: zone clock, current trend chip with the count, zone name and an edge arrow
 
 const SLOT := 72.0
 const POP_SCALE := 1.6
-#How far under the middle of the screen the name of the zone sits
+#Zone name drop under the middle of the screen
 const ZONE_DROP := 90.0
 
 var _strip: TrendStrip
@@ -50,7 +48,7 @@ func _ready() -> void:
 	_strip.hide()
 
 
-#The name of a zone that is announced pops in under the middle of the screen in its colour and fades after "seconds"
+#Announced zone name pops in its colour and fades after "seconds"
 func show_zone(title: String, color: Color, seconds: float) -> void:
 	_zone_label.text = title
 	_zone_label.add_theme_color_override("font_color", color)
@@ -66,12 +64,12 @@ func show_zone(title: String, color: Color, seconds: float) -> void:
 	_zone_tween.tween_property(_zone_label, "modulate:a", 0.0, 0.5)
 
 
-#The arrow toward the zone, aimed with the camera of the player of this screen
+#Arrow toward the zone for this screen's camera
 func point_zone(camera: Camera3D, target: Vector3, wanted: bool) -> void:
 	_pointer.aim(camera, target, wanted)
 
 
-#The trend to follow now: its chip pops in big and settles
+#Current trend chip pops in big and settles
 func set_trend(kind: int) -> void:
 	var chain: Array[int] = [kind]
 	_strip.set_chain(chain)
@@ -84,7 +82,7 @@ func set_trend(kind: int) -> void:
 	_pop.tween_property(_strip, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-#How many trends it completed; the number jumps when it grows
+#Completed count; jumps when it grows
 func set_count(count: int) -> void:
 	_count.text = str(count)
 	_count.pivot_offset = _count.size / 2.0

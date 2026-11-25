@@ -1,13 +1,12 @@
 class_name Citizen
 extends Node3D
 
-#A person of the street, in the style of the four heroes: the body of one of them in another tone, a phone in the hands that lights
-#its face, and sometimes headphones, a scarf or a backpack. It walks, sits or pedals, always looking at the screen
+#Street person: a hero body in another tone with a phone, sometimes headphones, scarf or backpack
 
 enum Pose { WALK, SIT, RIDE }
 
 const BODIES: Array[StringName] = [&"fire", &"water", &"plant", &"lightning"]
-#Where the colour of each body sits on the wheel (0 to 1); the tones below keep away from these so nobody looks like a player
+#Hue of each hero body; citizen tones keep away from them
 const NATIVE_HUES := {&"fire": 0.0, &"water": 0.6, &"plant": 0.31, &"lightning": 0.13}
 const TONES: Array[float] = [0.19, 0.46, 0.53, 0.66, 0.78, 0.93]
 const MIN_TURN := 0.1
@@ -30,7 +29,7 @@ var _animation: AnimationPlayer
 var _to_root := Transform3D.IDENTITY
 
 
-#Builds the person with "rng" choosing body, tone and accessories; "phase" is a share of the cycle to start from
+#Builds the person; "phase" is where the cycle starts
 func build(pose: Pose, rng: RandomNumberGenerator, phase := 0.0) -> void:
 	body_id = BODIES[rng.randi() % BODIES.size()]
 	_phase = phase
@@ -41,10 +40,10 @@ func build(pose: Pose, rng: RandomNumberGenerator, phase := 0.0) -> void:
 	_animation = _model.get_node("AnimationPlayer") as AnimationPlayer
 	_animation.add_animation_library("street", load("res://assets/characters/%s/%s_street.res" % [body_id, body_id]))
 	var clip: StringName = ANIMATIONS[pose]
-	#The model starts its "idle" animation by itself when it enters the tree: this one is the clip it plays
+	#The idle clip it plays when it enters the tree
 	_model.idle_animation = clip
 	_tint(_pick_tone(rng))
-	#The accessories are measured on the skeleton at rest and the phone on its first frame, where the hands are
+	#Accessories measured on the rest skeleton and the phone on the first frame
 	if rng.randf() < 0.45 and pose != Pose.SIT:
 		_add_scarf(rng)
 	if rng.randf() < 0.4:
@@ -59,7 +58,7 @@ func _ready() -> void:
 	_animation.seek(_phase * _animation.current_animation_length)
 
 
-#A pedal under each foot, for the riders
+#Pedals for the riders
 func add_pedals() -> void:
 	for side in ["Left", "Right"]:
 		var pedal := MeshInstance3D.new()
@@ -91,7 +90,7 @@ func _pick_tone(rng: RandomNumberGenerator) -> Dictionary:
 	return {"hue": fposmod(target - native, 1.0), "saturation": rng.randf_range(0.7, 0.95), "value": rng.randf_range(1.0, 1.12)}
 
 
-#Gives each surface the toned material of its body; the same tone is shared by every person that uses it
+#Toned material per body, shared by everyone with that tone
 func _tint(tone: Dictionary) -> void:
 	for mesh in meshes():
 		for surface in mesh.mesh.get_surface_count():
@@ -110,7 +109,7 @@ func _tint(tone: Dictionary) -> void:
 			mesh.set_surface_override_material(surface, _tones[key])
 
 
-#Applies the first frame of the clip to the skeleton, so the places of the hands can be measured, and then lets it go
+#Applies the first clip frame to measure the hands
 func _pose_at_start(clip: StringName) -> void:
 	var anim := _animation.get_animation(clip)
 	for track in anim.get_track_count():
@@ -123,7 +122,7 @@ func _pose_at_start(clip: StringName) -> void:
 			_skeleton.set_bone_pose_position(bone, anim.position_track_interpolate(track, 0.0))
 
 
-#Hangs "item" on a bone so it ends up at "wanted" (in the space of the person) when the skeleton is in the pose it has now
+#Hangs "item" on a bone so it ends at "wanted" in the current pose
 func _attach(bone_name: String, item: Node3D, wanted: Transform3D) -> void:
 	var bone := _skeleton.find_bone("mixamorig_" + bone_name)
 	var attachment := BoneAttachment3D.new()
@@ -133,7 +132,7 @@ func _attach(bone_name: String, item: Node3D, wanted: Transform3D) -> void:
 	item.transform = (_to_root * _skeleton.get_bone_global_pose(bone)).affine_inverse() * wanted
 
 
-#Where a bone is, in the space of the person, with the skeleton as it stands now
+#Bone position in the person space
 func _point(bone_name: String) -> Vector3:
 	return (_to_root * _skeleton.get_bone_global_pose(_skeleton.find_bone("mixamorig_" + bone_name))).origin
 
@@ -147,9 +146,9 @@ func _add_phone(rng: RandomNumberGenerator, pose: Pose) -> void:
 	phone.set_instance_shader_parameter("case_color", CASE_COLORS[rng.randi() % CASE_COLORS.size()])
 	phone.set_instance_shader_parameter("screen_color", SCREEN_COLORS[rng.randi() % SCREEN_COLORS.size()])
 	phone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	#The screen looks back and up, toward the face that looks down at it
+	#Screen faces back and up toward the face
 	var basis := Basis(Vector3(-1.0, 0.0, 0.0), Vector3(0.0, 0.866, 0.5), Vector3(0.0, 0.5, -0.866))
-	#Seated people hold it higher, so it shows above the door of the car
+	#Seated people hold it higher, above the car door
 	var lift := 0.14 if pose == Pose.SIT else 0.03
 	_attach("Spine2", phone, Transform3D(basis, _point("Spine2") + Vector3(0.0, lift, 0.2)))
 
@@ -165,7 +164,7 @@ func _add_scarf(rng: RandomNumberGenerator) -> void:
 	_attach("Neck", item, Transform3D(Basis(), _point("Neck") + Vector3(0.0, 0.02, 0.0)))
 
 
-#Two cups on the sides of the head and a band over it
+#Two cups and a band
 func _add_headphones(rng: RandomNumberGenerator) -> void:
 	var material := _flat(ACCESSORY_COLORS[rng.randi() % ACCESSORY_COLORS.size()])
 	var item := Node3D.new()
@@ -197,7 +196,7 @@ func _add_backpack(rng: RandomNumberGenerator) -> void:
 	_attach("Spine2", item, Transform3D(Basis(), _point("Spine2") + Vector3(0.0, -0.04, -0.2)))
 
 
-#A tube along the top half of a circle in the XY plane, a headphone band
+#Half circle tube for the headphone band
 func _arc_mesh(arc_radius: float, tube_radius: float) -> Mesh:
 	var key := "arc_%s_%s" % [arc_radius, tube_radius]
 	if _meshes.has(key):

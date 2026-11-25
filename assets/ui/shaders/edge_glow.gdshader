@@ -1,6 +1,6 @@
 shader_type canvas_item;
 
-//A soft colour that grows from the edges of the screen: danger ahead or the flash of a hit
+//Soft colour from the screen edges for danger or hits
 uniform vec4 glow_color : source_color = vec4(0.88, 0.29, 0.42, 1.0);
 uniform float amount : hint_range(0.0, 1.0) = 0.0;
 //Distance from the centre where the glow starts

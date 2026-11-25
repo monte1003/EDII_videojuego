@@ -1,11 +1,9 @@
 class_name PadGlyph
 extends Control
 
-#A DualSense button as PlayStation games show it: a round dark button with its symbol in its own colour (blue cross, red circle, pink
-#square, green triangle), a stick as a dark cap with its letter and the d-pad with the arm it points to lit. Drawn by code, so it is
-#sharp at any size; no logo of any brand
+#DualSense button drawn by code as PlayStation games show it
 
-#The dark body of the buttons and the colours of the four symbols, as on the pad
+#Button body and the four symbol colours
 const BODY := Palette.EDGE
 const RIM := Color(1.0, 1.0, 1.0, 0.16)
 const SYMBOLS := {"cross": Color("7ea8ff"), "circle": Color("ff5a6e"), "square": Color("f48bd6"), "triangle": Color("40cfa0")}
@@ -24,7 +22,7 @@ func _init(button: Dictionary, size_points: int) -> void:
 	custom_minimum_size = Vector2(wide, height)
 
 
-#Drawn at its own size and centred in the space it gets, so a row that stretches it never makes it spill over its neighbours
+#Drawn at its own size and centred, so it never spills over its neighbours
 func _draw() -> void:
 	var height := minf(size.y, custom_minimum_size.y)
 	var radius := height / 2.0
@@ -63,7 +61,7 @@ func _outline(points: Array[Vector2], color: Color, width: float) -> void:
 	draw_polyline(closed, color, width, true)
 
 
-#The cap of the stick with a ring and its letter; a small dark arrow beside it says where to push
+#Stick cap with its letter and an arrow for the push direction
 func _stick(centre: Vector2, radius: float, width: float, letter: String) -> void:
 	draw_arc(centre, radius * 0.62, 0.0, TAU, 40, Color(LIGHT, 0.35), width * 0.6, true)
 	var font := UiKit.HEADING_FONT
@@ -78,7 +76,7 @@ func _stick(centre: Vector2, radius: float, width: float, letter: String) -> voi
 	draw_colored_polygon(PackedVector2Array([tip, back + across, back - across]), BODY)
 
 
-#The four arms of the d-pad, dim, and the one it points to lit
+#D-pad with the pointed arm lit
 func _dpad(centre: Vector2, radius: float) -> void:
 	var arm := radius * 0.7
 	var half := radius * 0.2

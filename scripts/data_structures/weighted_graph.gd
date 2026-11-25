@@ -1,7 +1,7 @@
 class_name WeightedGraph
 extends RefCounted
 
-#Weighted graph as adjacency lists with its own Dijkstra; data and algorithms only
+#Weighted graph as adjacency lists with its own Dijkstra
 
 #A directed arc; a two-way bridge is stored as two arcs
 class Edge:
@@ -107,7 +107,7 @@ func set_edge_enabled(a: StringName, b: StringName, enabled: bool) -> bool:
 	return true
 
 
-#Changes the cost of a to b and of b to a (a belt that turns around swaps them); the version grows so whoever planned a route plans it again
+#Sets both directions of a bridge; the version grows so routes are planned again
 func set_weights(a: StringName, b: StringName, forward: float, backward: float) -> bool:
 	var there := get_edge(a, b)
 	var back := get_edge(b, a)
@@ -120,7 +120,7 @@ func set_weights(a: StringName, b: StringName, forward: float, backward: float) 
 	return true
 
 
-#Each connection once (a < b for two-way edges), for drawing and listings
+#Each connection once, for drawing and listings
 func undirected_edges() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for a: StringName in _adjacency:
@@ -131,7 +131,7 @@ func undirected_edges() -> Array[Dictionary]:
 	return result
 
 
-#Dijkstra; skips blocked arcs and "forbidden" vertices; "penalties" (vertex -> extra cost to enter it) avoid crowded ones
+#Dijkstra skipping blocked arcs and forbidden vertices; "penalties" avoid crowded ones
 func shortest_path(from: StringName, to: StringName, forbidden: Array = [], penalties: Dictionary = {}) -> PathResult:
 	var result := PathResult.new()
 	if not _adjacency.has(from) or not _adjacency.has(to):
@@ -184,7 +184,7 @@ func shortest_path(from: StringName, to: StringName, forbidden: Array = [], pena
 	return result
 
 
-#Dijkstra from one vertex to all the others at once: {vertex: cost of its cheapest route}. The ones it cannot reach are left out
+#Dijkstra to every vertex at once: {vertex: cost}; unreachable ones are left out
 func costs_from(from: StringName, forbidden: Array = []) -> Dictionary:
 	var dist: Dictionary = {}
 	if not _adjacency.has(from):

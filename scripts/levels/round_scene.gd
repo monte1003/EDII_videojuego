@@ -1,7 +1,7 @@
 class_name RoundScene
 extends Node3D
 
-#What every round scene shares: who plays, how it ends, pause and help; it runs in a session or on its own
+#Shared base of every round scene: players, ending, pause and help, in a session or alone
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
 
@@ -9,19 +9,19 @@ const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
 
 var participants: Array[PlayerSlot] = []
 var paused := false
-#Anyone can strike a pose or a dance with the pose key in every round; the dock at the bottom of the screen shows the key
+#Pose key in every round; the dock shows the key
 var poses := PoseKeeper.new()
-#Hides the jump of the camera when the player of this screen falls off the map and comes back
+#Hides the camera jump when this screen's player falls and returns
 var iris := IrisFade.new()
 
-#The opening film plays at the start of every minigame unless a test turns it off; it never plays without a screen
+#Opening film on unless a test turns it off; never without a screen
 static var films_enabled := true
-#True while the opening film plays: the round waits as in the pause, but its world keeps moving
+#While the film plays the round waits but the world moves
 var filming := false
-#In a room, after its own player is done, this computer watches the others until the round is over
+#In a room, after its player is done this computer watches the others
 var spectating := false
 
-#Every player of the round by id, the one of this screen and the puppets of the other computers
+#Every player by id: this screen's and the remote puppets
 var everyone: Dictionary = {}
 
 var _pose_dock := PoseDock.new()
@@ -35,7 +35,7 @@ var _hidden_layers: Array[CanvasLayer] = []
 
 
 func _ready() -> void:
-	#In a room, whoever lost its connection does not play the rounds until it comes back
+	#Disconnected players sit out until they return
 	for slot in GameSession.participants(default_character):
 		if slot.connected or slot.player_id == GameSession.local_id:
 			participants.append(slot)
@@ -68,8 +68,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_pose_dock.press()
 
 
-#Reports the result: inside a session the results screen takes over, on its own it returns false. In a room the results come once
-#everybody is done, and meanwhile this computer watches the others
+#Reports the result; alone returns false; in a room waits for everybody while spectating
 func finish_round(result: RoundResult) -> bool:
 	var reported := GameSession.report_result(result)
 	if reported and GameSession.is_networked() and not GameSession.practice:
@@ -87,7 +86,7 @@ func start_spectating() -> void:
 	view.begin(self)
 
 
-#One Player per participant, each at its own point; the first one is the one this screen controls
+#One Player per participant; the first is this screen's
 func spawn_players(parent: Node3D, points: Array[Vector3]) -> Array[Player]:
 	var spawned: Array[Player] = []
 	for index in participants.size():
@@ -107,12 +106,11 @@ func spawn_players(parent: Node3D, points: Array[Vector3]) -> Array[Player]:
 	return spawned
 
 
-#The player this screen controls, once the round has spawned it
 func screen_player() -> Player:
 	return _pose_player
 
 
-#The player of this screen among the spawned ones: the one with the local id, or the first one alone
+#The one with the local id, or the first alone
 static func local_of(spawned: Array[Player]) -> Player:
 	for player in spawned:
 		if player.player_id == GameSession.local_id:
@@ -120,7 +118,7 @@ static func local_of(spawned: Array[Player]) -> Player:
 	return spawned[0] if not spawned.is_empty() else null
 
 
-#A round draws its random things from here: the seed of the room (the same on every computer), a fixed one of its settings, or any
+#Round randomness: the room seed, a fixed settings seed, or any
 func seed_rng(generator: RandomNumberGenerator, fixed := 0) -> void:
 	if fixed != 0:
 		generator.seed = fixed
@@ -130,7 +128,7 @@ func seed_rng(generator: RandomNumberGenerator, fixed := 0) -> void:
 		generator.randomize()
 
 
-#A player that can pose; "local" is the one of this screen, whose key and dock these are
+#A player that can pose; "local" owns the key and dock
 func add_poser(player: Player, local: bool) -> void:
 	everyone[player.player_id] = player
 	poses.add(player)
@@ -139,17 +137,17 @@ func add_poser(player: Player, local: bool) -> void:
 		_pose_player = player
 
 
-#The pose key of the player of this screen; a round may give the key another use first (the stations of the warm-up)
+#This screen's pose key; a round may use it first for something else
 func press_pose() -> void:
 	poses.toggle(_pose_local)
 
 
-#Whether a player may pose right now: rounds say no before the start, after the end or while it falls
+#Rounds forbid poses before the start, after the end or while falling
 func _pose_allowed(_player_id: int) -> bool:
 	return not paused
 
 
-#Whether the dock shows at all: it hides while the round is paused or over
+#Dock hidden while paused or over
 func _pose_shown() -> bool:
 	return not paused and not filming and not spectating
 
@@ -162,8 +160,7 @@ func pose_state() -> int:
 	return PoseDock.State.READY if poses.can_pose(_pose_local) else PoseDock.State.BLOCKED
 
 
-#The opening film of a minigame of the catalog: the round waits, its screens hide and Esc and F1 do nothing until the film lands on the
-#camera of the player
+#Opening film: the round waits and Esc and F1 do nothing until it lands
 func _open_film() -> void:
 	var info := MinigameCatalog.find(ScreenFlow.current) if ScreenFlow.current != &"" else null
 	var networked := GameSession.is_networked() and not GameSession.practice
@@ -172,14 +169,13 @@ func _open_film() -> void:
 		add_child(NetPuppets.new())
 	var cover: LoadingCover = null
 	if networked and info != null:
-		#The art of the round covers the screen until every computer has loaded it; then the film starts on all of them at once
+		#Round art covers the screen until every computer loaded; then the film starts everywhere
 		filming = true
 		cover = LoadingCover.new()
 		add_child(cover)
 		cover.show_round(info, _step_text())
 		await _wait_for_everybody()
-	#The fair screen has no player of its own and shows no film: it starts the round when the players end theirs, and when it got here
-	#after they were let go it catches up with them
+	#The fair screen has no film: it starts with the players and catches up if late
 	if GameSession.net.role == NetRoom.Role.WATCH:
 		var film_left := _players_film_length(info) - _seconds_behind()
 		if film_left > 0.0:
@@ -228,8 +224,7 @@ func _step_text() -> String:
 	return "RONDA %d DE %d" % [GameSession.round_index + 1, GameSession.plan.size()]
 
 
-#How long the opening film of the players lasts: the fair screen has no player, so it measures the same film around the first one. Without
-#a window nobody sees a film, as in the players' own check
+#Players' film length, measured around the first player on the fair screen; 0 headless
 func _players_film_length(info: MinigameInfo) -> float:
 	if not films_enabled or info == null or everyone.is_empty() or DisplayServer.get_name() == "headless":
 		return 0.0
@@ -242,7 +237,7 @@ func _players_film_length(info: MinigameInfo) -> float:
 	return seconds
 
 
-#Seconds since the room let this round go, for the fair screen only: the players start together and are never behind
+#Seconds since the room released this round, for the fair screen only
 func _seconds_behind() -> float:
 	var net := GameSession.net
 	if net.role != NetRoom.Role.WATCH or net.go_round < GameSession.round_index or net.go_at <= 0:
@@ -250,8 +245,7 @@ func _seconds_behind() -> float:
 	return (Time.get_ticks_msec() - net.go_at) / 1000.0
 
 
-#The fair screen got to the round late: the round runs the seconds it missed at once, in steps of the physics and without sound, so what
-#moves by its clock (traffic, hazards, bubbles, cards) is where the players see it
+#A late fair screen runs the missed seconds at once in silent physics steps
 func catch_up(seconds: float) -> void:
 	if seconds <= 0.0:
 		return
@@ -263,7 +257,7 @@ func catch_up(seconds: float) -> void:
 	AudioServer.set_bus_mute(0, muted)
 
 
-#In a room every computer waits here until the server lets all of them start the round together
+#In a room everybody waits here for the server's start
 func _wait_for_everybody() -> void:
 	if not GameSession.is_networked() or GameSession.practice:
 		return
@@ -274,8 +268,7 @@ func _wait_for_everybody() -> void:
 		await get_tree().process_frame
 
 
-#The shots of the opening film: by default the camera circles the whole playing field from high up and then comes down closer behind the
-#player; a round may give its own
+#Opening film shots: circle the field from high up, then come down behind the player
 func _film_shots() -> Array[RoundFilm.Shot]:
 	var area := playing_area()
 	var shots: Array[RoundFilm.Shot] = []
@@ -295,7 +288,7 @@ func _film_shots() -> Array[RoundFilm.Shot]:
 	return shots
 
 
-#The box around every floor and wall the players can touch
+#Box around every floor and wall players can touch
 func playing_area() -> AABB:
 	var area := AABB()
 	var first := true
@@ -311,7 +304,7 @@ func playing_area() -> AABB:
 	return area
 
 
-#The player of a computer that left: it hides here and the round stops waiting for it
+#A departed computer's player hides and is no longer waited for
 func _on_net_player_left(player_id: int) -> void:
 	var player: Player = everyone.get(player_id)
 	if player != null and is_instance_valid(player) and player.remote:
@@ -327,7 +320,7 @@ func _networked_round() -> bool:
 	return GameSession.is_networked() and not GameSession.practice
 
 
-#The round freezes like in the pause menu while its help is open (in a room the help does not open: the others keep playing)
+#The round freezes while the help is open (no help in a room)
 func open_help() -> void:
 	if filming or _networked_round() or _help == null or _help.is_open() or not _help_allowed():
 		return
@@ -335,13 +328,13 @@ func open_help() -> void:
 	if _actors != null:
 		_actors.process_mode = Node.PROCESS_MODE_DISABLED
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	#Esc closes the help, it must not also open the pause menu behind it
+	#Esc closing the help must not open the pause
 	if _pause_menu != null:
 		_pause_menu.set_process_unhandled_input(false)
 	_help.open()
 
 
-#Rounds that have a help say when it cannot be opened (before they start, after they end)
+#When the help cannot open
 func _help_allowed() -> bool:
 	return true
 
@@ -361,7 +354,7 @@ func _paused_changed(_is_paused: bool) -> void:
 	pass
 
 
-#In a room the pause menu does not stop the round, which goes on for the others: only the keys of this player rest while it is open
+#In a room the pause only rests this player's keys
 func _on_pause_opened() -> void:
 	if _networked_round():
 		if _pose_player != null:

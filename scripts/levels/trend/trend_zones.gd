@@ -1,39 +1,33 @@
 class_name TrendZones
 extends Node3D
 
-#Builds and moves what the zones of La Plaza add to the ground: the carpet of each zone with its rail, the path to it from the plaza and
-#its arch with its name, the decoration between the zones, the glass of airplane mode and its pads, the platforms and the pond of the sea
-#of memes, the screens of the locked screen with their lights, the likes that rain on the tower and a beam of light over the zone that
-#is played and the one that comes next. The platforms and the screens are bodies that carry and stop the players; where they are comes
-#from TrendObstacles
+#Builds and moves what the La Plaza zones add on the ground
 
 const GLASS_COLOR := Color(0.7, 0.92, 1.0, 0.3)
 const PAD_COLOR := Color("7ae6ff")
-#The splash of whoever falls in the sea of memes
+#Splash colour of a meme sea fall
 const WATER_COLOR := Color("4fa8ff")
 const ISLET_COLORS := {&"sink": Color("ff8f6b"), &"slide": Color("ffd166"), &"turn": Color("5fdcc0")}
 const SHUT_COLOR := Color("ff4d6d")
 const OPEN_COLOR := Color("4cf2b0")
 const WARN_COLOR := Color("ffd23f")
 const LIKE_COLOR := Color("ff5fa2")
-#How tall a falling like is: the thumb of a like, as on the icon of the networks
+#Height of a falling like
 const LIKE_HEIGHT := 1.9
 const LIKE_POOL := 10
 const ISLET_THICKNESS := 0.6
-#The sea of memes: our own memes, small, on the platforms (round like a story on the round ones, with round corners on the others), the
-#water with light that wanders over it and a ring of foam around each column
+#Meme sea: our memes on the platforms, wandering light on the water and foam rings
 const MEMES: Array[Texture2D] = [preload("res://assets/textures/memes/meme_01.jpg"), preload("res://assets/textures/memes/meme_02.jpg"),
 	preload("res://assets/textures/memes/meme_03.jpg"), preload("res://assets/textures/memes/meme_04.jpg"),
 	preload("res://assets/textures/memes/meme_05.jpg"), preload("res://assets/textures/memes/meme_06.jpg"),
 	preload("res://assets/textures/memes/meme_07.jpg")]
 const PHOTO_SHADER: Shader = preload("res://assets/shaders/meme_photo.gdshader")
 const WATER_SHADER: Shader = preload("res://assets/shaders/meme_water.gdshader")
-#The two colors of the ring of a story around the memes of the round platforms
+#Story ring colours around the round platform memes
 const STORY_COLORS: Array[Color] = [Color("ff7a59"), Color("ff7fb2")]
-#How tall the beam over a zone is and how wide it opens
 const BUBBLE_SHADER: Shader = preload("res://assets/shaders/bubble.gdshader")
 const FONT: Font = preload("res://assets/ui/fonts/heading_font.tres")
-#The arch at the mouth of each zone: how high its board hangs and how wide it is; the big bubbles that float around the screen of the plaza
+#Arch board height and width; bubbles floating around the plaza screen
 const GATE_HEIGHT := 4.2
 const GATE_SPAN := 8.5
 const PATH_WIDTH := 6.0
@@ -80,8 +74,7 @@ func build(plaza: TrendLayout, logic: TrendObstacles) -> void:
 	update(0.0, -1, -1, 0.0)
 
 
-#Puts every moving piece where it is at "time"; "active" is the zone being played, "next" the one announced (or -1) and "notice" goes
-#from 1 to 0 while it is announced
+#Moves every piece to "time"; "active" zone, "next" announced zone and "notice" 1 to 0
 func update(time: float, active: int, next: int, notice: float) -> void:
 	for index in _islets.size():
 		var place := obstacles.islet_transform(index, time)
@@ -93,8 +86,7 @@ func update(time: float, active: int, next: int, notice: float) -> void:
 		_islet_paint[index].albedo_color = base.lerp(WARN_COLOR, 0.6 * absf(sin(time * 14.0))) if obstacles.is_shaking(index) else base
 	for index in _screens.size():
 		var group := int(layout.screens[index]["group"])
-		#The body goes all the way down when the screen stops blocking (the same height the rules use), so nothing invisible is left
-		#in the way; its collision is off while it is down and on again as soon as it starts to come up
+		#The body sinks fully when the screen stops blocking; collision off while down
 		var rise := obstacles.screen_rise(group, time)
 		var solid := clampf((rise - TrendObstacles.SCREEN_BLOCKS) / (1.0 - TrendObstacles.SCREEN_BLOCKS), 0.0, 1.0)
 		_screen_shapes[index].disabled = solid <= 0.0
@@ -123,8 +115,7 @@ func update(time: float, active: int, next: int, notice: float) -> void:
 			beam.set_shader_parameter("strength", 0.45)
 
 
-#The heart of the plaza: a candy ring on its floor around the screen, one glowing petal of the colour of each zone pointing at its
-#bridge, and big soap bubbles that drift around the screen
+#Plaza heart: candy ring, a glowing petal per zone and drifting bubbles
 func _build_hub() -> void:
 	_terrain.rail(_ring_line(Vector3.ZERO, 8.4, 0.08), Color("ff8fc7"), true)
 	for zone in TrendLayout.ZONE_COUNT:
@@ -153,8 +144,7 @@ func _build_hub() -> void:
 			"size": 0.7 + 0.25 * (index % 3)})
 
 
-#The carpet of each zone: its floor drawn lighter in its colour, with a candy rail around it that leaves its mouth open, and a path in its
-#colour from the plaza to the mouth
+#Zone carpet with a rail open at the mouth and a path from the plaza
 func _build_carpets() -> void:
 	for zone in TrendLayout.ZONE_COUNT:
 		var color := layout.color_of_zone(zone)
@@ -170,7 +160,7 @@ func _build_carpets() -> void:
 			if distance < nearest:
 				nearest = distance
 				start = index
-		#The rail goes once around the carpet from just past the mouth to just before it
+		#Rail from just past the mouth to just before it
 		for step in points:
 			var corner := outline[(start + step) % points]
 			if corner.distance_to(Vector2(gate.x, gate.z)) < GATE_SPAN / 2.0 + 0.6:
@@ -186,7 +176,7 @@ func _build_carpets() -> void:
 			_terrain.inlay(PackedVector2Array([from - side, from + side, to + side, to - side]), 0.03, color.lerp(Color.WHITE, 0.3))
 
 
-#A candy arch over the mouth of each zone, its board with the name of the zone facing the plaza
+#Candy arch with the zone name facing the plaza
 func _build_gates() -> void:
 	for zone in TrendLayout.ZONE_COUNT:
 		var gate := layout.position_of(layout.zone_entry(zone))
@@ -197,9 +187,7 @@ func _build_gates() -> void:
 		add_child(arch)
 
 
-#The floor between the zones is drawn like a flower seen from above: a ring of cream around the plaza, a petal of soft colour between
-#each two zones and a striped band along the rim. On each petal, near the rim, a giant toy turns on a pedestal between two giant lollipops
-#and a bunch of balloons
+#Floor between zones like a flower: cream ring, petals and a striped rim band
 func _build_decor() -> void:
 	_band(TrendLayout.HUB_RADIUS + 0.4, TrendLayout.HUB_RADIUS + 2.6, Color("fff4e0"), Color("fff4e0"), 0.008)
 	_band(TrendLayout.BASE_RADIUS - 3.4, TrendLayout.BASE_RADIUS - 0.6, Color("c7b5ff"), Color("f3ecff"), 0.008)
@@ -212,7 +200,7 @@ func _build_decor() -> void:
 		var out := Vector3(cos(heading), 0.0, sin(heading))
 		var across := Vector3(-out.z, 0.0, out.x)
 		var tone := layout.color_of_zone(zone).lerp(layout.color_of_zone(next), 0.5)
-		#The petal: a long round shape along the gap between the two zones, and a smaller one inside it
+		#Petal shapes along the gap between zones
 		for layer: Array in [[1.0, 0.72, 0.014], [0.62, 0.5, 0.019]]:
 			var petal := PackedVector2Array()
 			var length := (TrendLayout.BASE_RADIUS - 4.0 - TrendLayout.HUB_RADIUS - 3.0) * float(layer[0])
@@ -247,7 +235,7 @@ func _build_decor() -> void:
 	balloons.commit()
 
 
-#A ring on the floor from "inner" to "outer" meters around the middle, in stripes of two colours
+#Two-colour striped floor ring
 func _band(inner: float, outer: float, a: Color, b: Color, height: float) -> void:
 	var steps := 72
 	for step in steps:
@@ -258,7 +246,7 @@ func _band(inner: float, outer: float, a: Color, b: Color, height: float) -> voi
 		_terrain.inlay(quad, height, a if step % 2 == 0 else b)
 
 
-#A giant candy lollipop: a striped stick and a round sweet on top with a swirl
+#Giant striped lollipop
 func _lollipop(at: Vector3, color: Color) -> void:
 	var stick := PartyKit.pillar(4.6, 0.14, PartyKit.WHITE, color)
 	stick.position = at
@@ -293,7 +281,7 @@ func _process(_delta: float) -> void:
 		node.scale = Vector3.ONE * float(floater["size"]) * (1.0 + 0.04 * sin(clock * 2.3 + radius))
 
 
-#Where the roller sweeps: a striped warning ring on the floor at the reach of its bar, and a softer one inside it
+#Striped warning ring at the roller reach
 func _build_roller() -> void:
 	var zone := TrendLayout.Zone.ROLLER
 	var centre := layout.zone_center(zone)
@@ -303,7 +291,7 @@ func _build_roller() -> void:
 	rim.commit()
 
 
-#The glass of the gravity zone stands on a collision layer of its own; under it, its pads face down, and its floor has a disc and pads
+#Gravity glass on its own collision layer with pads below and on the floor
 func _build_gravity() -> void:
 	var zone := TrendLayout.Zone.GRAVITY
 	var centre := layout.zone_center(zone)
@@ -324,7 +312,7 @@ func _build_gravity() -> void:
 	pane.cull_mode = BaseMaterial3D.CULL_DISABLED
 	pane.roughness = 0.1
 	_disc(glass, TrendLayout.GRAVITY_RADIUS, TrendLayout.GLASS_THICKNESS, GLASS_COLOR, Vector3.ZERO, pane)
-	#Six candy columns hold the glass, a ring of bulbs runs along its edge and a glowing ring marks the floor under it
+	#Candy columns, edge bulbs and a glowing floor ring
 	var frame := CandyTerrain.new(self)
 	var top := TrendLayout.GRAVITY_CEILING + TrendLayout.GLASS_THICKNESS + 0.1
 	frame.rail(_ring_line(centre, TrendLayout.GRAVITY_RADIUS, top), Color("7ae6ff"), true)
@@ -353,7 +341,7 @@ func _build_gravity() -> void:
 		_disc(self, TrendLayout.GRAVITY_PAD, 0.08, PAD_COLOR, pad - Vector3(0.0, 0.04, 0.0), glow)
 
 
-#The pond and its platforms: each platform is a body that carries whoever stands on it
+#Pond and platforms that carry whoever stands on them
 func _build_islands() -> void:
 	var zone := TrendLayout.Zone.ISLANDS
 	var water := MeshInstance3D.new()
@@ -402,7 +390,7 @@ func _build_islands() -> void:
 		view.material_override = paint
 		view.position.y = -ISLET_THICKNESS / 2.0
 		body.add_child(view)
-		#A white candy edge on top, so each platform reads as a stepping stone over the water
+		#White candy edge on top
 		var edge := MeshInstance3D.new()
 		if islet["round"]:
 			var torus := TorusMesh.new()
@@ -425,9 +413,7 @@ func _build_islands() -> void:
 		_islet_paint.append(paint)
 
 
-#What makes a platform look like a tile of a feed, with no collision of its own: a white face with one of our memes in its middle, small
-#so the platform still reads (round like a story with its ring on the round ones, with round corners on the others), a striped column
-#that holds it from the water and a ring of foam where the column meets the water. It moves, turns and sinks with the platform
+#Feed tile look without collision: a small meme in the middle, story ring on round ones
 func _dress_islet(body: Node3D, islet: Dictionary, index: int) -> void:
 	var size: Vector2 = islet["size"]
 	var color: Color = ISLET_COLORS[islet["kind"]]
@@ -464,7 +450,7 @@ func _dress_islet(body: Node3D, islet: Dictionary, index: int) -> void:
 	photo.rotation_degrees = Vector3(-90.0, 180.0, 0.0)
 	photo.position.y = 0.04 if round_top else 0.08
 	body.add_child(photo)
-	#The column goes from under the platform to the water, narrower than the platform so it reads as a pedestal
+	#Column from under the platform to the water
 	var reach := minf(size.x, size.y) * 0.5 if not round_top else size.x
 	var stem := CylinderMesh.new()
 	stem.top_radius = reach * 0.5
@@ -491,7 +477,7 @@ func _dress_islet(body: Node3D, islet: Dictionary, index: int) -> void:
 	body.add_child(ring)
 
 
-#A quad with a photo and round corners, or a plain card of one color
+#Photo quad with rounded corners, or a plain card
 func _photo_quad(texture: Texture2D, size: Vector2, radius: float) -> MeshInstance3D:
 	var key := "%s_%s_%s" % [texture.resource_path, size, radius]
 	if not _photo_paint.has(key):
@@ -514,8 +500,7 @@ func _quad(material: Material, size: Vector2) -> MeshInstance3D:
 	return quad
 
 
-#The screens of the maze: a body each that rises out of the floor and sinks back, red while it is up, and a strip on the floor
-#where it stands that is green while the way is open
+#Maze screens rising and sinking, with a floor strip green while open
 func _build_maze() -> void:
 	for _group in 2:
 		_screen_paint.append(PartyKit.paint(SHUT_COLOR, 0.5, 0.4))
@@ -553,7 +538,7 @@ func _build_maze() -> void:
 		add_child(strip)
 
 
-#A few likes are enough: each one falls, lands and goes before the pool runs out
+#A few reused likes are enough
 func _build_likes() -> void:
 	var mark := PartyKit.paint(LIKE_COLOR, 1.4, 0.4)
 	var ring := TorusMesh.new()
@@ -574,7 +559,7 @@ func _build_likes() -> void:
 		_likes.append({"body": body, "mark": target})
 
 
-#A like shows its ring on the floor while it is coming, falls in the last moment, squashes on landing and is gone
+#Ring while coming, falls at the end, squashes on landing
 func _place_likes(time: float) -> void:
 	var falling := obstacles.likes(time)
 	for index in _likes.size():
@@ -591,7 +576,7 @@ func _place_likes(time: float) -> void:
 		mark.position = at + Vector3(0.0, 0.05, 0.0)
 		mark.scale = Vector3.ONE * lerpf(0.4, 1.0, clampf(1.0 - left / TrendObstacles.LIKE_WARN, 0.0, 1.0))
 		body.visible = left < TrendObstacles.LIKE_FALL
-		#It turns while it falls, each one its own way, and lands facing the middle of the tower
+		#Spins while falling and lands facing the tower middle
 		body.rotation.y = atan2(layout.tower_center().x - at.x, layout.tower_center().z - at.z) + maxf(left, 0.0) * (4.0 if index % 2 == 0 else -4.0)
 		if left > 0.0:
 			var share := left / TrendObstacles.LIKE_FALL
@@ -603,7 +588,7 @@ func _place_likes(time: float) -> void:
 			body.scale = Vector3(1.0 + 0.4 * gone, 1.0 - 0.6 * gone, 1.0 + 0.4 * gone) * (1.0 - gone * 0.8)
 
 
-#A closed ring of points on the floor around "centre", for a candy rail
+#Closed ring of points for a candy rail
 func _ring_line(centre: Vector3, radius: float, height: float) -> PackedVector3Array:
 	var line := PackedVector3Array()
 	for step in 65:

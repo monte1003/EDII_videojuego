@@ -1,11 +1,11 @@
 extends Screen
 
-#Shows the draw of the next minigame as a feed that stops on the one GameSession already chose
+#Draw of the next minigame as a feed that stops on the one already chosen
 
 const CARD_SIZE := Vector2(540, 206)
 const CARD_GAP := 28.0
 const WINDOW_SIZE := Vector2(640, 300)
-#Seconds from the landing of the title to the goal line, between one piece of the summary and the next, and with all of it in view
+#Seconds between the title landing, each summary piece and the full view
 const LAND_TIME := 0.45
 const BRIEF_STEP := 0.25
 const BRIEF_HOLD := 2.0
@@ -26,7 +26,7 @@ var _target_card := 0
 var _title_box: VBoxContainer
 var _scroll: Tween
 var _revealed := false
-#The goal line and each key of the summary, in the order they come in
+#Goal line and summary keys in arrival order
 var _brief_items: Array[Control] = []
 var _last_nearest := -1
 
@@ -43,7 +43,7 @@ func _ready() -> void:
 	_play()
 
 
-#The draw always plays whole: no key or click moves it on, and there is no way back from it
+#The draw always plays whole
 func _unhandled_input(_event: InputEvent) -> void:
 	pass
 
@@ -117,7 +117,7 @@ func _build_layout() -> void:
 		column.add_child(_build_progress())
 
 
-#One line with the goal and up to three keys with one word each, taken from the minigame; they stay hidden until the title lands
+#Goal line and up to three keys of the minigame, hidden until the title lands
 func _build_brief(stack: VBoxContainer) -> void:
 	var goal := UiKit.body(_info.brief if _info.brief != "" else _info.tagline, 24, Palette.INK)
 	goal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -177,7 +177,7 @@ func _build_progress() -> Control:
 	return row
 
 
-#The feed: a few posts of the other candidates, then the chosen one, then two more
+#Feed of other candidates, then the chosen one, then two more
 func _build_reel() -> void:
 	_reel = Control.new()
 	_reel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -227,7 +227,6 @@ func _make_card(info: MinigameInfo, index: int) -> PanelContainer:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var art_style := UiKit.box(info.accent, 20)
 	art.add_theme_stylebox_override("panel", art_style)
-	#The picture is cut to the rounded shape of the panel
 	art.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 	column.add_child(art)
 	if info.card_art != null:
@@ -296,7 +295,7 @@ func _play() -> void:
 	_scroll.tween_callback(_reveal)
 
 
-#The chosen post gets its like, the rest fade, the name lands and under it come the goal and the keys, one after the other
+#The chosen post gets its like, the rest fade, then the name, goal and keys
 func _reveal() -> void:
 	if _revealed:
 		return

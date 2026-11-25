@@ -1,8 +1,7 @@
 class_name SelfieRoll
 extends Control
 
-#The roll of the round, at its end: every photo taken in a small copy with the followers it gave under it, in one row at the
-#bottom of the screen. No titles: the row says it all
+#End of round roll: every photo with its followers in one row
 
 const THUMB := Vector2(96.0, 54.0)
 const EDGE := 4.0
@@ -24,7 +23,7 @@ func _ready() -> void:
 	visible = false
 
 
-#"photos" and "numbers" go in the order they were taken; a number below 0 is a photo the player was not in
+#Photos and numbers in shot order; a negative number means the player was out
 func show_roll(photos: Array[Texture2D], numbers: Array[int]) -> void:
 	for child in _row.get_children():
 		child.queue_free()

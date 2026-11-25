@@ -1,14 +1,11 @@
 class_name RankingPanel
 extends PanelContainer
 
-#The ranking of the day on the fair screen, drawn like the screens of the game: the sky with its icons, a coral line over a title in ink,
-#the first three on cards of their own with the seal of their crown (diamond, gold and silver, as on the podium) and the rest in a list
-#like the positions of the final count. It shows the ranking of the fair (FairRanking); at the end of a game the rows come in one after the
-#other and the new ones of that game light up in coral while their points count up
+#Ranking of the day on the fair screen: top three on crowned cards, the rest in a list
 
 const TOP := 3
 const ROWS := 10
-#The crown of each of the first three places, its name and the colour of its card's edge
+#Crown, name and edge colour of the top three
 const CROWNS: Array[ScoreSheet.Medal] = [ScoreSheet.Medal.DIAMOND, ScoreSheet.Medal.GOLD, ScoreSheet.Medal.SILVER]
 const CROWN_NAMES: Array[String] = ["CORONA DE DIAMANTE", "CORONA DE ORO", "CORONA DE PLATA"]
 const EDGES: Array[Color] = [MedalBadge.FILL[ScoreSheet.Medal.DIAMOND], MedalBadge.FILL[ScoreSheet.Medal.GOLD], MedalBadge.FILL[ScoreSheet.Medal.SILVER]]
@@ -27,7 +24,6 @@ func _ready() -> void:
 	shape.border_color = Color(Palette.PAPER, 0.9)
 	shape.set_border_width_all(3)
 	add_theme_stylebox_override("panel", shape)
-	#The sky of the menus, cut to the round corners of the card
 	clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 	add_child(SocialBackground.new())
 	var margin := MarginContainer.new()
@@ -73,15 +69,13 @@ func _ready() -> void:
 	_tag.visible = false
 
 
-#The line under the title (the full list says how many there are)
 func set_subtitle(text: String) -> void:
 	_subtitle = text
 	if _heading != null:
 		_heading.text = text
 
 
-#Rows of [name, points], best first; only the first ten show. "fresh" are the places (from 0) of the entries of the game that just ended:
-#with "animate" the rows come in one after the other and those light up while their points count up
+#[name, points] rows, top ten shown; "fresh" rows light up and count up when animated
 func show_rows(rows: Array[Array], fresh: Array[int] = [], animate := false) -> void:
 	_tag.visible = not fresh.is_empty()
 	for child in _top.get_children() + _rest.get_children():
@@ -97,7 +91,7 @@ func show_rows(rows: Array[Array], fresh: Array[int] = [], animate := false) -> 
 			_enter(line, index, points, fresh.has(index))
 
 
-#A row slides in from the right after the ones above it; a new one counts its points up from zero
+#A row slides in after the ones above; a new one counts its points up
 func _enter(line: Control, index: int, points: int, fresh: bool) -> void:
 	line.modulate.a = 0.0
 	var arrive := create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
@@ -114,7 +108,7 @@ func _enter(line: Control, index: int, points: int, fresh: bool) -> void:
 	pulse.tween_property(line, "scale", Vector2.ONE, 0.25)
 
 
-#One of the first three: a white card edged in the colour of its crown, with its seal, its name and the name of its crown
+#Top three card edged in its crown colour
 func _crowned(index: int, shown_name: String, points: int, fresh := false) -> Control:
 	var card := PanelContainer.new()
 	var face := UiKit.box(Color(Palette.PAPER, 0.96) if not fresh else Palette.PAPER.lerp(Palette.CORAL, 0.14), 22)
@@ -150,7 +144,7 @@ func _crowned(index: int, shown_name: String, points: int, fresh := false) -> Co
 	return card
 
 
-#From the fourth on: the place, the name and the points, as in the positions of the final count
+#From the fourth on: place, name and points
 func _row(index: int, shown_name: String, points: int, fresh := false) -> Control:
 	var line := HBoxContainer.new()
 	line.add_theme_constant_override("separation", 12)

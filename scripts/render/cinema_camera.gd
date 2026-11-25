@@ -1,9 +1,7 @@
 class_name CinemaCamera
 extends Camera3D
 
-#A film camera for the big moments: it is placed by a point and the point it looks at, glides between shots with eased moves, circles
-#around a point and shakes with "trauma" (a blow adds trauma, it fades by itself and the shake grows with its square, so small blows
-#barely move it and big ones rock it). A faint hand-held sway keeps it alive between moves
+#Film camera: glides between shots, orbits and shakes with trauma (shake grows with its square)
 
 const TRAUMA_FADE := 1.3
 const SHAKE_MOVE := 0.32
@@ -40,19 +38,19 @@ func _process(delta: float) -> void:
 	rotate_object_local(Vector3.FORWARD, _noise.get_noise_2d(_clock * 18.0, 50.0) * SHAKE_TURN * strength)
 
 
-#A blow: "amount" from 0 to 1 adds to the trauma
+#Adds "amount" (0 to 1) to the trauma
 func shake(amount: float) -> void:
 	trauma = clampf(trauma + amount, 0.0, 1.0)
 
 
-#A cut: the camera is there at once
+#Cut: the camera is there at once
 func place(at: Vector3, look: Vector3) -> void:
 	_stop_move()
 	_at = at
 	_look = look
 
 
-#A move to a new shot in "seconds", eased in and out
+#Eased move to a new shot
 func glide(at: Vector3, look: Vector3, seconds: float, trans := Tween.TRANS_SINE, ease_type := Tween.EASE_IN_OUT) -> Tween:
 	_stop_move()
 	_move = create_tween().set_parallel().set_trans(trans).set_ease(ease_type)
@@ -61,7 +59,7 @@ func glide(at: Vector3, look: Vector3, seconds: float, trans := Tween.TRANS_SINE
 	return _move
 
 
-#Circles around "centre" at "radius" and "height" over it, from one angle to another (degrees, 0 looks from +Z), looking at "look"
+#Orbits "centre" between two angles in degrees (0 looks from +Z)
 func orbit(centre: Vector3, radius: float, height: float, from_degrees: float, to_degrees: float, seconds: float, look: Vector3) -> Tween:
 	_stop_move()
 	_look = look
@@ -71,7 +69,7 @@ func orbit(centre: Vector3, radius: float, height: float, from_degrees: float, t
 	return _move
 
 
-#A quick change of the field of view that eases back: a punch in when something lands
+#FOV punch that eases back
 func punch(degrees: float, seconds := 0.5) -> void:
 	if _zoom != null and _zoom.is_valid():
 		_zoom.kill()

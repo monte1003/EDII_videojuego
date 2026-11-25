@@ -1,18 +1,18 @@
 class_name StreetRunner
 extends Player
 
-#Player of the street minigame: the usual third-person Player with its own camera and a jump that rests after landing
+#Street player: the usual Player with its own camera and a jump that rests after landing
 
 signal jump_cooldown_changed(left: float, total: float)
 
-#The models are 1 m tall, so 1.4 keeps them a bit under half of a 3 m sidewalk
+#1 m models at 1.4, under half of a 3 m sidewalk
 @export var model_scale := 1.4
 #Radius that keeps the runner inside the street
 @export var radius := 0.45
-#The body that obstacles touch: a little thinner than the model, as tall as it
+#Hurt body a little thinner than the model
 @export var hurt_radius := 0.36
 @export var hurt_height := 1.3
-#Seconds after landing from a jump in which a jump press does nothing
+#Seconds after landing before another jump
 @export var jump_cooldown := 1.5
 
 var min_x := -13.0
@@ -20,11 +20,11 @@ var max_x := 20.0
 var min_z := -7.0
 var max_z := 7.0
 
-#When set, the runner turns to this yaw instead of following the input (victory pose)
+#Forced yaw for the victory pose
 var _forced_yaw := NAN
 var _force_jump := false
 var _cooldown_left := 0.0
-#A jump is under way: it started on the ground and has not landed yet
+#A jump left the ground and has not landed
 var _jumped := false
 var _left_ground := false
 
@@ -33,7 +33,7 @@ func _ready() -> void:
 	move_speed = 6.0
 	jump_velocity = 5.0
 	push_decay = 16.0
-	#The camera starts behind the runner looking at the oncoming traffic (-X)
+	#Camera behind the runner facing the traffic (-X)
 	_camera_rig.rotation.y = PI / 2.0
 	_model_pivot.scale = Vector3.ONE * model_scale
 	_camera_rig.position.y *= model_scale
@@ -42,12 +42,12 @@ func _ready() -> void:
 	super()
 
 
-#The victory jump: it leaves at once, even if the jump is resting
+#Victory jump leaves at once
 func jump() -> void:
 	_force_jump = true
 
 
-#Victory pose: no more motion and the runner turns to look at "point"
+#Victory pose: still, facing "point"
 func celebrate(point: Vector3) -> void:
 	set_input_enabled(false)
 	push_velocity = Vector3.ZERO
@@ -67,7 +67,7 @@ func _physics_process(delta: float) -> void:
 		_model_pivot.rotation.y = lerp_angle(_model_pivot.rotation.y, _forced_yaw, turn_speed * delta)
 
 
-#A pressed jump leaves at once; after landing the next one waits and a press in the meantime is lost, not saved
+#A press during the rest is lost, not saved
 func _tick_jump(delta: float) -> void:
 	if _force_jump:
 		_force_jump = false

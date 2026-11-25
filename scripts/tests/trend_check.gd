@@ -1,10 +1,6 @@
 extends SceneTree
 
-#Checks the trend war: the five zones on one island and that every bubble point is inside its own zone; that every point, jump, step
-#and trampoline can be reached with the real numbers of the player and 20 % to spare; the board of bubbles one zone at a time, growing,
-#with the trend of every player always there and the viral bubble; airplane mode with a real body in the real scene; the seed; and the
-#rules by player id: one round per zone, a trend at a time, the viral one and the points.
-#run: godot --headless --fixed-fps 60 --path . --script res://scripts/tests/trend_check.gd
+#Checks the trend war: zones, reach with 20 % to spare, bubbles, rounds, trends and points
 
 const SHEET: ScoreSheet = preload("res://resources/score_sheet.tres")
 const SETTINGS: TrendSettings = preload("res://resources/levels/trend_war.tres")
@@ -58,7 +54,7 @@ func _measure() -> void:
 		_speed, _jump, _gravity, _apex(1.0) * MARGIN, _reach(1.0) * MARGIN, TrendLayout.GRAVITY_SCALE, _apex(TrendLayout.GRAVITY_SCALE) * MARGIN])
 
 
-#How high and how far a jump goes on flat ground with the pull of the ground times "scale"
+#Jump height and length with gravity times "scale"
 func _apex(scale: float) -> float:
 	return _jump * _jump / (2.0 * _gravity * scale)
 
@@ -67,7 +63,7 @@ func _reach(scale: float) -> float:
 	return 2.0 * _jump / (_gravity * scale) * _speed
 
 
-#Whether the middle of a body standing with its feet at "feet" reaches a bubble at "height"
+#Whether a body standing at "feet" reaches a bubble at "height"
 func _touches_from(feet: float, height: float) -> bool:
 	return absf(height - (feet + Player.TUMBLE_CENTER)) <= SETTINGS.touch_height
 
@@ -116,7 +112,7 @@ func _check_zones() -> void:
 	for zone in TrendLayout.ZONE_COUNT:
 		plenty = plenty and layout.zone_slots(zone).size() >= SETTINGS.bubbles_end + 1
 	_expect(plenty, "cada zona tiene más puntos que burbujas a la vez, al final de su ronda")
-	#From the plaza to where the play of every zone starts, and from one zone to the farthest of the others, on foot
+	#Walks from the plaza to each zone and between zones
 	var walks: Array[float] = []
 	var fine := true
 	for zone in TrendLayout.ZONE_COUNT:
@@ -145,7 +141,7 @@ func _check_zones() -> void:
 			(described["walls"] as Array).size(), (described["links"] as Array).size()])
 
 
-#The roller: its bar is low enough to jump with room to spare, and fast or slow it is crossed in less time than the feet stay over it
+#Roller bar low enough to jump and quick to cross
 func _check_roller() -> void:
 	var layout := TrendLayout.new()
 	var spinner: Dictionary = layout.spinners[0]
@@ -171,7 +167,7 @@ func _check_roller() -> void:
 	_expect(fine, "sus burbujas están bajo la barra, fuera del poste y se tocan de pie")
 
 
-#The gravity zone: every bubble is reached by a jump from the floor, standing on the glass, or floating from a pad
+#Gravity zone: every bubble reachable from floor, glass or pad
 func _check_glass() -> void:
 	var layout := TrendLayout.new()
 	var scale := TrendLayout.GRAVITY_SCALE
@@ -187,7 +183,7 @@ func _check_glass() -> void:
 		elif _touches_from(ceiling_feet, at.y):
 			how = "techo"
 		else:
-			#Floating up from the closest pad: the time to get to its height, and how far the player steers meanwhile
+			#Time to float to the bubble height and how far it steers
 			var pad := layout.floor_pads[0]
 			for other in layout.floor_pads:
 				if Vector2(other.x - at.x, other.z - at.z).length() < Vector2(pad.x - at.x, pad.z - at.z).length():
@@ -204,7 +200,7 @@ func _check_glass() -> void:
 	_expect(low > _apex(1.0) * 2.0, "con gravedad %.2f el salto llega a %.2f m (con el 80 %%), más del doble que el normal" % [scale, low])
 
 
-#Seconds from the floor pad until the feet are "height" up, with the kick of the pad and the turned pull, under the cap
+#Seconds from the floor pad until the feet are "height" up
 func _float_time(height: float, scale: float) -> float:
 	var speed := SETTINGS.pad_kick
 	var climbed := 0.0
@@ -216,8 +212,7 @@ func _float_time(height: float, scale: float) -> float:
 	return seconds
 
 
-#The archipelago: from the dock every platform with a bubble is reached hop by hop, never by a gap longer than 80 % of a jump; the
-#platforms never run into each other nor into the walls; one that sinks holds a moment first
+#Meme sea: hop by hop from the dock, short gaps, no collisions; sinkers hold first
 func _check_islands() -> void:
 	var layout := TrendLayout.new()
 	var obstacles := TrendObstacles.new(layout)
@@ -289,8 +284,7 @@ func _check_islands() -> void:
 		"quien cae al agua vuelve al muelle, fuera del agua")
 
 
-#The maze: with either group of screens up every cell is reached from the mouths, the walls are too high to jump, and its bubbles
-#are inside cells
+#Maze: every cell reachable either way, walls too high, bubbles inside cells
 func _check_maze() -> void:
 	var layout := TrendLayout.new()
 	var obstacles := TrendObstacles.new(layout)
@@ -348,8 +342,7 @@ func _cells_open(layout: TrendLayout, obstacles: TrendObstacles, time: float) ->
 	return seen.size()
 
 
-#The tower: no floor is climbed with a jump; every trampoline clears the edge of the floor it aims at; from the ground there is a
-#way up to every floor that holds a bubble; the likes fall in turns on every floor and throw outward
+#Tower: no floor by jump, clean trampolines, a way up, likes falling in turns
 func _check_tower() -> void:
 	var layout := TrendLayout.new()
 	var obstacles := TrendObstacles.new(layout)
@@ -397,15 +390,14 @@ func _check_tower() -> void:
 	_expect(falls.size() == 3 and outward, "en 30 s caen likes en los tres pisos %s y empujan hacia afuera" % falls)
 
 
-#The par of the round: what a good player completes, a little less with more players to share the bubbles
+#Round par, a little less with more players
 func _check_par() -> void:
 	var alone := SETTINGS.par_for(1)
 	var crowd := SETTINGS.par_for(4)
 	_expect(alone > 15.0 and alone < 60.0 and crowd < alone and crowd > alone * 0.6, "el par de la ronda es de %.0f tendencias solo y %.0f con cuatro" % [alone, crowd])
 
 
-#The board: one zone at a time, every bubble on its points and announced by a ring first; more bubbles as the round goes on; the trend of
-#every player always has a bubble; the viral one comes once; an old bubble moves somewhere else
+#Board: one zone at a time, announced bubbles, every trend covered, one viral
 func _check_board() -> void:
 	var layout := TrendLayout.new()
 	var board := TrendBoard.new(layout, SETTINGS, 9)
@@ -484,7 +476,7 @@ func _check_board() -> void:
 	_expect(board.take(-5) == -1, "una burbuja que no existe no se atrapa")
 
 
-#The same seed gives the same order of zones and the same bubbles; another seed gives others. Every zone comes once
+#Same seed, same zones and bubbles; every zone once
 func _check_seed() -> void:
 	var layout := TrendLayout.new()
 	var logs: Array[Array] = []
@@ -519,7 +511,7 @@ func _check_seed() -> void:
 	_expect(once and orders.size() > 20, "cada zona sale una vez por partida, en %d órdenes distintos con 40 semillas" % orders.size())
 
 
-#One round per zone: the first is announced, then each one lasts its seconds and the next is announced before it ends
+#One round per zone, the next announced before the end
 func _check_rounds() -> void:
 	var rules := _rules([1])
 	var log: Array[String] = []
@@ -543,7 +535,7 @@ func _check_rounds() -> void:
 	_expect(rules.needed(1) == -1 and not rules.collect(1, 0), "terminada la ronda no se atrapa más")
 
 
-#Every player follows one trend: only that kind or the viral one counts; completing it draws another one, never the same
+#Only your trend or the viral one counts; a new one is never the same
 func _check_trends() -> void:
 	var rules := _rules([1, 2])
 	_to_run(rules)
@@ -568,7 +560,7 @@ func _expect_quiet(condition: bool) -> void:
 		_expect(false, "una tendencia que tocaba no contó")
 
 
-#The points come from the trends against the par: the par gives all of them, half gives half, and each player keeps its own
+#Points from trends against the par
 func _check_points() -> void:
 	var rules := _rules([1, 2])
 	rules.par = 30.0
@@ -585,8 +577,7 @@ func _check_points() -> void:
 	_expect(SHEET.trend_score(0, 30.0) == 0 and SHEET.trend_score(5, 0.0) == 1000, "sin tendencias 0, y un par imposible no rompe nada")
 
 
-#The gravity zone in the real scene with a real body: it walks in (weak pull), steps on a pad (the pull turns and it floats up), stands
-#on the glass upside down, steps on a pad up there (it turns back and floats down), and walks out (normal pull, on its feet)
+#Gravity zone with a real body: weak pull, float up, stand upside down, float down, walk out
 func _check_gravity_body() -> void:
 	var scene := (load("res://scenes/levels/trend_war.tscn") as PackedScene).instantiate()
 	scene.hazards_enabled = false
@@ -679,7 +670,7 @@ func _check_gravity_body() -> void:
 	await _frames(3)
 
 
-#The roller in the real scene: a body that waits in the way of its bar is thrown like a car in the street, flipped and down a moment
+#A body in the roller's way is thrown and flipped
 func _check_roller_body() -> void:
 	var scene := (load("res://scenes/levels/trend_war.tscn") as PackedScene).instantiate()
 	root.add_child(scene)

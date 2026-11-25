@@ -1,55 +1,52 @@
 class_name SocialDrop
 extends RoundScene
 
-#SocialDrop, a memory game: nine cards show their app icons while the giant screens count down; then the cards turn into "?" and
-#the screens show the icon to find. Only the cards that had it stay, the rest drop. Round after round the board shows more
-#different icons and fewer cards with the one to find, until only a single card keeps it
+#SocialDrop memory game: memorize the card icons, then stand on the one the screens show
 
-#FINAL: the last drop is over and there is no time for another round
+#FINAL: no time for another round
 enum Phase { READY, GO, MEMORIZE, REACT, REST, FINAL, ENDED }
 
 const MINIGAME_ID := &"social_drop"
-#Each stage of the round: how many different icons the board shows (x) and on how many of the nine cards the icon to find is (y)
+#Per stage: distinct icons on the board (x) and cards with the target (y)
 const STAGES: Array[Vector2i] = [
 	Vector2i(2, 4), Vector2i(3, 4), Vector2i(3, 3), Vector2i(4, 3), Vector2i(4, 2), Vector2i(5, 2), Vector2i(6, 1),
 ]
 
-#One per kind of card; the name shown to the player comes from the file (assets/social_icons/<name>.png)
+#One per card kind; the name comes from assets/social_icons/<name>.png
 @export var icons: Array[Texture2D] = []
 
 @export_group("Round")
 @export var time_limit := 80.0
-#the screens say "YA" before the first memory, and the clock starts with it
+#Screens say "YA" before the first memory; the clock starts then
 @export var ready_seconds := 3.0
 @export var go_seconds := 1.2
-#Below this height the player has fallen off the platform
+#Below this height the player fell
 @export var fall_y := -2.5
-#The camera of each player sits this far behind and this steeply above: a bit farther than in the other rounds, to see the cards ahead
+#Camera a bit farther than other rounds to see the cards ahead
 @export var camera_distance := 4.6
 @export var camera_pitch := -26.0
 
 @export_group("Memory")
-#Seconds the icons stay face up while the screens count down; it shrinks from start to end over the round
+#Seconds icons stay face up, shrinking over the round
 @export var memorize_start := 4.0
 @export var memorize_end := 3.0
-#Pitch of the tick of the countdown, from the first number to the last
+#Countdown tick pitch from first to last
 @export var tick_pitch_start := 0.9
 @export var tick_pitch_end := 1.8
 
 @export_group("Drop")
-#Time to reach the card once the screens show the icon; it shrinks from start to end over the round,
-#slowly at first and faster near the end (reaction_curve > 1)
+#Time to reach the card, shrinking faster near the end (reaction_curve > 1)
 @export var reaction_start := 3.6
 @export var reaction_end := 2.3
 @export var reaction_curve := 1.6
-#The cards that will drop blink for this long right before they do
+#Doomed cards blink this long before dropping
 @export var warning_seconds := 0.6
-#Seconds from a drop to the next round; the cards come back drop_hold seconds after the drop
+#Seconds to the next round; cards return drop_hold after the drop
 @export var rest_seconds := 3.0
 @export var drop_hold := 1.6
 
 @export_group("Victory")
-#Time between the end and the results, to see the jump or the fall
+#Delay before the results to see the jump or fall
 @export var end_delay := 1.5
 
 var phase := Phase.READY
@@ -57,9 +54,9 @@ var elapsed := 0.0
 
 var _players: Array[Player] = []
 var _local: Player
-#Each player that fell, with the second of the round at which it did
+#Each fallen player with the second it fell
 var _fallen: Dictionary = {}
-#The board draws from the seed of the room; effects (dust, sparks) from their own dice, so a landing here never changes the board there
+#Board from the room seed; effects from their own dice so they never change the board
 var _rng := RandomNumberGenerator.new()
 var _fx_rng := RandomNumberGenerator.new()
 var _phase_timer := 0.0
@@ -69,14 +66,14 @@ var _chosen := -1
 var _warned := false
 var _restored := false
 var _drops_survived := 0
-#One spare life: the first fall puts the player back on a safe card, but that drop does not count and costs some seconds; the second is out
+#One spare life: the first fall returns to a safe card at a time cost
 const SPARE_LIVES := 1
 const REVIVE_COST := 10.0
 var _spares_left := SPARE_LIVES
 var _penalty := 0.0
 var _missed_drop := false
 var _reviving := false
-#In a room, the player of this computer fell for good: the board goes on for the others until the clock runs out
+#In a room this player is out: the board goes on for the others
 var _out := false
 var _hud_timer := 0.0
 var _tick_sound: AudioStreamPlayer
@@ -120,7 +117,7 @@ func _help_allowed() -> bool:
 	return phase != Phase.ENDED and not _out
 
 
-#Everybody stands on the platform at once, each with its own id and camera; this screen controls the first one
+#Everybody on the platform with its own id and camera
 func _spawn_players() -> void:
 	_players = spawn_players(_actors, _world.spawn_points())
 	_local = RoundScene.local_of(_players)
@@ -132,7 +129,7 @@ func _spawn_players() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	#The cards move with tweens of the world: they stop with the pause and the help too
+	#Card tweens stop with the pause and help
 	_world.process_mode = Node.PROCESS_MODE_DISABLED if paused else Node.PROCESS_MODE_INHERIT
 	if paused or filming or phase == Phase.ENDED:
 		return
@@ -170,10 +167,10 @@ func _physics_process(delta: float) -> void:
 		_hud.set_time(time_limit - elapsed)
 
 
-#A player that goes under the platform is out of the round; when it is the one at this screen, the round is over
+#Under the platform means out; this screen's player out ends the round here
 func _check_falls() -> void:
 	for player in _players:
-		#The puppet of another computer only hides while it is under the board (its spare life may bring it back)
+		#A remote puppet only hides while under the board
 		if player.remote:
 			player.visible = player.global_position.y >= fall_y
 			continue
@@ -185,7 +182,7 @@ func _check_falls() -> void:
 			continue
 		_fallen[player.player_id] = elapsed
 		if player == _local:
-			#Out for good: the body stops where it is, under the board, while this computer watches the others
+			#Out for good: the body stops and this computer watches the others
 			player.set_physics_process(false)
 			player.hide()
 			_finish(false, "Caída", "")
@@ -194,7 +191,7 @@ func _check_falls() -> void:
 		player.hide()
 
 
-#The spare life: the picture closes, the player comes back on a card of the icon of the screen (or its starting place) and it opens
+#Spare life: iris, back on a target card or the start, iris opens
 func _revive(player: Player) -> void:
 	_spares_left -= 1
 	_reviving = true
@@ -221,7 +218,7 @@ func _go() -> void:
 	_local.set_input_enabled(true)
 
 
-#The board is dealt for the stage of the round, the cards turn face up and the screens count down while everybody looks for a good place
+#Deal the stage, show the icons and count down
 func _start_memorize() -> void:
 	phase = Phase.MEMORIZE
 	_memory_total = _memorize_time(elapsed)
@@ -236,7 +233,7 @@ func _start_memorize() -> void:
 	_world.show_icons(true)
 
 
-#The stage of the round that starts at "start": it moves on with the clock, and the very last round is always the hardest
+#Stage by the clock; the very last round is the hardest
 func _stage_at(start: float) -> Vector2i:
 	if _is_last_round(start):
 		return STAGES[STAGES.size() - 1]
@@ -244,13 +241,13 @@ func _stage_at(start: float) -> Vector2i:
 	return STAGES[mini(int(progress * STAGES.size()), STAGES.size() - 1)]
 
 
-#Whether no other round fits after the one that starts at "start"
+#Whether no other round fits after this one
 func _is_last_round(start: float) -> bool:
 	var memorize := _memorize_time(start)
 	return not _round_fits(start + memorize + _reaction_time(start + memorize) + rest_seconds)
 
 
-#One number per second on the screens, each tick a little higher; at zero the cards hide their icons
+#One rising tick per second; at zero the icons hide
 func _update_memorize() -> void:
 	if _phase_timer <= 0.0:
 		_reveal_target()
@@ -264,7 +261,7 @@ func _update_memorize() -> void:
 	_tick_sound.play()
 
 
-#The cards turn into "?" and the screens show the icon that has to be stepped on
+#Cards turn to "?" and the screens show the target icon
 func _reveal_target() -> void:
 	phase = Phase.REACT
 	_phase_timer = _reaction_time(elapsed)
@@ -302,11 +299,11 @@ func _update_rest() -> void:
 		if _round_fits(elapsed):
 			_start_memorize()
 		else:
-			#No round starts that the clock would cut: the last seconds just run out
+			#No round starts that the clock would cut
 			phase = Phase.FINAL
 
 
-#Whether a round starting at "start" reaches its drop before the time runs out
+#Whether a round starting at "start" reaches its drop in time
 func _round_fits(start: float) -> bool:
 	var memorize := _memorize_time(start)
 	return start + memorize + _reaction_time(start + memorize) <= time_limit
@@ -321,14 +318,14 @@ func _reaction_time(at: float) -> float:
 	return lerpf(reaction_start, reaction_end, progress)
 
 
-#Every landing of the player of this screen and the hard ones of the rest
+#Landings of this screen's player and hard ones of the rest
 func _on_player_landed(at: Vector3, hard: bool, player: Player) -> void:
 	_world.press_tile(at)
 	if hard or player == _local:
 		ImpactFx.landing(self, player, hard, _fx_rng)
 
 
-#The opening film of the board comes from high over it, above the giant screens around it, and then down behind the player
+#Opening film from high over the board, then behind the player
 func _film_shots() -> Array[RoundFilm.Shot]:
 	var shots := super()
 	if shots.is_empty():
@@ -351,7 +348,7 @@ func _pose_shown() -> bool:
 func _finish(victory: bool, title: String, message: String) -> void:
 	if phase == Phase.ENDED or (_out and not victory):
 		return
-	#The clock ran out after this player had fallen: the board stops and nothing is told twice
+	#Time ran out after this player fell: nothing is told twice
 	if _out:
 		phase = Phase.ENDED
 		_world.screen_text("Fin", Palette.TEAL)
@@ -361,7 +358,7 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	else:
 		phase = Phase.ENDED
 	_local.set_input_enabled(false)
-	#A late Esc press must not open the pause menu over the final panel
+	#A late Esc must not open the pause over the final panel
 	_pause_menu.set_process_unhandled_input(false)
 	_hud.hide_target()
 	_hud.hide_mission()
@@ -376,9 +373,9 @@ func _finish(victory: bool, title: String, message: String) -> void:
 	get_tree().create_timer(end_delay).timeout.connect(_end_round.bind(victory, title, message))
 
 
-#Inside a session the results screen takes over; on its own the HUD shows the end panel
+#In a session the results take over; alone the HUD shows the end panel
 func _end_round(victory: bool, title: String, message: String) -> void:
-	#Seconds this player held: in a room the clock goes on after its fall
+	#Seconds held; in a room the clock goes on after a fall
 	var held_here: float = _fallen.get(_local.player_id, minf(elapsed, time_limit))
 	var lines: Array[Array] = [
 		["Segundos", "%d s" % floori(held_here)],
@@ -404,7 +401,7 @@ func _retry() -> void:
 		ScreenFlow.reload_current()
 
 
-#A random icon different from "current" (-1 for any)
+#Random icon other than "current" (-1 for any)
 func _other_icon(current: int) -> int:
 	if icons.size() < 2:
 		return 0

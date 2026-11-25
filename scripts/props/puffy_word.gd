@@ -1,15 +1,14 @@
 class_name PuffyWord
 extends RefCounted
 
-#Fixed words of the big moments in chunky round letters, like the title of the game, made in Blender from its font: one node per letter
-#with its origin at its middle, so each letter can drop and bounce on its own. Each word comes in the colours of what it names
+#Chunky letters for big moments, one node per letter so each can bounce
 
 const FOLDER := "res://assets/words/%s.glb"
 const SHADER: Shader = preload("res://assets/shaders/puffy_word.gdshader")
-#Height of a capital letter of the files, in their own meters
+#Capital height in the files
 const CAP := 0.72
 
-#Light top, deep bottom and darker sides of each set of colours
+#Top, bottom and side colours of each set
 const COLOURS := {
 	&"bronze": [Color("ffd2a8"), Color("d9772e"), Color("8a4a1c")],
 	&"silver": [Color("ffffff"), Color("b9c6dc"), Color("66748f")],
@@ -22,7 +21,7 @@ const COLOURS := {
 static var _paints: Dictionary = {}
 
 
-#A word "height" meters tall in one set of colours; the letters are the children of the node it returns
+#Word "height" meters tall; the letters are children of the node
 static func make(word: StringName, height: float, colours: StringName, glow := 0.0) -> Node3D:
 	var root := Node3D.new()
 	root.name = String(word)

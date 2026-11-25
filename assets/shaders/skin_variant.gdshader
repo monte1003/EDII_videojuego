@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
-//Another colour of the same character: its own texture with the hue turned and a little more saturation, so two players with the
-//same skin are told apart at a glance while the drawing stays the same
+//Same character in another hue so two equal skins are told apart
 uniform sampler2D albedo_texture : source_color, filter_linear_mipmap, repeat_enable;
 uniform vec4 albedo_color : source_color = vec4(1.0);
 uniform float hue_shift = 0.0;

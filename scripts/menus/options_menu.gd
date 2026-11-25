@@ -6,7 +6,7 @@ const ACCENTS: Array[Color] = [Palette.TEAL, Palette.AMBER, Palette.CORAL]
 
 func _ready() -> void:
 	super()
-	#The buttons are the children of this screen in the tree, so the tree decides what shows up here
+	#The buttons are this screen's children in the screen tree
 	var children := ScreenFlow.children_of(screen_id)
 	for index in children.size():
 		var button := BUTTON_SCENE.instantiate() as TextButton

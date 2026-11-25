@@ -1,6 +1,6 @@
 extends SceneTree
 
-#Checks the graph and Dijkstra; run: godot --headless --path . --script res://scripts/tests/graph_check.gd
+#Checks the graph and Dijkstra; run headless with --script
 
 var _failures := 0
 
@@ -50,7 +50,7 @@ func _check_shortest_path() -> void:
 		if edge[4] == Level01Layout.SLIDE:
 			one_way = one_way and not graph.has_edge(edge[1], edge[0])
 	_expect(one_way, "los toboganes solo bajan: ninguno se sube")
-	#Every way of the first part reaches every way of the second through the plaza: nine routes from the start to the goal
+	#Nine routes from start to goal through the plaza
 	var routes := 0
 	for way: Array in [[&"A1", &"Ax"], [&"B1", &"B3"], [&"C1", &"Cx"]]:
 		for slide: Array in [[&"Bn", &"B8"], [&"h1", &"A8"], [&"z1", &"C8"]]:

@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
 
-//Candy stripes for the bumpers of many islands joined in one mesh: the first colour is the same for all, the second one is the colour
-//of each vertex and the stripes are counted in the UV, so one material serves every island
+//Candy stripes for joined islands: second colour from the vertex, stripes from the UV
 uniform vec4 color_a : source_color = vec4(0.99, 0.98, 1.0, 1.0);
 uniform float glow = 0.25;
 

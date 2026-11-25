@@ -1,10 +1,7 @@
 class_name SelfieHud
 extends RoundHud
 
-#The selfie screen: which photo it is, very small, and the followers of its player. The rest shows only when it matters: the badge
-#that says where the next photo is, the live picture of the drone in a corner while a photo is coming, the message that tells the
-#camera is moving and to which set, the photo that takes its place at the shot and shrinks into the corner, the chips of the two
-#actions (pose and shove) and the roll of photos at the end
+#Selfie screen: photo number and followers, plus badge, live picture and messages when needed
 
 const CAMERA_HOLD := 2.4
 const CAMERA_IN := 0.24
@@ -67,7 +64,7 @@ func set_photo(number: int, total: int) -> void:
 	_photo_label.text = "FOTO %d/%d" % [number, total]
 
 
-#Your followers, with what the last photo added next to them for a moment
+#Followers with the last gain next to them for a moment
 func set_followers(total: int, gained: int) -> void:
 	var from := _shown
 	_shown = total
@@ -82,7 +79,7 @@ func set_followers(total: int, gained: int) -> void:
 	fade.tween_property(_gain_label, "modulate:a", 0.0, 0.4)
 
 
-#The drone sets off for the next place: two short lines at the top say the camera moves and to which set
+#Two short lines when the drone moves to the next set
 func announce_camera(set_name: String) -> void:
 	_camera_hint.text = "ve a %s" % set_name
 	monitor.set_title(set_name)
@@ -101,19 +98,19 @@ func announce_camera(set_name: String) -> void:
 	_camera_tween.chain().tween_callback(_camera_box.hide)
 
 
-#The photo comes out where the live picture was, with what it gave
+#The photo comes out where the live picture was
 func show_photo(photo: Texture2D, followers: int, inside: bool, posed: bool) -> void:
 	card.play(photo, monitor.get_global_rect().position + Vector2(monitor.size.x - SelfieCard.CARD.x, 0.0), followers, inside, posed)
 
 
-#The end of the round: the small copy leaves and the roll of every photo comes in
+#End of round: the roll of every photo
 func show_roll(photos: Array[Texture2D], numbers: Array[int]) -> void:
 	card.clear()
 	monitor.set_live(false)
 	roll.show_roll(photos, numbers)
 
 
-#The chip of the shove: over the rival in reach or near the player, with its recharge
+#Shove chip with its recharge
 func set_shove_chip(shown: bool, charge: float, at: Vector2) -> void:
 	shove_chip.set_charge(charge)
 	shove_chip.set_shown(shown)

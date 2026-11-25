@@ -1,8 +1,7 @@
 class_name FairMenu
 extends CanvasLayer
 
-#The menu of the staff on the fair screen (Esc), drawn like the pause of the rounds: go on, take a name out of the ranking, go back to the
-#main menu or close the game. The screen keeps playing behind it. Taking a name out asks once more before it goes
+#Staff menu on the fair screen (Esc); removing a name asks once more
 
 signal name_removed(shown: String)
 signal leave_requested
@@ -51,7 +50,7 @@ func _show_main() -> void:
 	first.grab_focus()
 
 
-#Every name of the ranking, best first; picking one asks before it goes
+#Every ranking name, best first; picking one asks first
 func _show_names(notice: String) -> void:
 	_clear()
 	_title("QUITAR UN NOMBRE DEL RANKING")

@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode blend_add, unshaded, depth_draw_never, cull_back, fog_disabled;
 
-//A soap bubble: only its rim shows, with the colours of oil on water over the colour of what it holds, and a small shine.
-//It adds light instead of blending, so it costs very little. With "jiggle" its skin ripples like jelly when something goes through it
+//Soap bubble: only the rim shows, additive; "jiggle" ripples its skin
 uniform vec4 tint : source_color = vec4(1.0);
 uniform float glow = 1.0;
 uniform float fade = 1.0;

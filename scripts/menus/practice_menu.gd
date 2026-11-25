@@ -1,6 +1,6 @@
 extends MenuPage
 
-#One minigame on its own, from the lobby: every ready minigame of the catalog is a button
+#One minigame alone from the lobby: a button per ready minigame
 
 const ACCENTS: Array[Color] = [Palette.CORAL, Palette.TEAL, Palette.AMBER]
 

@@ -1,9 +1,7 @@
 class_name ArenaGround
 extends Node3D
 
-#What an arena round asks of the world it plays on: build it from the layout, tell each locator where its player stands, show the
-#pieces of each stage, move what moves and bounce a pad. ArenaWorld builds a map out of its layout; a round with a stage of its own
-#builds it in another one
+#What an arena round needs from its world: build, locate players, stage pieces and move them
 
 
 func build(_arena: ArenaLayout) -> void:

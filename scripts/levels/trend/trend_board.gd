@@ -1,16 +1,13 @@
 class_name TrendBoard
 extends RefCounted
 
-#The bubbles of the trend war, with no nodes. One zone is open at a time and every bubble is born on a point that zone lists, never anywhere
-#else. A ring on the floor tells where a bubble is about to be born; it lives until somebody takes it or until it gets old, and then it is
-#born again somewhere else. As the round of the zone goes on there are more bubbles; the trend of every player always has one somewhere, and
-#once per zone the viral bubble comes. The same seed and the same players give the same game
+#Trend war bubbles with no nodes: born only on the open zone's points, announced by a floor ring
 
 signal bubble_announced(id: int)
 signal bubble_spawned(id: int)
 signal bubble_gone(id: int, taken: bool)
 
-#Of the free points, a new bubble picks one of this many of the best
+#A new bubble picks among this many best free points
 const CHOICES := 3
 
 
@@ -20,17 +17,16 @@ class Bubble:
 	var kind: int
 	var phase := 0.0
 	var age := 0.0
-	#Seconds until it is born; while above 0 only its ring shows
+	#Seconds until born; only its ring shows meanwhile
 	var pending := 0.0
 
 
-#Every bubble announced or alive, by its id
+#Every announced or live bubble by id
 var bubbles: Dictionary = {}
-#Seconds this board has run
 var clock := 0.0
-#The zone that is open (-1 for none)
+#Open zone, -1 for none
 var zone := -1
-#In a room every computer but the server only shows the bubbles the server tells: it makes none and lets none age out
+#In a room non-servers only show what the server tells
 var mirror := false
 
 var _layout: TrendLayout
@@ -39,7 +35,7 @@ var _rng := RandomNumberGenerator.new()
 var _next_id := 1
 var _on_slot: Dictionary = {}
 var _slot_rest: Dictionary = {}
-#The share of the round of the zone at which the viral bubble comes, and whether it came
+#Share of the zone round when the viral bubble comes, and whether it came
 var _viral_at := 1.0
 var _viral_done := false
 
@@ -50,9 +46,9 @@ func _init(layout: TrendLayout, settings: TrendSettings, seed_value: int) -> voi
 	_rng.seed = seed_value
 
 
-#Opens a zone: the bubbles of the last one go and the first ones of this one are announced
+#Opens a zone: the old bubbles go and the first new ones are announced
 func open_zone(new_zone: int, players: Dictionary, wanted: Dictionary) -> void:
-	#A mirror keeps what the server told: its bubbles of the new zone may come before this computer opens it
+	#A mirror keeps what the server told, even before it opens the zone
 	if mirror:
 		zone = new_zone
 		return
@@ -63,7 +59,6 @@ func open_zone(new_zone: int, players: Dictionary, wanted: Dictionary) -> void:
 	tick(0.0, 0.0, players, wanted)
 
 
-#Every bubble goes
 func close() -> void:
 	for id: int in bubbles.keys():
 		_remove(id, false)
@@ -71,15 +66,13 @@ func close() -> void:
 	zone = -1
 
 
-#How many bubbles the zone holds at that share of its round, with that many players
+#Bubble count at that share of the round with that many players
 func target_count(share: float, player_count: int) -> int:
 	var base := lerpf(float(_settings.bubbles_start), float(_settings.bubbles_end), clampf(share, 0.0, 1.0))
 	return mini(roundi(base) + _settings.bubbles_per_player * maxi(player_count - 1, 0), maxi(_layout.zone_slots(maxi(zone, 0)).size() - 1, 1))
 
 
-#Moves time on. "share" is how far the round of the zone is, "players" {player id: position} and "wanted" {player id: kind it follows}.
-#The rings become bubbles, the old bubbles move, every trend that is followed gets a bubble when it has none, the viral one comes at its
-#moment and the rest of the room is filled with kinds at random, half of them the kinds that are followed
+#Advances time: rings hatch, old bubbles move and every followed trend gets a bubble
 func tick(delta: float, share: float, players: Dictionary, wanted: Dictionary) -> void:
 	clock += delta
 	for slot: int in _slot_rest.keys():
@@ -125,12 +118,12 @@ func kind_of(id: int) -> int:
 	return (bubbles[id] as Bubble).kind if bubbles.has(id) else -1
 
 
-#Whether the bubble is born (not only its ring)
+#Born, not only its ring
 func is_live(id: int) -> bool:
 	return bubbles.has(id) and (bubbles[id] as Bubble).pending <= 0.0
 
 
-#How many bubbles of a kind are announced or alive
+#Announced or live bubbles of a kind
 func count_of(kind: int) -> int:
 	var count := 0
 	for bubble: Bubble in bubbles.values():
@@ -147,7 +140,7 @@ func bob_of(id: int) -> float:
 	return (bubbles[id] as Bubble).phase
 
 
-#A bubble the server announced, with its id, point, kind and bob
+#Bubble announced by the server
 func mirror_add(id: int, slot: int, kind: int, bob: float) -> void:
 	if bubbles.has(id) or slot < 0 or slot >= _layout.slots.size() or kind < 0 or kind > TrendRules.VIRAL:
 		return
@@ -162,30 +155,30 @@ func mirror_add(id: int, slot: int, kind: int, bob: float) -> void:
 	bubble_announced.emit(id)
 
 
-#A bubble the server took away (taken by somebody or old)
+#Bubble removed by the server (taken or old)
 func mirror_gone(id: int, taken: bool) -> void:
 	if bubbles.has(id):
 		_remove(id, taken)
 
 
-#How far its ring is from being a bubble: 0 when it is announced, 1 when it is born
+#Ring progress: 0 announced, 1 born
 func birth_share(id: int) -> float:
 	return 1.0 - (bubbles[id] as Bubble).pending / maxf(_settings.spawn_notice, 0.01)
 
 
-#How close to moving away an old bubble is, 0 young and 1 about to go
+#Age: 0 young, 1 about to move
 func age_share(id: int) -> float:
 	return clampf((bubbles[id] as Bubble).age / _settings.bubble_life, 0.0, 1.0)
 
 
-#Where a bubble floats: over its point, bobbing a little
+#Floats over its point, bobbing
 func position_of(id: int) -> Vector3:
 	var bubble: Bubble = bubbles[id]
 	var at: Vector3 = _layout.slots[bubble.slot]["position"]
 	return at + Vector3(0.0, sin(clock * 1.6 + bubble.phase) * 0.12, 0.0)
 
 
-#Takes a bubble: it is gone at once; another one will be born on another point. Returns its kind, or -1 when it was not there or not born
+#Takes a bubble at once; returns its kind or -1
 func take(id: int) -> int:
 	if not is_live(id):
 		return -1
@@ -202,8 +195,7 @@ func _remove(id: int, taken: bool) -> void:
 	bubble_gone.emit(id, taken)
 
 
-#A new bubble of "kind" announced on a free point of the zone. For somebody's trend ("for_player" its position) the point is one of the
-#closest to it that is not on top of it; otherwise it is about as far from every player. Never on a point that rests or next to a player
+#Announces a "kind" bubble: near its player for a trend, otherwise far from everybody
 func _spawn(kind: int, players: Dictionary, for_player: Vector3) -> Bubble:
 	var slot := _pick_slot(players, for_player)
 	if slot < 0:

@@ -1,7 +1,7 @@
 class_name LevelInput
 extends Node
 
-#Turns the level's extra keys into signals, so the round logic never reads the keyboard
+#Turns the level's extra keys into signals, so the logic never reads the keyboard
 
 signal interact_pressed
 signal interact_released

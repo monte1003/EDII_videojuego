@@ -1,9 +1,7 @@
 class_name LobbyStage
 extends Node3D
 
-#The 3D waiting room: a podium for every place of the lobby, with the character of whoever sits there. The ring of its podium takes its
-#colour and beats once it is ready, a burst of confetti answers "Listo" and over it go its name in the wide letters of the game and
-#whether it is you or ready. The lobby draws a halo of that colour behind each place (on the 2D screen, where a soft glow blends well)
+#3D waiting room: a podium per place with its character; the ring beats once ready
 
 const SLOT_X: Array[float] = [-1.15, 1.15, -3.45, 3.45]
 const SLOT_Z: Array[float] = [0.0, 0.0, -0.4, -0.4]
@@ -13,7 +11,7 @@ const MODEL_SCALE := 1.6
 const PODIUM_COLOR := Color("f5f1fd")
 const SKIRT_COLOR := Color("d3c8f0")
 const EMPTY_RING := Color("b9aee6")
-#Where the halo of a place is centred, over its podium
+#Height of a place halo over its podium
 const HALO_HEIGHT := 1.25
 
 var _places: Array[Dictionary] = []
@@ -33,18 +31,17 @@ func show_slots(slots: Array[PlayerSlot], local_id: int) -> void:
 		_fill(_places[index], slot, slot != null and slot.player_id == local_id)
 
 
-#The character of that player jumps and a little confetti goes up from its podium: the answer to pressing "Listo"
+#Jump and confetti when the player presses "Listo"
 func cheer(player_id: int) -> void:
 	for place in _places:
 		if place["player_id"] == player_id and place["model"] != null:
 			var model: CharacterModel = place["model"]
 			model.set_state(false, true)
-			#The timer belongs to the model, so it disappears with it
+			#The timer belongs to the model, so it goes with it
 			model.create_tween().tween_callback(model.set_state.bind(false, false)).set_delay(0.55)
 			ImpactFx.confetti(self, (place["root"] as Node3D).position + Vector3(0.0, 0.4, 0.0), 40, 38.0, 4.6)
 
 
-#The rings of the ready players beat slowly
 func _process(delta: float) -> void:
 	_clock += delta
 	var beat := 0.5 + 0.5 * sin(_clock * 3.6)
@@ -54,7 +51,7 @@ func _process(delta: float) -> void:
 		_tint(place["ring"], place["color"], 1.1 + 0.7 * beat)
 
 
-#Where a place is on the picture of the stage, and what it shows: for the halos the lobby draws behind it
+#Screen point of a place, for the halos the lobby draws
 func place_point(index: int) -> Vector2:
 	return _camera.unproject_position((_places[index]["root"] as Node3D).position + Vector3(0.0, HALO_HEIGHT, 0.0))
 
@@ -233,7 +230,7 @@ func _glow(color: Color, energy: float) -> StandardMaterial3D:
 	return material
 
 
-#Soft contact shadow that keeps the podiums from floating on the flat background
+#Soft contact shadow so the podiums do not float
 func _shadow() -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(Palette.INK, 0.09)

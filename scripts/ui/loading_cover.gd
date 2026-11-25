@@ -1,8 +1,7 @@
 class_name LoadingCover
 extends CanvasLayer
 
-#While the other computers finish loading a round: the art of its card over the night colour, the round and the name of the minigame,
-#and a quiet line with three dots that breathe. It fades away when everybody is in, right before the opening film
+#Cover while the others load a round: card art, round and minigame name; fades before the film
 
 const FADE := 0.45
 
@@ -53,7 +52,6 @@ func _process(delta: float) -> void:
 		_dots.text = "ESPERANDO A LOS DEMÁS JUGADORES" + ".".repeat(int(_clock * 2.5) % 4)
 
 
-#Fades out and leaves
 func lift() -> void:
 	var tween := create_tween()
 	tween.tween_property(_root, "modulate:a", 0.0, FADE).set_trans(Tween.TRANS_SINE)

@@ -1,38 +1,32 @@
 extends Node
 
-#Which device the player of this computer is using: the keyboard and mouse or a game pad (a DualSense read straight through Godot's
-#Input). The last one touched rules: it decides the hints on screen and whether the cursor shows. With the pad, menus get a focused
-#button, a stick counts like a button (only when it crosses its threshold) and a pad that goes away in the middle of a round pauses it
-#with a notice until it comes back
+#Keyboard and mouse or DualSense: the last one used rules hints, cursor and focus
 
 enum Kind { KEYS, PAD }
 
 signal changed(kind: Kind)
-#A pad was plugged in or pulled out
 signal pad_plugged(connected: bool)
 
-#How far a stick must tilt to count as a press, and how far back it must come to let go: the gap keeps a shaky stick from pressing twice
+#Stick press and release thresholds; the gap stops a shaky stick pressing twice
 const STICK_PRESS := 0.5
 const STICK_RELEASE := 0.3
-#A stick let go springs back and may swing past the middle: a push to the other side this soon after (milliseconds) is that swing
+#Milliseconds in which a push to the other side is the stick swinging back
 const STICK_SETTLE := 90
-#A mouse moved less than this (pixels in one event) is a bump of the desk, not a player taking the mouse
+#Mouse moves under this many pixels are bumps, not the player
 const MOUSE_WAKE := 3.0
-#Screens that move their own selection with the arrows: no button gets the focus there
+#Screens that move their own selection with the arrows
 const SELF_NAVIGATED: Array[StringName] = [&"character_select"]
 
 var kind := Kind.KEYS
-#The pad in use, or -1 without one
+#Pad in use, or -1
 var pad := -1
 
 var _tilt: Dictionary = {}
-#When each stick was last let go, and from which side
 var _let_go: Dictionary = {}
 var _hid_cursor := false
 var _notice := PadNotice.new()
-#The pause this computer opened when its pad went away, so it closes again when the pad is back
+#Pause opened when the pad went away, closed when it is back
 var _pause_opened: PauseMenu
-#The screen where the notice showed: going to another screen takes it away
 var _notice_scene: Node
 
 
@@ -68,9 +62,7 @@ func _input(event: InputEvent) -> void:
 			_use(Kind.KEYS, -1)
 
 
-#Moving the stick is read every frame through the actions; as an event it only goes on once per push, when it crosses its threshold, like
-#a button, so a menu or a list never jumps several places for one push. Letting it go is never a push: on its way back it still passes
-#through values the actions would count, and it may swing a little to the other side
+#A stick counts as one press when it crosses its threshold, never on release
 func _crossed(motion: InputEventJoypadMotion) -> bool:
 	var key := motion.device * 16 + motion.axis
 	var before: int = _tilt.get(key, 0)
@@ -114,7 +106,7 @@ func _process(_delta: float) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
-#A menu with nothing selected gets its first button, so the d-pad always has something to move
+#A menu with nothing selected gets its first button
 func _give_focus() -> void:
 	var screen := get_tree().current_scene as Screen
 	if screen == null or SELF_NAVIGATED.has(ScreenFlow.current) or get_viewport().gui_get_focus_owner() != null:
@@ -146,7 +138,7 @@ func _on_joy_connection(device: int, connected: bool) -> void:
 	pad_plugged.emit(connected)
 
 
-#The pad of the player went away: inside a round its pause opens (in a room the others keep playing) and a notice asks to plug it back
+#Pad lost: opens the pause inside a round and asks to plug it back
 func _lost_pad() -> void:
 	Rumble.stop()
 	_notice_scene = get_tree().current_scene
@@ -163,7 +155,6 @@ func _lost_pad() -> void:
 	_notice.show_for(PadNotice.Context.ROOM if in_room else PadNotice.Context.ROUND)
 
 
-#Closing the pause by hand (with the keyboard) also takes the notice away
 func _on_pause_closed() -> void:
 	_pause_opened = null
 	_notice.lift()

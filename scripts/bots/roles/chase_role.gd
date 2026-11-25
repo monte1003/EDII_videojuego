@@ -1,4 +1,4 @@
 class_name ChaseRole
 extends BotRole
 
-#The direct hunter (Troll): always goes for the platform where the player is
+#Direct hunter (Troll): goes to the player's platform

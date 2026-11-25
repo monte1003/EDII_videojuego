@@ -1,10 +1,8 @@
 extends SceneTree
 
-#Checks the gravity of the player: with the normal state every move is the same as it always was (the same path, frame by frame),
-#and a turned state makes it fall up, jump down, float slower, not dive, never shoot off and come back on its feet safely.
-#Run: godot --headless --fixed-fps 60 --path . --script res://scripts/tests/gravity_check.gd      (-- baseline prints the path)
+#Checks player gravity: normal unchanged frame by frame, turned safe; run with --fixed-fps 60
 
-#The path of the scripted run below, measured before gravity could change: x, y and z every SAMPLE_EVERY frames
+#Path of the scripted run sampled every SAMPLE_EVERY frames
 const SAMPLE_EVERY := 10
 const BASELINE: Array[float] = [
 	0.00000, -0.00272, 0.00000, 0.00000, -0.04900, 0.00000, 0.00000, -0.04900, -0.08333, 0.00000, -0.04900, -0.91665,
@@ -54,7 +52,7 @@ func _make() -> Player:
 	return player
 
 
-#Runs, jumps, dives, turns, jumps again, takes a push and a flip; the path is sampled as it goes
+#Runs, jumps, dives, turns, takes a push and a flip while sampling
 func _trace(player: Player) -> Array[float]:
 	var path: Array[float] = []
 	var origin := player.global_position
@@ -117,8 +115,7 @@ func _run() -> void:
 	quit(1 if _failures > 0 else 0)
 
 
-#A ceiling CEILING meters up over a patch of the floor; under it the gravity turns, the player floats up, stands on it, jumps down
-#from it, cannot dive, never goes faster than the cap, and back to normal it falls softly and lands on its feet
+#Ceiling test: float up, stand, jump down, no dive, speed cap and soft return
 const CEILING := 6.0
 
 

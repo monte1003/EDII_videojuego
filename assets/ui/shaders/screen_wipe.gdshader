@@ -1,7 +1,6 @@
 shader_type canvas_item;
 
-//progress: 0 nothing, 1 everything covered, 2 everything revealed again.
-//A slanted band sweeps across: its front covers the screen and its tail uncovers it.
+//progress: 0 nothing, 1 covered, 2 revealed again
 uniform float progress = 2.0;
 uniform vec4 lead_color : source_color = vec4(0.992, 0.337, 0.498, 1.0);
 uniform vec4 fill_color : source_color = vec4(0.165, 0.129, 0.271, 1.0);

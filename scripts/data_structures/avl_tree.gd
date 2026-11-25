@@ -1,9 +1,7 @@
 class_name AVLTree
 extends RefCounted
 
-#AVL tree of the standings. Each node is the score of one player, and the key is made of three parts so two players never
-#share a key: the points, then the tie-break (the best single round) and then the player id. With equal points the higher
-#tie-break goes first, and if that is equal too, the lower player id does
+#AVL tree of the standings; key: points, then best round, then lower player id
 
 class AVLNode:
 	var points: int
@@ -20,7 +18,7 @@ class AVLNode:
 
 
 var root: AVLNode = null
-#How many rotations the insertions needed, to show the tree balancing itself
+#Rotations done by the insertions, to show the balancing
 var rotations := 0
 
 var _count := 0
@@ -40,13 +38,13 @@ func get_balance(node: AVLNode) -> int:
 	return get_height(node.left) - get_height(node.right)
 
 
-#Below zero when "a" goes before "b" in the tree (it ranks worse), above when it goes after; zero only for the same player with the same score
+#Below zero when "a" ranks worse than "b"; zero only for the same key
 static func compare(a: AVLNode, b: AVLNode) -> int:
 	if a.points != b.points:
 		return a.points - b.points
 	if a.tie != b.tie:
 		return a.tie - b.tie
-	#The lower id ranks better, so it is the greater key
+	#The lower id ranks better
 	return b.player_id - a.player_id
 
 
@@ -72,28 +70,28 @@ func left_rotate(x: AVLNode) -> AVLNode:
 	return y
 
 
-#Adds the score of a player; false when that very key is already in the tree
+#Adds a score; false when that key already exists
 func insert(points: int, player_id: int, tie := 0) -> bool:
 	var before := _count
 	root = _insert_node(root, AVLNode.new(points, tie, player_id))
 	return _count > before
 
 
-#From the best to the worst: the in-order walk backwards (right, root, left)
+#Best to worst: reverse in-order walk
 func standings() -> Array[AVLNode]:
 	var result: Array[AVLNode] = []
 	_walk_down(root, result)
 	return result
 
 
-#In-order walk (left, root, right): from the worst to the best
+#In-order walk: worst to best
 func get_inorder_array() -> Array[AVLNode]:
 	var result: Array[AVLNode] = []
 	_inorder_traverse(root, result)
 	return result
 
 
-#Place of each player, starting at 1; two players only share a place when the whole key but the id is the same
+#Place of each player from 1; ties only when all but the id match
 func places() -> Dictionary:
 	var result: Dictionary = {}
 	var order := standings()

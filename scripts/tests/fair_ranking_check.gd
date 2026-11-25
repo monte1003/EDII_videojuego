@@ -1,12 +1,6 @@
 extends SceneTree
 
-#Checks the ranking of the fair screen (FairRanking) on a file of its own: a missing or broken file is an empty ranking, 0, 1, 10 and 11
-#entries (the eleventh is out of the top ten and is told how many points it was short), the order with ties (total, then best round,
-#then the older entry), one entry per name (capitals and spaces do not count): a name that plays again only replaces it when it beats it,
-#and is told when it did not; the same game seen twice is judged against the same mark; two players of a game with one name count once;
-#a name can be taken out; an older file with a name twice keeps the better; the file is written whole (a temporary one moved over it)
-#with a copy that is read when the file breaks, and the reset empties it. The script loads FairRanking when it runs (it needs the autoloads).
-#run: godot --headless --path . --script res://scripts/tests/fair_ranking_check.gd
+#Checks the fair ranking file: broken files, top ten, ties, names, records and removal
 
 const FILE := "user://fair_ranking_check.json"
 

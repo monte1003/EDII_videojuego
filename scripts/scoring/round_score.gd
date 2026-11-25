@@ -1,13 +1,13 @@
 class_name RoundScore
 extends RefCounted
 
-#What a round was worth for one player: points from 0 to 1000, the medal they earn and how they add up
+#What a round was worth for one player: 0 to 1000 points and their medal
 
 var points := 0
 var medal := ScoreSheet.Medal.NONE
-#Set by the session when these points beat the best ones kept for that minigame
+#Set by the session when these points beat the best kept
 var record := false
-#What was measured, in one line, as in "Llegaste en 84 s"
+#What was measured, as in "Llegaste en 84 s"
 var metric := ""
 #Up to three lines like ["Tiempo", "+412"]
 var breakdown: Array[Array] = []

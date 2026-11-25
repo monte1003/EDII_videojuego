@@ -1,14 +1,14 @@
 class_name SynthSound
 extends RefCounted
 
-#Small sound effects made from math, so the game needs no audio files for them; each one is made once and kept
+#Sound effects made from math, each built once and cached
 
 const MIX_RATE := 22050
 
 static var _cache: Dictionary = {}
 
 
-#A beep that fades out; "sweep" slides its frequency (in Hz) over its length
+#Fading beep; "sweep" slides its frequency in Hz
 static func tone(frequency: float, length: float, sweep := 0.0, volume := 0.55) -> AudioStreamWAV:
 	var key := "tone_%s_%s_%s_%s" % [frequency, length, sweep, volume]
 	if _cache.has(key):
@@ -25,7 +25,7 @@ static func tone(frequency: float, length: float, sweep := 0.0, volume := 0.55) 
 	return _store(key, data)
 
 
-#A body blow: a low note that drops fast and a short crack at the start
+#Body blow: a low falling note with a crack
 static func thump(length := 0.32) -> AudioStreamWAV:
 	var key := "thump_%s" % length
 	if _cache.has(key):
@@ -44,7 +44,7 @@ static func thump(length := 0.32) -> AudioStreamWAV:
 	return _store(key, data)
 
 
-#A crash: the thump plus a burst of dull noise, for a car that hits
+#Car crash: a thump plus dull noise
 static func crash(length := 0.5) -> AudioStreamWAV:
 	var key := "crash_%s" % length
 	if _cache.has(key):
@@ -65,7 +65,7 @@ static func crash(length := 0.5) -> AudioStreamWAV:
 	return _store(key, data)
 
 
-#A short car horn: two close notes held and cut
+#Short car horn
 static func honk(length := 0.26) -> AudioStreamWAV:
 	var key := "honk_%s" % length
 	if _cache.has(key):
@@ -84,7 +84,7 @@ static func honk(length := 0.26) -> AudioStreamWAV:
 	return _store(key, data)
 
 
-#A soft landing: a quick low puff
+#Soft landing puff
 static func land(length := 0.16) -> AudioStreamWAV:
 	var key := "land_%s" % length
 	if _cache.has(key):
@@ -101,8 +101,7 @@ static func land(length := 0.16) -> AudioStreamWAV:
 	return _store(key, data)
 
 
-#A player that plays one of these sounds; the node frees itself when it ends
-#A snare roll that grows: strokes of noise ever closer and louder, for the moment before a reveal
+#Snare roll that grows, for the moment before a reveal
 static func roll(length := 2.0) -> AudioStreamWAV:
 	var key := "roll_%s" % length
 	if _cache.has(key):
@@ -127,7 +126,7 @@ static func roll(length := 2.0) -> AudioStreamWAV:
 	return _store(key, data)
 
 
-#Air that rushes past: noise that swells and fades, brighter in the middle
+#Whoosh of air
 static func whoosh(length := 0.6) -> AudioStreamWAV:
 	var key := "whoosh_%s" % length
 	if _cache.has(key):
@@ -145,7 +144,7 @@ static func whoosh(length := 0.6) -> AudioStreamWAV:
 	return _store(key, data)
 
 
-#A bell: a few partials that ring and fade, the higher ones faster
+#Bell whose higher partials fade faster
 static func chime(frequency: float, length := 1.4) -> AudioStreamWAV:
 	var key := "chime_%s_%s" % [frequency, length]
 	if _cache.has(key):
@@ -163,7 +162,7 @@ static func chime(frequency: float, length := 1.4) -> AudioStreamWAV:
 	return _store(key, data)
 
 
-#A crowd that cheers: many voices of noise that rise and fall unevenly, with claps on top
+#Cheering crowd with claps
 static func cheer(length := 3.0) -> AudioStreamWAV:
 	var key := "cheer_%s" % length
 	if _cache.has(key):

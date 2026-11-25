@@ -1,11 +1,10 @@
 extends RoundScene
 
-#The 30 seconds before the first round to try the controls; ends when everybody votes ready or time runs out. In a room the server keeps
-#the clock and the votes: once most players vote, the clock jumps to MAJORITY_SECONDS (if it had more left) and everybody goes on together
+#30 seconds to try the controls before the first round; ends on all votes or time
 
 const DURATION := 30.0
 const MAJORITY_SECONDS := 3.0
-#How often the server tells the others the clock of the warm-up
+#How often the server sends the warm-up clock
 const SHARE_EVERY := 0.5
 const FALL_Y := -10.0
 const STATION_RADIUS := 2.2
@@ -33,7 +32,7 @@ func _ready() -> void:
 		player.dive_enabled = true
 	var local := RoundScene.local_of(_players)
 	_local = local
-	#Each computer looks through its own player (otherwise the first camera made, the one of the server's player, stays on)
+	#Each computer looks through its own player
 	local.view_camera().make_current()
 	var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 	var air_time := 2.0 * local.jump_velocity / gravity
@@ -68,12 +67,12 @@ func _physics_process(delta: float) -> void:
 		if _share_left <= 0.0:
 			_share_left = SHARE_EVERY
 			GameSession.net.send_warm(_time_left, _votes.size(), participants.size())
-	#A client waits for the server to end the warm-up
+	#A client waits for the server to end it
 	if _time_left <= 0.0 and (not GameSession.is_networked() or GameSession.net.is_host()):
 		_finish()
 
 
-#A player says they are ready; with everybody ready the warm-up ends
+#A ready vote; all ready ends the warm-up
 func cast_vote(player_id: int) -> void:
 	if _done:
 		return
@@ -95,7 +94,7 @@ func _respawn(player: Player, point: Vector3) -> void:
 	_hud.toast("Otra vez")
 
 
-#The server counts a vote: with most players ready the clock goes down to MAJORITY_SECONDS, and with all of them the warm-up ends
+#Server counts votes: a majority cuts the clock to MAJORITY_SECONDS, all end it
 func _count_vote(player_id: int) -> void:
 	if _done:
 		return
@@ -106,7 +105,7 @@ func _count_vote(player_id: int) -> void:
 	_share_left = 0.0
 
 
-#A client follows the clock and the votes of the server
+#Client follows the server clock and votes
 func _on_warm(seconds_left: float, votes: int, total: int) -> void:
 	if _done:
 		return
@@ -114,7 +113,7 @@ func _on_warm(seconds_left: float, votes: int, total: int) -> void:
 	_hud.set_votes(votes, total, _votes.has(GameSession.local_id))
 
 
-#Next to the station the key turns it on and off; anywhere else it strikes a pose
+#At the station the key toggles it; elsewhere it poses
 func press_pose() -> void:
 	if not _use_station():
 		super()

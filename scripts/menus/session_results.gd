@@ -1,7 +1,6 @@
 extends Screen
 
-#The end of the game: a line per round with its medal and points, the total with the medal of the whole game,
-#and the standings when more than one played
+#End of the game: a line per round, the total with its medal and the standings
 
 const BUTTON_WIDTH := 300.0
 const ROW_WIDTH := 520.0
@@ -91,7 +90,7 @@ func _build() -> void:
 	_column.add_child(menu)
 
 
-#The medal of the whole game and the sum of its rounds, out of the most they can give
+#Game medal and the sum of its rounds out of the maximum
 func _build_total() -> Control:
 	var medal := GameSession.session_medal(_local_id)
 	var row := HBoxContainer.new()
@@ -114,7 +113,7 @@ func _build_total() -> Control:
 	return row
 
 
-#One line per round: its medal, the game and the points; the best one carries a mark
+#One line per round; the best one is marked
 func _build_row(result: RoundResult, is_best: bool) -> Control:
 	var info := MinigameCatalog.find(result.minigame_id)
 	var line := HBoxContainer.new()
@@ -135,7 +134,7 @@ func _build_row(result: RoundResult, is_best: bool) -> Control:
 	return line
 
 
-#With several players: everybody from the first to the last, in the order the tree of scores gives
+#Several players: everybody in the order of the score tree
 func _build_standings() -> Control:
 	var places := GameSession.places()
 	var table := VBoxContainer.new()
@@ -164,7 +163,7 @@ func _centered(label: Label) -> Label:
 	return label
 
 
-#The column comes in, the rounds drop in one after the other and then the total counts up and its medal lands
+#The column comes in, rounds drop in, then the total counts up
 func _animate_in() -> void:
 	await get_tree().process_frame
 	_column.pivot_offset = _column.size / 2.0
@@ -204,6 +203,6 @@ func _land_medal() -> void:
 		land.tween_property(_record_label, "modulate:a", 1.0, 0.2)
 
 
-#The key on the main button follows the device in use: Enter or the cross of the pad
+#Key hint follows the device in use
 func _on_device_changed(_kind: int) -> void:
 	_button.set_icon(InputHints.confirm_icon())

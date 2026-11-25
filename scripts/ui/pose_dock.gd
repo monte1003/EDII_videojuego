@@ -1,9 +1,7 @@
 class_name PoseDock
 extends CanvasLayer
 
-#The pose key, always at the bottom of the screen during a round: the key and one word in white. It dims while the pose cannot be
-#struck (in the air, dazed), turns gold and breathes while the player poses, sinks when the key is pressed and hides when the round
-#is over. "source" says the state every frame
+#Pose key at the bottom during a round: dims when unavailable, gold while posing
 
 enum State { HIDDEN, BLOCKED, READY, POSING }
 
@@ -72,12 +70,12 @@ func _process(delta: float) -> void:
 	_holder.queue_redraw()
 
 
-#The key was pressed: the dock sinks for a moment
+#Sinks for a moment on press
 func press() -> void:
 	_sink = 1.0
 
 
-#While the player poses, a thin gold line under the word that grows from its middle
+#Gold line under the word while posing
 func _draw_glow() -> void:
 	if _glow <= 0.01:
 		return

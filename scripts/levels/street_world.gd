@@ -1,7 +1,7 @@
 class_name StreetWorld
 extends Node3D
 
-#Scenery of the street minigame: a toy-town boulevard along X, end line and giant arch at +X; the runner walks on its ground
+#Toy-town boulevard along X with the end line and giant arch at +X
 
 const SIDEWALK_HEIGHT := 0.12
 const CURB_WIDTH := 0.24
@@ -11,14 +11,13 @@ const SIDEWALK_TEXTURE: Texture2D = preload("res://assets/textures/sidewalk_tile
 const CURB_TEXTURE: Texture2D = preload("res://assets/textures/curb_stripes.png")
 const ROAD_COLOR := Color("5a5eb0")
 const LINE_COLOR := Color("fff6ec")
-#Faint tints on the cream walls: the colours of each building stay and no two neighbours look the same
+#Faint wall tints so neighbours never match
 const WALL_TINTS: Array[Color] = [
 	Color(1.0, 1.0, 1.0), Color(1.0, 0.93, 0.95), Color(0.93, 0.97, 1.0), Color(1.0, 0.97, 0.88),
 ]
 const BUILDING_IDS: Array[StringName] = [&"building_shop", &"building_flats"]
 const CLOUD_COUNT := 16
-#Meters after which the markings repeat, so the belt can slide them without end: each period holds one zebra crossing,
-#five lane dashes and three arrows, and none of them touches another
+#Marking period so the belt slides them endlessly
 const MARKS_PERIOD := 24.0
 const ZEBRA_DEPTH := 2.4
 const ZEBRA_STRIPE := 0.55
@@ -26,17 +25,17 @@ const ZEBRA_PITCH := 1.1
 const DASH_LENGTH := 2.0
 const DASH_COUNT := 5
 const DASH_WIDTH := 0.15
-#The arrows painted on every lane that show where the belt takes you: toward +X, away from the traffic
+#Lane arrows toward +X, away from the traffic
 const CHEVRON_COUNT := 3
 const CHEVRON_COLOR := Color("8e96f2")
 const CHEVRON_ANGLE := deg_to_rad(38.0)
 const CHEVRON_ARM := 1.1
-#Meters kept free around the arch and the bus stops
+#Clearance around the arch and bus stops
 const ARCH_CLEARANCE := 6.0
 const STOP_CLEARANCE := 6.5
 
 var _materials: Dictionary = {}
-#The ground is a conveyor: the markings and the textures slide toward +X at this speed
+#The ground slides toward +X at this speed
 var _belt_speed := 0.0
 var _belt_offset := 0.0
 var _marks_row: Node3D
@@ -97,7 +96,7 @@ func _build_ground(half: float, sidewalk_width: float, from_x: float, to_x: floa
 	add_child(ground)
 
 	for side: float in [-1.0, 1.0]:
-		#The paving starts where the curb ends, so the two never share a face
+		#Paving starts where the curb ends
 		var paving := sidewalk_width - CURB_WIDTH
 		_box(Vector3(center_x, SIDEWALK_HEIGHT / 2.0, side * (half + CURB_WIDTH + paving / 2.0)),
 			Vector3(length, SIDEWALK_HEIGHT, paving), _textured(SIDEWALK_TEXTURE, 4.0))
@@ -106,7 +105,7 @@ func _build_ground(half: float, sidewalk_width: float, from_x: float, to_x: floa
 		_sidewalk_collider(center_x, length, side, half, outer)
 
 
-#The curb is a ramp for the physics, so the runner steps up onto the sidewalk without catching on the edge
+#Curb as a ramp so the runner steps up without catching
 func _sidewalk_collider(center_x: float, length: float, side: float, half: float, outer: float) -> void:
 	var points := PackedVector3Array()
 	for end: float in [-length / 2.0, length / 2.0]:
@@ -130,12 +129,12 @@ func _build_road_marks(half: float, lane_count: int, from_x: float, to_x: float)
 	add_child(_marks_row)
 	var lane_width := half * 2.0 / lane_count
 	var stripes := int(floorf((half * 2.0 - 1.0) / ZEBRA_PITCH)) + 1
-	#Equal gaps between the lane dashes and between the last dash and the zebra stripes
+	#Equal gaps between dashes and before the zebra
 	var dash_gap := (MARKS_PERIOD - ZEBRA_DEPTH - DASH_COUNT * DASH_LENGTH) / (DASH_COUNT + 1.0)
 	var chevron_step := MARKS_PERIOD / CHEVRON_COUNT
 	var white: Array[Transform3D] = []
 	var arrows: Array[Transform3D] = []
-	#Zebra crossings; the first one is where the runner starts. The row slides up to one period, so it starts one period early
+	#Zebra crossings starting one period early so the slide never shows a gap
 	var crossing_x := -7.0 - MARKS_PERIOD * ceilf((-7.0 - (from_x - MARKS_PERIOD)) / MARKS_PERIOD)
 	while crossing_x < to_x + MARKS_PERIOD:
 		for index in stripes:
@@ -154,7 +153,7 @@ func _build_road_marks(half: float, lane_count: int, from_x: float, to_x: float)
 	_scatter(arrows, _flat(CHEVRON_COLOR))
 
 
-#A "V" whose point goes to +X: two bars that meet at "tip"
+#"V" pointing to +X
 func _add_chevron(into: Array[Transform3D], tip: Vector3) -> void:
 	for side: float in [-1.0, 1.0]:
 		var direction := Vector3(-cos(CHEVRON_ANGLE), 0.0, side * sin(CHEVRON_ANGLE))
@@ -163,12 +162,12 @@ func _add_chevron(into: Array[Transform3D], tip: Vector3) -> void:
 		into.append(mark)
 
 
-#A flat box of the unit mesh of _scatter, at "center" with the given size
+#Flat box at "center" with the given size
 func _mark(center: Vector3, size: Vector3) -> Transform3D:
 	return Transform3D(Basis.from_scale(size), center)
 
 
-#All the boxes of one colour in a single draw call
+#One draw call per colour
 func _scatter(boxes: Array[Transform3D], material: Material) -> void:
 	var mesh := BoxMesh.new()
 	var multi := MultiMesh.new()
@@ -184,9 +183,9 @@ func _scatter(boxes: Array[Transform3D], material: Material) -> void:
 	_marks_row.add_child(instance)
 
 
-#A coral band on the ground marks the line; the inflatable arch over it is what shows from far away
+#Coral line on the ground and an inflatable arch over it
 func _build_end(end_x: float, half: float, outer: float) -> void:
-	#Painted flat: over the road and over each paving, never across the curb
+	#Painted over road and paving, never across the curb
 	var coral := _flat(Palette.CORAL)
 	_box(Vector3(end_x, 0.012, 0.0), Vector3(0.6, 0.024, half * 2.0), coral)
 	var paving := outer - half - CURB_WIDTH
@@ -209,7 +208,7 @@ func _build_end(end_x: float, half: float, outer: float) -> void:
 	add_child(label)
 
 
-#Two rows of toy buildings behind the greenery and a block closing each end of the street
+#Two rows of toy buildings and a block at each end
 func _build_skyline(from_x: float, to_x: float, outer: float) -> void:
 	for side: float in [-1.0, 1.0]:
 		var x := from_x
@@ -222,7 +221,7 @@ func _build_skyline(from_x: float, to_x: float, outer: float) -> void:
 			z += _place_building(Vector3(edge, 0.0, z), Vector3.BACK, -end * PI / 2.0, 14.0, 19.0) + 0.3
 
 
-#Places a building starting at "start" and growing along "along", front turned to "yaw"; returns the width it takes
+#Places a building and returns its width
 func _place_building(start: Vector3, along: Vector3, yaw: float, min_height: float, max_height: float) -> float:
 	var id := BUILDING_IDS[_rng.randi() % BUILDING_IDS.size()]
 	var height := _rng.randf_range(min_height, max_height)
@@ -235,7 +234,7 @@ func _place_building(start: Vector3, along: Vector3, yaw: float, min_height: flo
 	return width
 
 
-#A bus stop on each side, back to the buildings and open toward the street
+#A bus stop on each side facing the street
 func _build_bus_stops(outer: float) -> void:
 	for entry in [[1.0, -20.0], [-1.0, 8.0]]:
 		var side: float = entry[0]
@@ -247,7 +246,7 @@ func _build_bus_stops(outer: float) -> void:
 		_stops.append(Vector2(side, x))
 
 
-#Trees and bushes on the grass strip and lamps along the curb; they leave room for the arch and the stops
+#Trees, bushes and lamps, clear of the arch and stops
 func _build_greenery(from_x: float, to_x: float, outer: float, end_x: float) -> void:
 	for side: float in [-1.0, 1.0]:
 		var x := from_x + 4.0 + (5.0 if side > 0.0 else 0.0)
@@ -310,7 +309,7 @@ func _flat(color: Color) -> StandardMaterial3D:
 	return material
 
 
-#World-space mapping: the texture covers "meters" meters of ground whatever the size of the box
+#World-space texture covering "meters" of ground
 func _textured(texture: Texture2D, meters: float) -> StandardMaterial3D:
 	var key := "tex_%s_%s" % [texture.resource_path, meters]
 	if _materials.has(key):

@@ -1,9 +1,6 @@
 extends SceneTree
 
-#Checks the daze of the arenas against the blow of a car in the street: how far a shove throws the player on flat ground, how long it
-#stays without hands, the stars over its head, the short grace after it, the shield, the step back of whoever shoves, a shove in
-#the air, and that a rain of shoves never keeps anyone dazed for good.
-#Run: godot --headless --fixed-fps 60 --path . --script res://scripts/tests/daze_check.gd
+#Checks the arena daze against a street car blow; run headless with --fixed-fps 60 --script
 
 const STEP := 1.0 / 60.0
 

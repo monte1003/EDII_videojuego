@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
 
-//The viewfinder the drone draws on the floor: thick light corners with a dark outline so they read on any colour,
-//the lines of thirds, and the circle of the centre. Widths are in meters whatever the size of the frame
+//Drone viewfinder on the floor: corners, thirds and centre circle in meters
 uniform float side = 6.0;
 uniform float center_share = 0.25;
 uniform vec4 line_color : source_color = vec4(1.0);

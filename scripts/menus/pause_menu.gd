@@ -1,13 +1,12 @@
 class_name PauseMenu
 extends CanvasLayer
 
-#Pause of every round: a small title and a plain list of text buttons
+#Pause of every round: small title and a list of text buttons
 
 signal opened
 signal closed
 signal help_requested
 
-#Whether this round has a help to open from the pause
 @export var allow_help := false
 
 var _restart_button: TextButton
@@ -15,7 +14,7 @@ var _help_button: TextButton
 var _first_button: TextButton
 var _exit_button: TextButton
 var _stack: VBoxContainer
-#The server asked once whether to close the room for everybody
+#Already asked once whether to close the room for everybody
 var _confirming := false
 
 
@@ -72,7 +71,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func open() -> void:
-	#In a room the round goes on for the others: it cannot start again here and its help does not open
+	#In a room the round goes on for the others: no restart and no help
 	var in_room := GameSession.is_networked() and not GameSession.practice
 	_restart_button.visible = not in_room
 	_help_button.visible = allow_help and not in_room
@@ -90,7 +89,7 @@ func close() -> void:
 	closed.emit()
 
 
-#A player leaves the room alone; the server would close it for everybody, so it asks first
+#Leaving as the server closes the room for everybody, so it asks first
 func _on_exit() -> void:
 	if GameSession.is_networked() and GameSession.net.is_host() and not _confirming:
 		_confirming = true
@@ -99,7 +98,7 @@ func _on_exit() -> void:
 	GameSession.abandon()
 
 
-#Inside a session the round starts again; on its own the scene is loaded again
+#In a session the round restarts; alone the scene reloads
 func _on_restart() -> void:
 	if GameSession.is_playing_round():
 		GameSession.restart_round()

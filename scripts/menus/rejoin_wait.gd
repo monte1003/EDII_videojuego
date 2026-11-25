@@ -1,7 +1,6 @@
 extends Screen
 
-#Back in a game under way after losing the connection: the round the others are playing and that this computer joins in the next one.
-#The server moves it on by itself
+#Back in a game under way: shows the round being played; the server moves it on
 
 func _ready() -> void:
 	super()

@@ -1,7 +1,7 @@
 class_name RoundPlanner
 extends RefCounted
 
-#Draws the minigames of a session: the ids in the order they will be played
+#Draws the minigame ids of a session in play order
 
 
 static func plan(pool: Array[MinigameInfo], rounds: int, rng: RandomNumberGenerator) -> Array[StringName]:

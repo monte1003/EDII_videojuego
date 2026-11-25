@@ -1,11 +1,7 @@
 class_name FairFrame
 extends CanvasLayer
 
-#The frame of the fair screen over the full-screen picture, drawn like the screens of the game (light cards, ink, a coral line, the seals
-#of the medals). Top left, the banner of who or what is in focus, as the header of the lobby, with the seal of its crown when it has
-#one; on the right, the light that says whether a game is on and, under it, the ranking of the day as tall as the screen; at the bottom
-#left, two short lines of the fair that take turns, or the live board of the game being watched. In the middle, when a game ends, the
-#ranking in big with its messages, and for the staff the full list and short notices
+#Fair screen frame: focus banner, live light, ranking of the day and staff hints
 
 const COLUMN_WIDTH := 380.0
 const STRIP_SECONDS := 7.0
@@ -39,7 +35,7 @@ var _notice_text: Label
 
 
 func _ready() -> void:
-	#Over everything of the rounds it shows, their loading cover included (layer 30)
+	#Above everything of the rounds, loading cover included
 	layer = 40
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -93,7 +89,7 @@ func _process(delta: float) -> void:
 			_swap_text(_strip_labels[index], STRIPS[index][_strip_turn % STRIPS[index].size()])
 
 
-#Who or what is on screen: the coral line over it, its name and the seal of its crown (none for NONE); the banner slides into the new one
+#Who is on screen with its crown; the banner slides to the new one
 func show_focus(title: String, detail: String, medal: int) -> void:
 	if _banner_title.text == title and _banner_detail.text == detail:
 		return
@@ -109,7 +105,7 @@ func show_focus(title: String, detail: String, medal: int) -> void:
 	slide.tween_property(_banner, "position:x", 0.0, 0.35)
 
 
-#The light of the game: coral and beating while a game is on, still and lilac while there is none
+#Coral and beating while a game is on, still and lilac otherwise
 func set_live(text: String, live: bool) -> void:
 	_live_text.text = text
 	_live = live
@@ -118,8 +114,7 @@ func set_live(text: String, live: bool) -> void:
 		_live_dot.modulate.a = 1.0
 
 
-#The live board of the game being watched, in place of the lines of the fair: one card per player, the best first, with the colour of
-#its character, its name, its total and, after a round, what it just won. Empty rows: back to the lines of the fair
+#Live board of the watched game, best first; empty rows restore the fair lines
 func show_board(rows: Array[Dictionary]) -> void:
 	_strips.visible = rows.is_empty()
 	_board.visible = not rows.is_empty()
@@ -151,7 +146,7 @@ func show_board(rows: Array[Dictionary]) -> void:
 		_board.add_child(card)
 
 
-#The end of a game: the ranking in big in the middle, its rows coming in, and under it what happened (a record, who got in, who was short)
+#End of a game: big ranking with its rows and what happened
 func show_finale(rows: Array[Array], fresh: Array[int], lines: Array[String]) -> void:
 	_finale.visible = true
 	_finale.modulate.a = 0.0
@@ -177,7 +172,7 @@ func hide_finale() -> void:
 		out.tween_callback(_finale.hide)
 
 
-#For the staff: every entry of the ranking in columns, or hidden again
+#Staff view: every ranking entry in columns, or hidden
 func toggle_full_list(rows: Array[Array]) -> void:
 	_full.visible = not _full.visible
 	if not _full.visible:
@@ -188,7 +183,7 @@ func toggle_full_list(rows: Array[Array]) -> void:
 	_full_text.text = "\n".join(lines) if not lines.is_empty() else "Todavía no hay nadie en el ranking"
 
 
-#A short notice for the staff at the top of the screen
+#Short staff notice at the top
 func notice(text: String, seconds := 4.0) -> void:
 	_notice_text.text = text
 	_notice.visible = true
@@ -328,7 +323,7 @@ func _swap_text(label: Label, text: String) -> void:
 	swap.tween_property(label, "modulate:a", 1.0, 0.25)
 
 
-#The light card of the screens of the game, round and a little see-through, with its soft shadow
+#Light rounded card with its soft shadow
 func _card(radius: int, vertical: float, horizontal: float) -> StyleBoxFlat:
 	var card := UiKit.box(Color(Palette.PAPER, 0.93), radius)
 	card.content_margin_left = horizontal

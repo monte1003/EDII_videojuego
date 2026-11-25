@@ -1,35 +1,31 @@
 class_name ArenaLayout
 extends RefCounted
 
-#The single source of truth of an arena map: one solid ground with relief and a fence all around, so there is no void anywhere.
-#Blocks, ramps and drums raise the ground into terraces, and walls split it. On the terrain go the places (the vertices of the
-#graph: crossings, summits, clearings) and the links between them (its edges, which cost seconds of travel), and what moves:
-#bars, blocks, trampolines, cannons and belts. The world is built from it, the bots walk its graph and the rules measure with it
+#Single source of truth of an arena map: ground or islands, terrain, places and graph links
 
-#Kinds of link: a plain way, a way over a belt (cheap with its flow and dear against it), a step down from a terrace that
-#nobody can climb back, and the throw of a trampoline or a cannon, also one way
+#Link kinds: walk, belt (cheap with the flow), one-way drop and one-way launch
 const WALK := &"walk"
 const BELT := &"belt"
 const DROP := &"drop"
 const LAUNCH := &"launch"
-#A small jump up onto something lower than a jump, both ways: players take it, bots (which never jump) do not
+#Small jump up both ways: players take it, bots never jump
 const HOP := &"hop"
-#Speed of somebody on foot, to turn meters into seconds of travel
+#Walking speed, to turn meters into seconds
 const WALK_SPEED := 5.0
 #Height of the ground everything stands on
 const GROUND := 0.0
-#Under a map of floating islands there is nothing: this is the height of nothing
+#Height of the void under floating islands
 const VOID := -60.0
-#How much farther than its distance on the ground a place feels for each meter it is above or below
+#Extra cost per meter of height difference
 const HEIGHT_WEIGHT := 8.0
 
 
 class Place:
 	var id: StringName
 	var position: Vector3
-	#Flat room around it: whoever stands this close is "at" the place
+	#Flat radius of a place
 	var radius: float
-	#Which part of the map it belongs to: it picks its colour
+	#Map part that picks its colour
 	var zone: int
 
 	func _init(name: StringName, at: Vector3, size: float, part: int) -> void:
@@ -43,7 +39,7 @@ class Link:
 	var a: StringName
 	var b: StringName
 	var kind: StringName
-	#Seconds from a to b and from b to a; "back" is negative when there is no way back
+	#Seconds a to b and b to a; "back" negative when one way
 	var seconds: float
 	var back: float
 
@@ -57,49 +53,43 @@ class Link:
 
 var places: Dictionary = {}
 var links: Array[Link] = []
-#One colour per zone of the map, and the colour of the ground between them
+#Colour per zone and of the ground between them
 var zone_colors: Array[Color] = []
 var ground_color := Color("d9ccff")
-#The fence: the corners of the map on the ground, in order. Nothing can be walked outside it
+#Fence corners in order; nothing is walkable outside
 var outline: PackedVector2Array = PackedVector2Array()
-#A map of floating islands has no ground: each island is a convex outline with its top, and wide bridges join them. With none, the
-#ground runs everywhere inside the fence. An island: {"outline", "top", "zone", "rim": Color}; a bridge: {"from", "to" (the middles of
-#its two ends, on its floor), "width", "zone"}
+#Floating islands (convex outline and top) joined by bridges; none means ground everywhere
 var islands: Array[Dictionary] = []
 var bridges: Array[Dictionary] = []
-#The terrain. Block: {"center": Vector2, "size": Vector2, "top", "bottom", "yaw", "zone", "wall": bool}.
-#Ramp: {"from": Vector3, "to": Vector3, "width", "zone", "steps": bool, "solid": bool}. Drum: {"center": Vector2, "radius", "top", "bottom", "zone"}
+#Terrain pieces: blocks, ramps and drums
 var blocks: Array[Dictionary] = []
 var ramps: Array[Dictionary] = []
 var drums: Array[Dictionary] = []
-#A bar that sweeps a circle: {"at": Vector3, "arm", "speed", "phase", "from"} and optionally "surge" {"rate", "depth"}
+#Sweeping bar: {"at", "arm", "speed", "phase", "from"}, optional "surge"
 var spinners: Array[Dictionary] = []
-#A padded block that goes back and forth between two points: {"a": Vector3, "b": Vector3, "period", "phase", "from"}
+#Back and forth block: {"a", "b", "period", "phase", "from"}
 var sweepers: Array[Dictionary] = []
-#A trampoline: {"at": Vector3, "from"}. With "to" (Vector3) and "time" it is a cannon that throws along an arc to that point.
-#With "beat" {"period", "on", "phase"} it only works for "on" seconds of every "period"
+#Trampoline {"at", "from"}; with "to" and "time" a cannon; with "beat" it rests between periods
 var pads: Array[Dictionary] = []
-#A belt lying on the terrain from "a" to "b": {"a": Vector3, "b": Vector3, "width", "from", "turns": bool}; one that turns runs the other way every belt_period
+#Belt {"a", "b", "width", "from", "turns"}; turning belts reverse every belt_period
 var belts: Array[Dictionary] = []
 var belt_period := 9.0
 var belt_speed := 3.0
-#Where the players start, one per player
 var spawn_place: StringName = &""
 
 
-#A place at a point of the terrain: its height is the one of the floor there
+#Place on the terrain at the floor height there
 func add_place(id: StringName, x: float, z: float, radius: float, zone: int) -> void:
 	places[id] = Place.new(id, Vector3(x, height_at(x, z), z), radius, zone)
 
 
-#A way between two places. Plain ways and belts go both ways; a drop and a launch only from the first place to the second.
-#"extra" are seconds added for what is in the way; "seconds" replaces the time of the way there (a launch says its own)
+#Link between places; drops and launches one way; "extra" adds seconds, "seconds" replaces them
 func link(a: StringName, b: StringName, kind := WALK, extra := 0.0, seconds := -1.0) -> void:
 	var walk := position_of(a).distance_to(position_of(b)) / WALK_SPEED + extra
 	var there := seconds if seconds >= 0.0 else walk
 	var back := walk
 	if kind == BELT:
-		#With the flow the belt adds its speed, against it takes it away
+		#With the flow a belt adds its speed, against it subtracts it
 		var length := position_of(a).distance_to(position_of(b))
 		there = length / (WALK_SPEED + belt_speed) + extra
 		back = length / (WALK_SPEED - belt_speed) + extra
@@ -108,36 +98,33 @@ func link(a: StringName, b: StringName, kind := WALK, extra := 0.0, seconds := -
 	links.append(Link.new(a, b, kind, there, back))
 
 
-#A box of terrain: its middle and its size on the ground, how high its top is and how far it is turned. It is solid down to
-#"bottom", so a block that starts above the ground is a deck with room to walk under it
+#Terrain box; solid down to "bottom", so a raised one is a deck
 func add_block(center: Vector2, size: Vector2, top: float, zone: int, yaw := 0.0, bottom := GROUND) -> void:
 	blocks.append({"center": center, "size": size, "top": top, "bottom": bottom, "yaw": yaw, "zone": zone, "wall": false})
 
 
-#A wall between two points of the ground, too high to jump
+#Wall too high to jump
 func add_wall(from: Vector2, to: Vector2, height: float, zone: int, thickness := 0.6) -> void:
 	var along := to - from
 	blocks.append({"center": (from + to) / 2.0, "size": Vector2(thickness, along.length() + thickness), "top": height, "bottom": GROUND,
 		"yaw": atan2(along.x, along.y), "zone": zone, "wall": true})
 
 
-#A slope from the middle of its low end to the middle of its high end. Solid, it is filled down to the ground; otherwise it
-#is a thin walkway with room under it. With "steps" it looks like a staircase
+#Slope from low end to high end; solid to the ground or a thin walkway; "steps" looks like stairs
 func add_ramp(from: Vector3, to: Vector3, width: float, zone: int, steps := false, solid := true) -> void:
 	ramps.append({"from": from, "to": to, "width": width, "zone": zone, "steps": steps, "solid": solid})
 
 
-#A floating island of a convex outline, its top at "top"
+#Floating island of a convex outline
 func add_island(shape: PackedVector2Array, top: float, zone: int, rim: Color) -> void:
 	islands.append({"outline": shape, "top": top, "zone": zone, "rim": rim})
 
 
-#A wide bridge between two islands, from the middle of one end of its floor to the middle of the other
+#Wide bridge between two islands
 func add_bridge(from: Vector3, to: Vector3, width: float, zone: int) -> void:
 	bridges.append({"from": from, "to": to, "width": width, "zone": zone})
 
 
-#A round pillar to stand on
 func add_drum(center: Vector2, radius: float, top: float, zone: int, bottom := GROUND) -> void:
 	drums.append({"center": center, "radius": radius, "top": top, "bottom": bottom, "zone": zone})
 
@@ -165,7 +152,7 @@ func link_between(a: StringName, b: StringName) -> Link:
 	return null
 
 
-#How high the floor is at a point of the map: the highest piece of terrain that is under it and not above "ceiling"
+#Floor height at a point: the highest piece under it and not above "ceiling"
 func height_at(x: float, z: float, ceiling := INF) -> float:
 	var point := Vector2(x, z)
 	var best := _base_height(point, ceiling)
@@ -184,7 +171,7 @@ func height_at(x: float, z: float, ceiling := INF) -> float:
 	return best
 
 
-#Whether a point of the ground is inside the fence (or on an island or a bridge), "margin" meters or more away from its edge
+#Inside the fence, island or bridge, at least "margin" from the edge
 func is_inside(x: float, z: float, margin := 0.0) -> bool:
 	var point := Vector2(x, z)
 	if not islands.is_empty():
@@ -210,7 +197,7 @@ func is_inside(x: float, z: float, margin := 0.0) -> bool:
 	return true
 
 
-#The floor under a point with nothing else on it: the ground, or the island or bridge it is over (the void elsewhere)
+#Ground, island or bridge height under a point; void elsewhere
 func _base_height(point: Vector2, ceiling: float) -> float:
 	if islands.is_empty():
 		return GROUND
@@ -228,7 +215,7 @@ func _base_height(point: Vector2, ceiling: float) -> float:
 	return best
 
 
-#How far along a bridge a point is (0 to 1), or -1 when it is off it ("margin" meters in from its sides)
+#Share along a bridge (0 to 1), or -1 when off it
 func _bridge_share(bridge: Dictionary, point: Vector2, margin: float) -> float:
 	var from := Vector2((bridge["from"] as Vector3).x, (bridge["from"] as Vector3).z)
 	var to := Vector2((bridge["to"] as Vector3).x, (bridge["to"] as Vector3).z)
@@ -241,7 +228,7 @@ func _bridge_share(bridge: Dictionary, point: Vector2, margin: float) -> float:
 	return along / maxf(length, 0.01)
 
 
-#Whether a point is inside a convex outline, "margin" meters or more from its edges
+#Inside a convex outline with "margin"
 func _in_outline(shape: PackedVector2Array, point: Vector2, margin: float) -> bool:
 	if not Geometry2D.is_point_in_polygon(point, shape):
 		return false
@@ -267,7 +254,6 @@ func reach() -> float:
 	return far
 
 
-#The highest floor of the map
 func top_height() -> float:
 	var top := GROUND
 	for block in blocks:
@@ -278,7 +264,7 @@ func top_height() -> float:
 	return top
 
 
-#The place a point belongs to: the closest one, where a place on another floor counts as farther than it is
+#Closest place; other floors count as farther
 func nearest_place(point: Vector3) -> StringName:
 	var best: StringName = &""
 	var best_distance := INF
@@ -291,14 +277,13 @@ func nearest_place(point: Vector3) -> StringName:
 	return best
 
 
-#Whether a point stands on the floor of a place (with "margin" meters to spare from its rim)
+#On the floor of a place with "margin" from its rim
 func is_over(id: StringName, point: Vector3, margin := 0.0) -> bool:
 	var at := position_of(id)
 	return Vector2(point.x - at.x, point.z - at.z).length() <= radius_of(id) - margin and absf(point.y - at.y) < 1.5
 
 
-#The graph of the map: a place is a vertex and a link is one arc each way it can be travelled, at the cost of its seconds.
-#The bots walk it without the drops and the launches: they never jump off a terrace nor step on a trampoline
+#Graph of the map: places are vertices and links arcs costing seconds; bots skip drops and launches
 func build_graph(for_bots := false) -> WeightedGraph:
 	var graph := WeightedGraph.new()
 	for id: StringName in places:
@@ -312,7 +297,7 @@ func build_graph(for_bots := false) -> WeightedGraph:
 	return graph
 
 
-#Seconds of the cheapest route between every pair of places, by Dijkstra from each one: {from: {to: seconds}}
+#Cheapest seconds between every pair of places, Dijkstra from each: {from: {to: seconds}}
 func travel_table(graph: WeightedGraph) -> Dictionary:
 	var table: Dictionary = {}
 	for from: StringName in places:
@@ -324,12 +309,12 @@ func travel_table(graph: WeightedGraph) -> Dictionary:
 	return table
 
 
-#Whether what starts at stage "from" is already on at "stage"
+#Whether what starts at stage "from" is on at "stage"
 static func is_on(entry: Dictionary, stage: int) -> bool:
 	return stage >= int(entry.get("from", 0))
 
 
-#Which way a belt runs at "time": 1 from its first end to the second, -1 the other way, 0 while it is stopped
+#Belt direction at "time": 1 forward, -1 back, 0 stopped
 func belt_flow(belt: Dictionary, stage: int, time: float) -> float:
 	if not is_on(belt, stage):
 		return 0.0
@@ -338,7 +323,7 @@ func belt_flow(belt: Dictionary, stage: int, time: float) -> float:
 	return 1.0 if int(time / belt_period) % 2 == 0 else -1.0
 
 
-#Seconds until the belts that turn do it again
+#Seconds until turning belts turn again
 func belt_turn_in(time: float) -> float:
 	return belt_period - fposmod(time, belt_period)
 
@@ -349,7 +334,7 @@ func _in_block(block: Dictionary, point: Vector2) -> bool:
 	return absf(local.x) <= half.x and absf(local.y) <= half.y
 
 
-#Height of the surface of a ramp over a point, or a number under the ground when the point is not over it
+#Ramp surface height over a point, or below ground when off it
 func _ramp_height(ramp: Dictionary, point: Vector2) -> float:
 	var from: Vector3 = ramp["from"]
 	var to: Vector3 = ramp["to"]

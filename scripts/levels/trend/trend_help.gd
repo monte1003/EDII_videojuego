@@ -1,7 +1,7 @@
 class_name TrendHelp
 extends RefCounted
 
-#The pages of the help of the trend war; the numbers come from its settings
+#Help pages of the trend war, numbers from its settings
 
 
 static func pages(settings: TrendSettings) -> Array[Dictionary]:

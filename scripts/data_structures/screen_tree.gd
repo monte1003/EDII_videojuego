@@ -7,7 +7,7 @@ class ScreenNode:
 	var title: String
 	var scene_path: String
 	var children: Array[ScreenNode] = []
-	#The parent is a weak reference: parent and child holding each other would never be freed
+	#Weak parent reference so parent and child can be freed
 	var parent: ScreenNode:
 		get:
 			return _parent.get_ref() as ScreenNode if _parent != null else null
@@ -59,7 +59,7 @@ func has(id: StringName) -> bool:
 	return _by_id.has(id)
 
 
-#Root down to the given screen, which is the trail shown at the top of each screen
+#Root down to the screen, the trail shown at the top
 func path_to(id: StringName) -> Array[ScreenNode]:
 	var trail: Array[ScreenNode] = []
 	var node := find(id)
@@ -69,7 +69,7 @@ func path_to(id: StringName) -> Array[ScreenNode]:
 	return trail
 
 
-#Preorder walk, used by the screen that draws the whole tree
+#Preorder walk for the screen that draws the tree
 func preorder(from: ScreenNode = null) -> Array[ScreenNode]:
 	var visited: Array[ScreenNode] = []
 	_walk(from if from != null else root, visited)

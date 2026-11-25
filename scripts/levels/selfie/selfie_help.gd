@@ -1,7 +1,7 @@
 class_name SelfieHelp
 extends RefCounted
 
-#The pages of the help of the perfect selfie; the numbers come from its settings and the score sheet
+#Help pages of the perfect selfie, numbers from its settings and the score sheet
 
 
 static func pages(settings: SelfieSettings, sheet: ScoreSheet) -> Array[Dictionary]:

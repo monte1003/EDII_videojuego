@@ -1,9 +1,7 @@
 class_name Level01TrapView
 extends Node3D
 
-#Draws the obstacles of Level01Traps where the clock says they are: the axes of comments under their candy gantries, the like punchers at
-#the sides of the bridges, the scroll wheels and the giant balls with their slots and lanes, the fans with their wind, and the tiles of
-#the stories with their bodies (they are the floor of their plates). It only shows what the traps and the tiles say
+#Draws the Level01Traps obstacles where the clock says
 
 const STORY_SHADER: Shader = preload("res://assets/shaders/story_tile.gdshader")
 const SKY := Color("62b7ff")
@@ -13,24 +11,24 @@ const LIME := Color("86e05f")
 const ROSE := Color("ff7fb2")
 const AQUA := Color("4fd3e8")
 const INK := Color("2a2145")
-#The sides of the letters of the comments
+#Side colour of the comment letters
 const WORD_SIDE := Color("4636a3")
-#How thick the rod of an axe is, how far out of a bridge the pillars of its gantry stand and how many wind streaks a fan blows
+#Axe rod radius, gantry pillar offset and fan streak count
 const ROD_RADIUS := 0.09
 const GANTRY_OUT := 0.55
 const STREAKS := 9
 const FAN_RADIUS := 1.75
 const FAN_LIFT := 1.95
 
-#Per row of axes: {"row", "pivots": Array[Node3D]}
+#Per axe row: {"row", "pivots"}
 var _axes: Array[Dictionary] = []
-#Per puncher: {"puncher", "fist": Node3D, "arm": MeshInstance3D, "housing": Node3D, "flash": StandardMaterial3D, "base": Vector3}
+#Per puncher: fist, arm, housing, flash and base
 var _punchers: Array[Dictionary] = []
-#Per run: {"run", "index", "pool": Array[MeshInstance3D], "lanes": Array[StandardMaterial3D]}
+#Per run: index, pool and lane materials
 var _runs: Array[Dictionary] = []
-#Per fan: {"fan", "blades": Node3D, "ring": StandardMaterial3D, "streaks": Array[MeshInstance3D], "arrows": StandardMaterial3D}
+#Per fan: blades, ring, streaks and arrows
 var _fans: Array[Dictionary] = []
-#Plate id -> Array of {"body": StaticBody3D, "view": Node3D, "top": MeshInstance3D, "shown": bool}
+#Plate id -> tiles with body, view, top and shown flag
 var _tiles: Dictionary = {}
 var _terrain: CandyTerrain
 var _rng := RandomNumberGenerator.new()
@@ -55,7 +53,7 @@ func build(tiles: Level01Tiles) -> void:
 	tiles.tile_back.connect(_on_tile_back)
 
 
-#Every node that moves or hides by itself: the axes, the fists, the balls and wheels, the blades and wind of the fans and the tiles
+#Nodes that move or hide by themselves
 func _moving_nodes() -> Array[Node]:
 	var found: Array[Node] = []
 	var lists: Array = [_axes, _punchers, _runs, _fans]
@@ -78,7 +76,7 @@ func _collect(value: Variant, found: Array[Node]) -> void:
 			_collect(item, found)
 
 
-#Puts everything where it is at "time"; "tiles" says how far each tile of stories is in its shaking
+#Puts everything at "time"; "tiles" gives each tile's shake
 func update(time: float, tiles: Level01Tiles) -> void:
 	for entry in _axes:
 		var row: Dictionary = entry["row"]
@@ -104,8 +102,7 @@ func update(time: float, tiles: Level01Tiles) -> void:
 				view.position = Vector3(sin(time * 51.0), 0.0, cos(time * 47.0)) * 0.05 * share
 
 
-#A candy gantry over the bridge, one arch at each end of the row and a beam along it, and under the beam each axe: a striped rod that
-#ends in a comment with a word on both faces
+#Candy gantry over the bridge with striped rods ending in comments
 func _build_axes(row: Dictionary) -> void:
 	var frame := Level01Traps.bridge_frame(row["edge"])
 	var spots := Level01Traps.axe_spots(row)
@@ -155,7 +152,7 @@ func _build_axes(row: Dictionary) -> void:
 		var blade := PropKit.make(&"bubble", Level01Layout.AXE_BLADE)
 		blade.position.y = -Level01Layout.AXE_ROD - Level01Layout.AXE_BLADE.y / 2.0
 		pivot.add_child(blade)
-		#The word is on the face that looks at whoever comes along the bridge
+		#The word faces whoever comes along the bridge
 		var word := Word3D.make(String(words[index % words.size()]), 0.95, Level01Layout.AXE_BLADE.x * 0.78, WORD_SIDE, 0.2)
 		word.position = Vector3(0.0, -Level01Layout.AXE_ROD + 0.08, Level01Layout.AXE_BLADE.z / 2.0 + 0.02)
 		pivot.add_child(word)
@@ -163,8 +160,7 @@ func _build_axes(row: Dictionary) -> void:
 	_axes.append({"row": row, "pivots": pivots})
 
 
-#A puncher: a candy barrel at the side of the bridge, its mouth toward the bridge and a heart on top, on a pillar that goes down to the
-#deck; a striped spring of an arm comes out of the mouth with a like at its end
+#Puncher: candy barrel on a pillar with a spring arm ending in a like
 func _build_puncher(puncher: Dictionary) -> void:
 	var frame := Level01Traps.bridge_frame(puncher["edge"])
 	var side := float(puncher["side"])
@@ -194,7 +190,7 @@ func _build_puncher(puncher: Dictionary) -> void:
 	barrel.material_override = flash
 	barrel.transform = PartyKit.stretch(centre + across * side * 0.8, centre - across * side * 0.8)
 	add_child(barrel)
-	#White bands around the barrel and a bright ring at its mouth
+	#White bands and a bright mouth ring
 	for share: float in [-0.55, 0.0, 0.55]:
 		var band := MeshInstance3D.new()
 		var hoop := TorusMesh.new()
@@ -249,7 +245,7 @@ func _place_puncher(entry: Dictionary, time: float) -> void:
 		arm.transform = PartyKit.stretch(from, to)
 
 
-#A run: the slots in the floor where its things rise and sink, the lit lanes of the giant balls and a pool of wheels or balls to draw
+#Run: floor slots, lit lanes and a pool of wheels or balls
 func _build_run(run: Dictionary, index: int) -> void:
 	var line := Level01Layout.run_line(run)
 	var along: Vector3 = line["along"]
@@ -300,7 +296,7 @@ func _build_run(run: Dictionary, index: int) -> void:
 			rim.position = end + across * lane + Vector3(0.0, 0.012, 0.0)
 			add_child(rim)
 		if not rolls:
-			#The lane of a giant ball lights up in the seconds before one comes along it
+			#A giant ball lane lights up before one comes
 			var strip := MeshInstance3D.new()
 			var sheet := BoxMesh.new()
 			sheet.size = Vector3(2.3, 0.02, float(line["length"]) - 2.0 * (Level01Layout.BOULDER_RADIUS + 0.45))
@@ -330,7 +326,7 @@ func _build_run(run: Dictionary, index: int) -> void:
 			wheel.rings = 1
 			thing.mesh = wheel
 			thing.material_override = PartyKit.candy(PartyKit.WHITE, VIOLET, 8.0)
-			#Golden rims at the two ends, like the wheel of a mouse
+			#Golden rims like a mouse wheel
 			for end: float in [-1.0, 1.0]:
 				var rim := MeshInstance3D.new()
 				var hoop := TorusMesh.new()
@@ -389,8 +385,7 @@ func _place_run(entry: Dictionary, time: float) -> void:
 		paint.albedo_color.a = 0.22 + 0.35 * warning
 
 
-#A fan: a lime turbine on a candy stand at the side of the bridge, a short tube with a grill in front and big blades that spin up before it
-#blows, streaks of wind across the bridge while it blows and arrows on the floor that say which way it pushes
+#Fan: lime turbine with grill and blades, wind streaks and floor arrows
 func _build_fan(fan: Dictionary) -> void:
 	var frame := Level01Traps.bridge_frame(fan["edge"])
 	var side := float(fan["side"])
@@ -411,7 +406,7 @@ func _build_fan(fan: Dictionary) -> void:
 	ring_paint.emission_enabled = true
 	ring_paint.emission = LIME
 	ring_paint.emission_energy_multiplier = 0.3
-	#The tube of the turbine, open at both ends and painted inside too
+	#Turbine tube painted inside too
 	var tube := MeshInstance3D.new()
 	var shell := CylinderMesh.new()
 	shell.top_radius = FAN_RADIUS + 0.1
@@ -454,7 +449,7 @@ func _build_fan(fan: Dictionary) -> void:
 		lip.rotation.x = PI / 2.0
 		lip.position.z = front
 		holder.add_child(lip)
-	#The grill in front of the blades: two thin rings and four spokes
+	#Grill: two rings and four spokes
 	var grill_paint := PartyKit.paint(PartyKit.WHITE, 0.2, 0.3)
 	for radius: float in [FAN_RADIUS * 0.45, FAN_RADIUS * 0.9]:
 		var wire := MeshInstance3D.new()
@@ -518,7 +513,7 @@ func _build_fan(fan: Dictionary) -> void:
 		streak.hide()
 		add_child(streak)
 		streaks.append(streak)
-	#Three arrows on the floor across the bridge, pointing where the wind pushes
+	#Three floor arrows along the wind
 	var arrow_paint := StandardMaterial3D.new()
 	arrow_paint.albedo_color = Color(LIME, 0.5)
 	arrow_paint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -575,7 +570,7 @@ func _place_fan(entry: Dictionary, time: float) -> void:
 		streak.basis = Basis.looking_at(facing, Vector3.UP)
 
 
-#The tiles of a plate of stories: each one is a body with its own story on top, so it can drop and come back on its own
+#Story tiles, each a body that drops and returns on its own
 func _build_tiles(plate: StringName) -> void:
 	var list: Array[Dictionary] = []
 	var side := Level01Layout.tile_side()

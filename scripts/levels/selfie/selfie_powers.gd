@@ -1,8 +1,7 @@
 class_name SelfiePowers
 extends Node3D
 
-#The power-ups on their pedestals: a plump candy gem that floats and turns, with the sign of what it gives on both faces.
-#An arrow up in green is the jump, a bolt in yellow is the speed and a shield in blue is the shield
+#Power-up gems: green arrow jump, yellow bolt speed, blue shield
 
 const COLORS: Array[Color] = [Color("4fd38a"), Color("ffc928"), Color("35c3f2")]
 const GEM_HEIGHT := 1.25
@@ -45,7 +44,7 @@ func build(spots: Array[Vector3], kinds: Array[int]) -> void:
 		set_kind(index, kinds[index], false)
 
 
-#Shows the power-up of a pedestal, or hides it when "kind" is -1
+#Shows a pedestal power-up, or hides it with -1
 func set_kind(pedestal: int, kind: int, pop := true) -> void:
 	var gem := _gems[pedestal]
 	gem.visible = kind >= 0
@@ -66,7 +65,7 @@ func _process(delta: float) -> void:
 		_gems[index].position.y = GEM_HEIGHT + sin(_clock * 2.2 + index * 1.3) * 0.12
 
 
-#The sign of a power-up as flat white shapes, once on each face of the gem
+#Power-up sign on both faces of the gem
 func _make_sign(kind: int) -> Node3D:
 	var holder := Node3D.new()
 	var white := PartyKit.paint(PartyKit.WHITE, 0.9, 0.3)
@@ -83,7 +82,7 @@ func _make_sign(kind: int) -> Node3D:
 				shaft.size = Vector3(0.17, 0.3, SIGN_DEPTH)
 				_piece(side, shaft, white, Vector3(0.0, -0.15, 0.0))
 			SelfieRules.Power.SPEED:
-				#A bolt: two slanted wedges that meet in the middle
+				#Bolt from two slanted wedges
 				var wedge := PrismMesh.new()
 				wedge.size = Vector3(0.26, 0.44, SIGN_DEPTH)
 				wedge.left_to_right = 1.0

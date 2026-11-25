@@ -1,7 +1,7 @@
 class_name GraphDebugView
 extends Node3D
 
-#Draws the graph of the course: vertex ids, bridges with their costs and the routes Dijkstra finds
+#Draws the course graph: ids, bridges with costs and Dijkstra routes
 
 const OPEN_COLOR := Color("3ddc84")
 const BLOCKED_COLOR := Color("ff3b3b")
@@ -39,7 +39,7 @@ func setup(graph: WeightedGraph, positions: Dictionary) -> void:
 		_edge_labels[key] = label
 
 
-#Each route is {"path": the vertices in order, "color", "from": where whoever follows it stands}
+#Route: {"path", "color", "from"}
 func redraw(routes: Array[Dictionary]) -> void:
 	_mesh.clear_surfaces()
 	var quads := 0
@@ -67,12 +67,12 @@ func redraw(routes: Array[Dictionary]) -> void:
 		for step in range(path.size() - 1):
 			_ribbon(_positions[path[step]], _positions[path[step + 1]], 0.4, height, color)
 			quads += 1
-		#Line from whoever follows the route to the first vertex it heads to
+		#Line from the follower to its first vertex
 		if not path.is_empty():
 			_ribbon(route["from"], _positions[path[0]], 0.2, height, color)
 			quads += 1
 	if quads == 0:
-		#An empty surface is not allowed: draw a degenerate triangle
+		#An empty surface is not allowed: degenerate triangle
 		_mesh.surface_add_vertex(Vector3.ZERO)
 		_mesh.surface_add_vertex(Vector3.ZERO)
 		_mesh.surface_add_vertex(Vector3.ZERO)
@@ -98,7 +98,7 @@ func _edge_key(a: StringName, b: StringName) -> String:
 	return "%s|%s" % [a, b] if String(a) < String(b) else "%s|%s" % [b, a]
 
 
-#A flat strip between two points, thick enough to read from the game camera
+#Flat strip readable from the game camera
 func _ribbon(from: Vector3, to: Vector3, width: float, height: float, color: Color) -> void:
 	var a := Vector3(from.x, from.y + height, from.z)
 	var b := Vector3(to.x, to.y + height, to.z)

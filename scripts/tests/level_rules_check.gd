@@ -1,6 +1,6 @@
 extends SceneTree
 
-#Checks the rules of level 1 with no scene; run: godot --headless --path . --script res://scripts/tests/level_rules_check.gd
+#Checks the level 1 rules with no scene; run headless with --script
 
 const STEP := 0.1
 

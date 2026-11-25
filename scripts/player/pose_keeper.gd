@@ -1,24 +1,22 @@
 class_name PoseKeeper
 extends Node
 
-#Any player can strike a pose or a dance in any round with the pose key: it stands still until it moves, jumps, leaves the floor or
-#takes a blow. The keys that were already down when the pose started do not break it until they are let go, a press in the air
-#waits a moment for the landing, and a floor that shakes for a frame does not count as leaving it
+#Pose key in any round: stand still until moving, jumping, leaving the floor or being hit
 
 signal pose_changed(player_id: int, posing: bool, style: int)
 
-#How hard the keys must be pressed for a move to end the pose
+#Input strength that ends a pose
 const BREAK_INPUT := 0.3
-#A press in the air still strikes the pose if the player lands within this many seconds
+#A press in the air still poses if landing within this time
 const PRESS_BUFFER := 0.3
-#Seconds off the floor before the pose ends: a bump of a moving floor does not end it
+#Seconds off the floor before the pose ends
 const AIR_GRACE := 0.12
 
-#Whether the round lets a player pose right now (it is running, it has not finished)
+#Whether the round allows posing now
 var allowed: Callable = func(_player_id: int) -> bool: return true
 
 var _players: Dictionary = {}
-#Per player: the move keys were down when the pose started, seconds left of a press in the air, seconds off the floor
+#Per player: move keys held at pose start, air press timer and air time
 var _held: Dictionary = {}
 var _pending: Dictionary = {}
 var _air: Dictionary = {}
@@ -39,18 +37,18 @@ func is_posing(player_id: int) -> bool:
 	return player != null and player.posing
 
 
-#Whether the player stands free on the floor and the round lets it pose
+#On the floor and allowed by the round
 func can_pose(player_id: int) -> bool:
 	var player: Player = _players.get(player_id)
 	return player != null and is_free(player, float(_air.get(player_id, 0.0))) and allowed.call(player_id)
 
 
-#Free to pose: on the floor (or off it for less than AIR_GRACE), not carried, not dazed, not down and not diving
+#On the floor, not carried, dazed, down or diving
 static func is_free(player: Player, air_time := 0.0) -> bool:
 	return air_time < AIR_GRACE and not player.carried and not player.is_dazed() and not player.is_down() and not player.is_diving()
 
 
-#One press strikes the pose and the next one drops it; a press in the air is kept a moment for the landing
+#One press poses, the next drops it; an air press waits for landing
 func toggle(player_id: int) -> bool:
 	if is_posing(player_id):
 		return set_posing(player_id, false)
@@ -88,7 +86,7 @@ static func next_style(last: int, count: int, rng: RandomNumberGenerator) -> int
 	return pick if last < 0 or pick < last else pick + 1
 
 
-#A move ends the pose only when it is a new press: a key held since the pose started counts once it is let go
+#Only a new press ends the pose; keys held since the start count once released
 static func moves(held: Dictionary, player_id: int, input: Vector2, threshold := BREAK_INPUT) -> bool:
 	if input.length() <= threshold:
 		held[player_id] = false
@@ -110,8 +108,7 @@ func _physics_process(delta: float) -> void:
 				_pending.erase(id)
 		if not player.posing:
 			continue
-		#The player clears its own input while it poses, so the keys are read from what it asked for. A jump that ends the pose is handed
-		#back, so the player jumps at once instead of having to press again
+		#Input is read from what the player asked; a jump that ends the pose is handed back
 		var jumped := player.asked_jump or player.jump_requested
 		if not can_pose(id) or jumped or moves(_held, id, player.asked_move):
 			set_posing(id, false)

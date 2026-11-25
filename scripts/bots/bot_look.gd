@@ -1,7 +1,7 @@
 class_name BotLook
 extends Node3D
 
-#What the bot AI knows of its look, whether primitives or a final model
+#What the bot AI knows of its look
 
 @export var alert_height := 1.62
 
@@ -14,7 +14,7 @@ func _ready() -> void:
 	add_child(_alert_mark)
 
 
-#Shown while the bot winds up a push, so the player can dodge it
+#Shown while the bot winds up a push
 func set_alert(active: bool) -> void:
 	_alert_mark.visible = active
 	if _alert_tween and _alert_tween.is_valid():

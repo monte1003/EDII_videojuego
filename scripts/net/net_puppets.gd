@@ -1,11 +1,10 @@
 class_name NetPuppets
 extends Node
 
-#In a room, inside a round: sends where the player of this screen is 20 times a second and moves the puppets of the other computers with
-#what comes from theirs. A shove made on another computer to the player of this one lands here
+#Sends this player's state 20 times a second and moves the other computers' puppets
 
 const SEND_EVERY := 0.05
-#The strongest push a message may carry: anything bigger is a broken message, not a shove
+#Strongest valid push; anything bigger is a broken message
 const MAX_PUSH := 30.0
 
 var _left := 0.0
@@ -20,7 +19,7 @@ func _physics_process(delta: float) -> void:
 	_left -= delta
 	if _left > 0.0:
 		return
-	#Added and not set: three physics frames of 1/60 leave a rest a hair above zero, and setting it sent only 15 times a second
+	#Subtracted, not reset, so it really sends 20 times a second
 	_left += SEND_EVERY
 	var mine: Player = (get_parent() as RoundScene).everyone.get(GameSession.local_id)
 	if mine != null and is_instance_valid(mine):

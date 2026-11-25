@@ -1,11 +1,9 @@
 class_name CloudField
 extends Node3D
 
-#Many clouds, each a flat cluster of puffs that drifts along X and comes back from the other side. The drift is done by the shader from the clock,
-#so the clouds cost no CPU; they are split in rows along Z with one draw call each, which the engine skips when a row is out of view
+#Drifting clouds moved by the shader; one draw call per row along Z
 
 const SHADER: Shader = preload("res://assets/shaders/cloud_puff.gdshader")
-#Meters along Z that a row covers
 const ROW := 120.0
 
 var _clouds: Array[Dictionary] = []
@@ -13,13 +11,13 @@ var _left := 0.0
 var _width := 1.0
 
 
-#"area_x" is the stretch (from, to) in which clouds drift and wrap around
+#"area_x" is the range where clouds drift and wrap
 func setup(area_x: Vector2) -> void:
 	_left = area_x.x
 	_width = area_x.y - area_x.x
 
 
-#A cloud of "size" meters at "center", drifting "speed" m/s
+#Cloud of "size" meters drifting "speed" m/s
 func add_cloud(center: Vector3, size: float, color: Color, speed: float, rng: RandomNumberGenerator) -> void:
 	var puffs: Array[Dictionary] = []
 	for _step in rng.randi_range(4, 7):
@@ -70,12 +68,12 @@ func commit() -> void:
 				var basis := Basis.from_scale(puff["scale"] as Vector3)
 				multi.set_instance_transform(slot, Transform3D(basis, centre + (puff["offset"] as Vector3)))
 				multi.set_instance_color(slot, cloud["color"])
-				#Where its cloud started along X and how fast it drifts: the shader moves the puff from there
+				#Start X and speed for the shader
 				multi.set_instance_custom_data(slot, Color(centre.x, cloud["speed"], 0.0, 0.0))
 				slot += 1
 		var instance := MultiMeshInstance3D.new()
 		instance.multimesh = multi
 		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		#A row sweeps the whole width as time goes by, so its box is the whole width
+		#A row sweeps the whole width over time
 		instance.custom_aabb = AABB(Vector3(_left - 40.0, low.y, low.z), Vector3(_width + 80.0, high.y - low.y, high.z - low.z))
 		add_child(instance)

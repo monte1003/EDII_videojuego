@@ -1,53 +1,48 @@
 class_name AttractReel
 extends Node3D
 
-#The trailer of the fair screen, made inside the engine with the real pieces of the game (it is not a video): the night stage of the
-#podium, La Plaza, El Plató and SocialDrop, the four characters running, shoving, posing and dancing, the logo of the game and short
-#lines of our own set as the titles of a film (TitleCard). Three acts cut on the bars of the game's music (the victory theme, the trend war theme and the end of the
-#victory theme, about 70 s in all), and the loop fades to night and starts over without a cut
+#Fair screen trailer built in the engine with the real game pieces, cut to the music in three acts
 
-#What the banner of the frame shows: who or what is on screen, the line over it and the seal of its crown (a ScoreSheet.Medal)
+#Banner of the frame: who is on screen, the line over it and its crown
 signal focus_changed(title: String, detail: String, medal: int)
-#The places are built and the trailer is playing
 signal started
 
-#Seconds the winner is celebrated on the stage before the ranking takes over (the stage stays behind it)
+#Seconds the winner is celebrated before the ranking takes over
 const CELEBRATION := 7.0
 
 const VICTORY: AudioStream = preload("res://assets/audio/music/victory_theme.ogg")
 const PLAZA_THEME: AudioStream = preload("res://assets/audio/music/trend_war.ogg")
 const MARK: Texture2D = preload("res://assets/ui/textures/mark.png")
-#Bars of the two tracks (117.5 and 123 beats a minute, four beats a bar) and the first beat of the victory theme
+#Bars of the two tracks and the first beat of the victory theme
 const VICTORY_BAR := 2.043
 const VICTORY_BEAT := 0.84
 const PLAZA_BAR := 1.951
-#The break of the trend war theme, where the maps end, and the climb of the victory theme to its end
+#Break of the trend war theme and the climb of the victory theme
 const PLAZA_END := 40.5
 const CLOSING_FROM := 22.0
 const CLOSING_END := 36.2
 const MUSIC_DB := -8.0
 const STAGE_SCALE := 1.6
-#Fast and slow motion, and how long the speed takes to ramp into them, as films do (real seconds)
+#Fast and slow motion and their ramp time in real seconds
 const FAST_MOTION := 1.6
 const SLOW_MOTION := 0.2
 const RAMP := 0.35
-#The speed of a player in the game and the jump of a runner: the run of the characters matches their legs
+#Game run speed and jump, so the legs match the run
 const RUN_SPEED := 5.0
 const HOP_SECONDS := 0.55
 const HOP_HEIGHT := 0.9
-#The bars of the cinema, always on, and a little closer at the big moments
+#Cinema bars, a little closer at the big moments
 const BARS := 0.075
 const BARS_CLOSE := 0.1
-#The ranking column covers the right quarter of the screen: every shot slides its subject to the middle of what is left, a share of
-#its distance to the camera (the tangent of half the horizontal view times a quarter of the screen)
+#The ranking covers the right quarter: shift the subject to the middle of the rest
 const FRAME_SHIFT := 0.23
 const PLACES: Array[StringName] = [AttractSets.STAGE, AttractSets.PLAZA, AttractSets.PLATO, AttractSets.DROP]
-#The crown of each character's block on the stage, in the order of AttractSets.CHARACTERS (as on the podium: diamond for the first)
+#Crown of each character block on the stage, as on the podium
 const CROWNS: Array[ScoreSheet.Medal] = [ScoreSheet.Medal.DIAMOND, ScoreSheet.Medal.GOLD, ScoreSheet.Medal.SILVER, ScoreSheet.Medal.BRONZE]
-#The pose each character strikes when it lands on its block, and the dance of each one at the end
+#Landing pose and closing dance of each character
 const HERO_POSES: Array[int] = [0, 1, 2, 4]
 const DANCES: Array[int] = [3, 5, 2, 4]
-#The card of the SocialDrop board that stays when the others fall
+#SocialDrop card that stays when the others fall
 const DROP_CARD := 3
 
 var places: Dictionary = {}
@@ -57,7 +52,7 @@ var _camera := CinemaCamera.new()
 var _board_middle := Vector3.ZERO
 var _figures: Array[Figure] = []
 var _track: AudioStreamPlayer
-#Where the track started and when, in real time: the cuts follow this clock, which slow and fast motion do not touch
+#Real-time clock of the track; cuts follow it, slow motion does not
 var _track_from := 0.0
 var _track_at := 0
 var _players: Array[AudioStreamPlayer] = []
@@ -69,13 +64,12 @@ var _flash := ColorRect.new()
 var _bars: Array[ColorRect] = []
 var _fireworks := false
 var _firework_left := 0.0
-#The runners the camera runs alongside during the race, the side it watches them from and the way they run
+#Runners the camera follows during the race
 var _pack: Array[Figure] = []
 var _pack_side := Vector3.ZERO
 var _pack_ahead := Vector3.ZERO
 var _pack_center := Vector3.ZERO
-#Whether the trailer plays: stop() turns it off at once and every wait of an act then gives up; play() and celebrate() start a new
-#run only after the old one has seen it (two frames), so two runs never overlap
+#stop() ends it at once; a new run waits two frames so runs never overlap
 var _running := false
 var _generation := 0
 var _layer: CanvasLayer
@@ -124,13 +118,13 @@ func _process(delta: float) -> void:
 func _exit_tree() -> void:
 	_running = false
 	Engine.time_scale = 1.0
-	#The places waiting out of the tree are nobody's children: they go with the trailer
+	#Places waiting out of the tree go with the trailer
 	for place: AttractSets.Place in places.values():
 		if place != active and is_instance_valid(place.root):
 			place.root.queue_free()
 
 
-#Builds the places one per frame behind a night veil, the first time the trailer plays
+#Builds the places one per frame behind a night veil
 func _run() -> void:
 	_veil.color.a = 1.0
 	for id in PLACES:
@@ -139,7 +133,7 @@ func _run() -> void:
 	started.emit()
 
 
-#Plays the three acts from the first one, forever, until stop()
+#Plays the three acts in a loop until stop()
 func play() -> void:
 	if not await _begin():
 		return
@@ -153,7 +147,7 @@ func play() -> void:
 		await _act_closing()
 
 
-#Stops the trailer at once: no music, no fast or slow motion, its places out of the scene and its picture hidden
+#Stops at once: music, motion, places and picture
 func stop() -> void:
 	_running = false
 	_generation += 1
@@ -172,8 +166,7 @@ func stop() -> void:
 	_layer.visible = false
 
 
-#The winner of the game on the middle block of the stage, dancing under confetti and fireworks with its line; after CELEBRATION seconds
-#it returns and the stage stays on with the camera going round, until stop()
+#Winner dancing on the stage; after CELEBRATION the stage stays with the camera circling
 func celebrate(character: StringName, shown_name: String, points: int, lines: Array[String]) -> void:
 	if not await _begin():
 		return
@@ -217,14 +210,14 @@ func celebrate(character: StringName, shown_name: String, points: int, lines: Ar
 	_running = false
 
 
-#The winner jumps for joy (a new record of the day)
+#The winner jumps for joy at a new record
 func cheer() -> void:
 	for figure in _figures:
 		if figure.root.visible:
 			_hop(figure)
 
 
-#Starts a new run: waits two frames so the run before has seen stop(), and the places if they are not built yet
+#Waits two frames so the previous run has seen stop()
 func _begin() -> bool:
 	_running = false
 	_generation += 1
@@ -241,8 +234,7 @@ func _begin() -> bool:
 	return true
 
 
-#Act one, on the start of the victory theme: the stage at night, the logo slammed in on the first beat and the four characters landing
-#one per bar
+#Act one: night stage, logo on the first beat, one character landing per bar
 func _act_stage() -> void:
 	_show(AttractSets.STAGE)
 	_hide_figures()
@@ -280,8 +272,7 @@ func _act_stage() -> void:
 	_flash_screen(0.8)
 
 
-#One character drops onto its block, lands with a bounce, its light comes on, its name comes in at the bottom and it strikes its pose;
-#the camera pushes in from a low angle until "until"
+#A character lands on its block, lights up, shows its name and poses
 func _hero(index: int, until: float) -> void:
 	var figure := _figures[index]
 	var entry := AttractSets.entry_of(active, index)
@@ -312,8 +303,7 @@ func _hero(index: int, until: float) -> void:
 	_clear_words()
 
 
-#Act two, on the trend war theme: La Plaza from the sky, a race in fast motion, a shove in slow motion, El Plató, the SocialDrop board
-#and a pass over each map, a few bars per shot
+#Act two: La Plaza, race, slow-motion shove, El Plató, SocialDrop and map passes
 func _act_maps() -> void:
 	_show(AttractSets.PLAZA)
 	_play(PLAZA_THEME, 0.0)
@@ -357,8 +347,7 @@ func _act_maps() -> void:
 	_flash_screen(0.8)
 
 
-#The four characters race across La Plaza: the time speeds up, each runs at its own pace (they pass each other), weaving a little and
-#hopping here and there, and the camera runs alongside at their height
+#Fast-motion race across La Plaza with the camera alongside
 func _race(until: float) -> void:
 	var path := AttractSets.plaza_run(active.layout)
 	focus_changed.emit("A toda velocidad", "CÁMARA RÁPIDA", ScoreSheet.Medal.NONE)
@@ -391,7 +380,7 @@ func _race(until: float) -> void:
 	_clear_words()
 
 
-#The camera runs beside the middle of the runners, a little behind and at the height of their heads, looking a little ahead of them
+#Camera beside the middle of the runners at head height
 func _follow_pack(delta: float) -> void:
 	var center := Vector3.ZERO
 	for figure in _pack:
@@ -400,8 +389,7 @@ func _follow_pack(delta: float) -> void:
 	_camera.place(_pack_center + _pack_side * 6.5 - _pack_ahead * 1.2 + Vector3(0.0, 1.5, 0.0), _pack_center + _pack_ahead * 1.5 + Vector3(0.0, 0.7, 0.0))
 
 
-#Face to face in the middle of La Plaza: one takes a run-up and shoves, time ramps almost to a stop at the contact, the other flies back
-#in a somersault, lands and staggers, and time comes back
+#Slow-motion shove: one flies back in a somersault, lands and staggers
 func _shove(middle: Vector3, until: float) -> void:
 	_hide_figures()
 	var pusher := _figures[0]
@@ -447,7 +435,7 @@ func _shove(middle: Vector3, until: float) -> void:
 	_clear_words()
 
 
-#A body thrown back in an arc that turns over once around its waist
+#Arc thrown back with one turn around the waist
 func _somersault(share: float, figure: Figure, from: Vector3, to: Vector3) -> void:
 	figure.root.position = from.lerp(to, share) + Vector3(0.0, sin(share * PI) * 1.3, 0.0)
 	var turn := Basis(Vector3.RIGHT, share * TAU)
@@ -462,7 +450,7 @@ func _landed(figure: Figure) -> void:
 	SynthSound.play(self, SynthSound.land(0.16), -8.0)
 
 
-#El Plató: one on the turntable under the ring light; the others run in and stand by it, and on the beat of the photo all four pose
+#El Plató: one on the turntable, the others join and all pose on the beat
 func _plato(until: float) -> void:
 	_show(AttractSets.PLATO)
 	_hide_figures()
@@ -497,7 +485,7 @@ func _plato(until: float) -> void:
 	_clear_words()
 
 
-#The SocialDrop board from high above: the icons show, the cards blink and every card but the right one falls; the four hop for joy
+#SocialDrop board from above: every card but one falls
 func _board(until: float) -> void:
 	_show(AttractSets.DROP)
 	_hide_figures()
@@ -536,7 +524,7 @@ func _board(until: float) -> void:
 	_clear_words()
 
 
-#The four on the card of SocialDrop that never falls, looking at the front of the board
+#The four on the card that never falls
 func _stand_on_card() -> void:
 	var board := active.board
 	var spots := board.spawn_points()
@@ -545,7 +533,7 @@ func _stand_on_card() -> void:
 		_stand(_figures[index], spot + Vector3((index % 2) * 0.5 - 0.25, 0.0, 0.0), _board_middle + Vector3(0.0, 0.0, 8.0), 1.0)
 
 
-#A pass over a whole map from high up, as the openings of the rounds circle it, with the four characters in the middle of it
+#Pass over a whole map from high up
 func _flyover(id: StringName, seconds: float) -> void:
 	_show(id)
 	_dip(Palette.LILAC)
@@ -556,8 +544,7 @@ func _flyover(id: StringName, seconds: float) -> void:
 		center = active.layout.position_of(TrendLayout.CORE if id == AttractSets.PLAZA else SelfieLayout.HUB)
 		radius = 17.0
 	elif active.board != null:
-		#SocialDrop: the cards that fell come back up and the four stand again on the one that held them, not in the air where the
-		#last place left them
+		#Fallen cards come back and the four stand on the one that held
 		active.board.restore()
 		_stand_on_card()
 	var titles := {AttractSets.PLAZA: &"trend_war", AttractSets.PLATO: &"perfect_selfie", AttractSets.DROP: &"social_drop"}
@@ -568,14 +555,12 @@ func _flyover(id: StringName, seconds: float) -> void:
 	_camera.orbit(center, radius, radius * 0.7, from, from + 45.0, seconds, center + Vector3(0.0, 0.8, 0.0))
 
 
-#The name a minigame has in the game
 func _title_of(minigame: StringName) -> String:
 	var info := MinigameCatalog.find(minigame)
 	return info.title if info != null else ""
 
 
-#The four characters together around the middle of La Plaza or the turntable of El Plató, each turned its own way; with "posing" each
-#strikes its own pose a moment after the other
+#The four gathered in the middle, each turned its own way; "posing" makes them pose
 func _gather(id: StringName, posing: bool) -> void:
 	if active.layout == null:
 		return
@@ -588,7 +573,7 @@ func _gather(id: StringName, posing: bool) -> void:
 			_pose_later(_figures[index], index + 1, 0.15 * index)
 
 
-#Act three, on the end of the victory theme: everybody dancing on the stage under fireworks, the last line, the title and the call to play
+#Act three: dance under fireworks, last line, title and call to play
 func _act_closing() -> void:
 	_show(AttractSets.STAGE)
 	_play(VICTORY, CLOSING_FROM)
@@ -627,12 +612,12 @@ func _act_closing() -> void:
 	active.podium.crowd.set_excitement(1.0)
 
 
-#A line of our own, set over the picture as the title of a film
+#Our own line set like a film title
 func _say(lines: Array[String]) -> void:
 	_titles.say(lines)
 
 
-#Slides the subject of the shot to the middle of the free part of the screen, for a subject at "distance" from the camera
+#Moves the subject to the middle of the free part of the screen
 func _shift(distance: float) -> void:
 	_camera.h_offset = FRAME_SHIFT * distance
 
@@ -641,7 +626,7 @@ func _clear_words() -> void:
 	_titles.clear()
 
 
-#Puts one place in the scene and takes the one before out
+#Puts one place in the scene and takes the previous one out
 func _show(id: StringName) -> void:
 	var next: AttractSets.Place = places[id]
 	if next == active:
@@ -680,14 +665,14 @@ func _pose_later(figure: Figure, index: int, delay: float) -> void:
 	later.tween_callback(_pose.bind(figure, index))
 
 
-#Lands with a bounce: wider and lower for an instant, then back to its size
+#Landing squash
 func _squash(figure: Figure) -> void:
 	var size := figure.root.scale.y
 	figure.root.scale = Vector3(1.14, 0.84, 1.14) * size
 	create_tween().tween_property(figure.root, "scale", Vector3.ONE * size, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
 
-#A jump on the spot with the jump of the game and a bounce on landing
+#Hop on the spot with a landing bounce
 func _hop(figure: Figure, delay := 0.0) -> void:
 	var base := figure.root.position
 	var jump := create_tween()
@@ -700,8 +685,7 @@ func _hop(figure: Figure, delay := 0.0) -> void:
 	jump.tween_callback(_squash.bind(figure))
 
 
-#Runs a figure along the points at "speed" meters a second of game time, turning smoothly the way it goes and jumping at the shares of
-#the way in "hops"; at the end it stands still, turned to "facing" when given
+#Runs a figure along the points, turning and hopping at "hops"; ends facing "facing"
 func _run_along(figure: Figure, path: Array[Vector3], speed: float, delay: float, hops: Array[float], facing := Vector3.INF) -> void:
 	var length := 0.0
 	for step in path.size() - 1:
@@ -740,13 +724,13 @@ func _on_ground(at: Vector3) -> Vector3:
 	return at
 
 
-#Speeds the time up or down to "amount" in "seconds" of real time, the way a film ramps into fast or slow motion
+#Ramps time to "amount" in "seconds" of real time
 func _ramp(amount: float, seconds := RAMP) -> void:
 	var tween := create_tween().set_ignore_time_scale(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tween.tween_property(Engine, "time_scale", amount, seconds)
 
 
-#Starts a track at "from" seconds and fades out the one before
+#Starts a track at "from" and fades out the previous one
 func _play(stream: AudioStream, from: float) -> void:
 	var next := _players[0] if _track != _players[0] else _players[1]
 	if _track != null:
@@ -762,19 +746,19 @@ func _play(stream: AudioStream, from: float) -> void:
 	_track_at = Time.get_ticks_msec()
 
 
-#Seconds into the track that is playing, by the real clock (the same as the music's, and it also runs with the sound off)
+#Seconds into the track by the real clock
 func _now() -> float:
 	return _track_from + (Time.get_ticks_msec() - _track_at) / 1000.0
 
 
-#Waits until the track playing reaches "seconds": every cut lands on the music. False when the trailer was stopped meanwhile
+#Waits until the track reaches "seconds"; false if stopped
 func _until(seconds: float) -> bool:
 	while _running and is_inside_tree() and _now() < seconds:
 		await get_tree().process_frame
 	return _running
 
 
-#Waits in game time (slower or faster with the motion)
+#Waits in game time
 func _wait(seconds: float) -> bool:
 	await get_tree().create_timer(seconds).timeout
 	return _running
@@ -799,7 +783,7 @@ func _build_overlay() -> void:
 		bar.offset_bottom = 0.0
 		layer.add_child(bar)
 		_bars.append(bar)
-	#The words go under the flash of the beats and the night of the fades, as they would in a film
+	#Words go under the beat flashes and fades
 	layer.add_child(_titles)
 	for shade: ColorRect in [_flash, _veil]:
 		shade.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -809,7 +793,7 @@ func _build_overlay() -> void:
 	_veil.color = Color(Palette.NIGHT, 1.0)
 
 
-#The bars of the cinema close to "share" of the height, top and bottom
+#Cinema bars to "share" of the height
 func _letterbox(share: float, seconds: float) -> void:
 	var height := get_viewport().get_visible_rect().size.y * share
 	var tween := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
@@ -817,14 +801,13 @@ func _letterbox(share: float, seconds: float) -> void:
 	tween.tween_property(_bars[1], "offset_top", -height, seconds)
 
 
-#A white flash on a strong beat of the music
 func _flash_screen(strength: float) -> void:
 	_flash.color = Color(Palette.PAPER, strength)
 	create_tween().set_ignore_time_scale(true).tween_property(_flash, "color:a", 0.0, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	SynthSound.play(self, SynthSound.whoosh(0.35), -16.0)
 
 
-#A quick dip through a colour of the game between two places
+#Quick dip through a game colour between places
 func _dip(colour: Color) -> void:
 	_flash.color = Color(colour, 0.85)
 	create_tween().set_ignore_time_scale(true).tween_property(_flash, "color:a", 0.0, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)

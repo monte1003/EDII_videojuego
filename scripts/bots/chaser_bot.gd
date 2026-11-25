@@ -1,7 +1,7 @@
 class_name ChaserBot
 extends CharacterBody3D
 
-#Shared bot AI: its role picks the target vertex, Dijkstra plans the route and the bot walks it; a bridge crossing is committed once started
+#Shared bot AI: the role picks a target, Dijkstra plans the route, the bot walks it
 
 signal push_announced(bot: ChaserBot)
 signal push_landed(bot: ChaserBot, direction: Vector3, player_id: int)
@@ -9,7 +9,7 @@ signal route_changed(bot: ChaserBot)
 
 enum State { INACTIVE, CHASE, SEARCH }
 
-#How fast the speed of a shove fades (m/s each second)
+#Fade of a shove speed, in m/s per second
 const KNOCK_DECAY := 14.0
 
 @export_group("Movement")
@@ -18,21 +18,21 @@ const KNOCK_DECAY := 14.0
 @export var gate_inset := 1.0
 @export var stop_distance := 1.5
 @export var turn_speed := 10.0
-#Bots on the same platform keep this distance from each other so they never pile up
+#Distance bots keep from each other on a platform
 @export var separation_radius := 2.8
 @export_range(0.0, 1.5) var separation_weight := 1.2
-#A bot waits at a gate while another bot crossing the same bridge is closer than this
+#Wait at a gate while another bot on the same bridge is this close
 @export var bridge_gap := 4.5
-#Meters from the rim of a platform that a bot keeps clear of
+#Distance from the platform rim the bot keeps
 @export var rim_margin := 0.9
 
 @export_group("Planning")
-#Minimum seconds between two Dijkstra calls of the same bot
+#Minimum seconds between two Dijkstra calls
 @export var recalc_interval := 0.4
 @export var perception_interval := 0.25
 
 @export_group("Perception")
-#Seconds without seeing the player before the bot gives up and patrols
+#Seconds without seeing the player before patrolling
 @export var lose_time := 5.0
 @export var patrol_idle_time := 1.5
 
@@ -40,7 +40,7 @@ const KNOCK_DECAY := 14.0
 @export var push_enabled := true
 @export var push_trigger_range := 2.8
 @export var push_hit_range := 3.2
-#A bot only shoves whoever is less than this much higher or lower than itself
+#Shoves only reach this height difference
 @export var push_reach_height := 1.5
 @export var push_windup := 0.55
 @export var push_cooldown := 1.8
@@ -50,18 +50,18 @@ var role: BotRole = ChaseRole.new()
 var state := State.INACTIVE
 var current_vertex: StringName = &""
 var target_vertex: StringName = &""
-#Remaining vertices after the one the bot is at (or is crossing toward)
+#Vertices left after the current one
 var route: Array[StringName] = []
 var route_cost := INF
 var route_found := false
 var route_message := ""
-#Constant drift of the bridge the bot is on (a conveyor belt); the level sets it every frame
+#Drift of a conveyor belt, set by the level every frame
 var external_velocity := Vector3.ZERO
-#Set by the level for scripted demos: ignores perception and keeps the given target
+#For scripted demos: ignore perception and keep the target
 var manual_target := false
-#Keeps the bot standing still (used to show a route before the bot starts to walk it)
+#Keeps the bot still, to show a route before walking it
 var hold_movement := false
-#A shove from a player: the speed it throws the bot at, which fades out, and the seconds the bot stays dazed
+#Shove from a player: throw speed that fades and daze seconds
 var knock := Vector3.ZERO
 var dazed_left := 0.0
 
@@ -81,7 +81,7 @@ var _patrol_timer := 0.0
 var _windup_left := 0.0
 var _push_cooldown_left := 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
-#Held as Node3D: a BotLook member leaves scripts alive at exit
+#Node3D so a BotLook member does not leave scripts alive at exit
 var _visual: Node3D
 
 @onready var _visual_root: Node3D = $VisualRoot
@@ -100,7 +100,6 @@ func _exit_tree() -> void:
 		_ctx.bots.erase(self)
 
 
-#Swaps the look only: nothing else in the bot depends on it
 func set_appearance(bot_appearance: BotAppearance) -> void:
 	appearance = bot_appearance
 	role = BotRoles.make(appearance.role)
@@ -116,7 +115,7 @@ func set_appearance(bot_appearance: BotAppearance) -> void:
 	_visual_root.add_child(_visual)
 
 
-#Starts the hunt knowing where the player is, whatever the detection radius; the role decides where to go
+#Starts the hunt knowing where the player is; the role decides where to go
 func activate(known_vertex: StringName) -> void:
 	state = State.CHASE
 	_last_seen = _clock
@@ -141,7 +140,7 @@ func set_target(vertex: StringName) -> void:
 	_dirty = true
 
 
-#A player shoves the bot: it is thrown back, forgets the push it was winding up and stays dazed for a moment
+#Shoved by a player: thrown back, drops its push and stays dazed
 func take_shove(push: Vector3, seconds: float) -> void:
 	knock = Vector3(push.x, 0.0, push.z)
 	dazed_left = seconds
@@ -160,7 +159,6 @@ func role_kind() -> int:
 	return appearance.role if appearance != null else BotRole.Kind.CHASE
 
 
-#The vertex the bot is at, or the one it is crossing toward
 func anchor_vertex() -> StringName:
 	return _leg_vertex if _committed else current_vertex
 
@@ -169,7 +167,7 @@ func clock() -> float:
 	return _clock
 
 
-#Where the bot is heading right now, for the debug view
+#Destination for the debug view
 func planned_vertices() -> Array[StringName]:
 	var result: Array[StringName] = []
 	result.append(anchor_vertex())
@@ -181,7 +179,7 @@ func is_crossing() -> bool:
 	return _committed
 
 
-#The two ends of the bridge the bot is crossing; empty when it is on a platform
+#Ends of the bridge being crossed; empty on a platform
 func crossing_pair() -> Array[StringName]:
 	var pair: Array[StringName] = []
 	if _committed:
@@ -253,7 +251,7 @@ func _perceive() -> void:
 		_patrol_timer = 0.0
 
 
-#The closest player this bot notices: inside its detection radius, or any when its role needs no sight
+#Closest noticed player, or any when the role needs no sight
 func _nearest_noticed() -> ChaseTarget:
 	var best: ChaseTarget = null
 	var best_distance := INF
@@ -267,9 +265,9 @@ func _nearest_noticed() -> ChaseTarget:
 	return best
 
 
-#The player this bot pays attention to now; the closest one if it has not noticed anybody yet
+#Player this bot watches; the closest if it noticed nobody yet
 func _watched() -> ChaseTarget:
-	#A racer that left the course is freed with its node and its locator
+	#A racer that left the course is freed with its node
 	if _focus != null and not (is_instance_valid(_focus.node) and is_instance_valid(_focus.locator)):
 		_focus = null
 	if _focus != null:
@@ -316,11 +314,11 @@ func _walk(delta: float) -> Vector3:
 		var gate := _gate_point(current_vertex, next)
 		if not _reached(gate):
 			return _toward(gate)
-		#At the gate: the bridge must still be open to start crossing it
+		#The bridge must still be open to start crossing
 		if not _ctx.graph.is_edge_enabled(current_vertex, next):
 			_dirty = true
 			return Vector3.ZERO
-		#Another bot already on that bridge near the gate: wait, a bridge is too narrow for two
+		#Another bot near the gate on that bridge: wait, it fits only one
 		if _bridge_taken(current_vertex, next):
 			return Vector3.ZERO
 		_committed = true
@@ -332,7 +330,7 @@ func _walk(delta: float) -> Vector3:
 	return _idle_walk(delta)
 
 
-#The bot is at its target: chase the player on the same platform, patrol, or wait in the middle
+#At its target: chase on the same platform, patrol or wait
 func _idle_walk(delta: float) -> Vector3:
 	var watched := _watched()
 	var on_same_platform := watched != null and not watched.locator.on_bridge and watched.locator.vertex == current_vertex
@@ -358,7 +356,6 @@ func _pick_patrol_target() -> void:
 	for neighbor in _ctx.graph.neighbors(current_vertex):
 		if not _ctx.forbidden.has(neighbor):
 			options.append(neighbor)
-	#Prefer a platform no other bot is on or heading to
 	var free: Array[StringName] = options.filter(func(vertex: StringName) -> bool: return not crowded.has(vertex))
 	if not free.is_empty():
 		options = free
@@ -383,7 +380,6 @@ func _gate_point(from: StringName, to: StringName) -> Vector3:
 	var to_pos: Vector3 = _ctx.positions[to]
 	var direction := _flat(to_pos - from_pos).normalized()
 	var radius: float = _ctx.radii.get(from, 5.5)
-	#A point inside "from" on the side that faces "to"
 	return from_pos + direction * (radius - gate_inset)
 
 
@@ -412,7 +408,7 @@ func _to_player_flat() -> Vector3:
 	return _flat(watched.node.global_position - global_position)
 
 
-#A bot never walks off the rim of its platform: only the players fall
+#Bots never walk off the rim; only players fall
 func _stay_on_platform(wanted: Vector3) -> Vector3:
 	if _committed or state == State.INACTIVE or wanted == Vector3.ZERO:
 		return wanted
@@ -425,7 +421,7 @@ func _stay_on_platform(wanted: Vector3) -> Vector3:
 	return wanted - outward * wanted.dot(outward)
 
 
-#Pushes the bot away from other bots on its platform; it also nudges a bot that is standing still
+#Pushes away from other bots on the platform
 func _with_separation(wanted: Vector3) -> Vector3:
 	if _committed or state == State.INACTIVE:
 		return wanted
@@ -449,7 +445,7 @@ func _face(direction: Vector3, delta: float) -> void:
 	_visual_root.rotation.y = lerp_angle(_visual_root.rotation.y, yaw, turn_speed * delta)
 
 
-#Failsafe only: puts a fallen bot back on the platform it last used
+#Failsafe: puts a fallen bot back on its last platform
 func _recover_from_fall() -> void:
 	_committed = false
 	global_position = _ctx.positions[current_vertex]

@@ -1,9 +1,7 @@
 class_name Level01Set
 extends Node3D
 
-#The set around the feed race: candy pillars with sweeping beams and bunting along both sides, grandstands with a cheering crowd,
-#a gantry with traffic lights over the start, confetti cannons and stands at the goal, balloons, a big wheel and a rainbow.
-#It is all scenery: nothing collides and nothing touches the rules
+#Set around the feed race: pillars, beams, stands, start gantry, goal cannons, balloons and backdrop
 
 const SIDE_X := 72.0
 const PILLAR_BASE := -34.0
@@ -11,22 +9,22 @@ const PILLAR_SIZE := 1.8
 const PILLAR_Z: Array[float] = [186.0, 152.0, 118.0, 84.0, 50.0, 16.0, -18.0, -52.0, -86.0, -120.0, -154.0]
 const STAND_X := 58.0
 const STAND_Z: Array[float] = [150.0, 100.0, 50.0, 0.0, -50.0, -100.0]
-#How far under the island tops the grandstands stand
+#Grandstand drop under the island tops
 const STAND_DROP := 2.2
 const STAND_WIDTH := 20.0
 const STAND_TIERS := 4
 const GATE_HALF_WIDTH := 6.2
 const GATE_HEIGHT := 6.4
 const CHEER_TIME := 1.6
-#Islands that have balloons tied to their rim, and how many
+#Islands with balloons and how many
 const BALLOON_ISLANDS: Array[StringName] = [&"Aw", &"Ce", &"Ax", &"Cx", &"An", &"Cn", &"Ay", &"Cy"]
 const BALLOON_COUNT := 4
-#The big wheels far from the course: where each stands, how big it is and the point on the course it looks at (x, z)
+#Big wheels: position, size and the course point they face
 const WHEELS: Array[Dictionary] = [
 	{"at": Vector3(-118.0, -8.0, -78.0), "radius": 21.0, "facing": Vector2(118.0, 20.0)},
 	{"at": Vector3(122.0, -14.0, 96.0), "radius": 18.0, "facing": Vector2(-122.0, -30.0)},
 ]
-#The wave of the crowd: how long it takes to cross the course, the rest before the next one, where it starts and ends and how high the fans stand
+#Crowd wave: crossing time, rest, range and height
 const WAVE_TIME := 12.0
 const WAVE_REST := 6.0
 const WAVE_FROM := 175.0
@@ -58,7 +56,6 @@ func build() -> void:
 	StaticBatch.join(self, moving, false)
 
 
-#The crowd jumps higher for a moment
 func cheer(power: float) -> void:
 	if _cheer != null and _cheer.is_valid():
 		_cheer.kill()
@@ -67,7 +64,7 @@ func cheer(power: float) -> void:
 	_cheer.tween_method(_crowd.set_excitement, power, 1.0, CHEER_TIME).set_ease(Tween.EASE_OUT)
 
 
-#Somebody got to the goal: confetti and a roar
+#Confetti and a roar at an arrival
 func celebrate() -> void:
 	for cannon in _cannons:
 		var muzzle := cannon.get_node("Muzzle") as Marker3D
@@ -75,10 +72,10 @@ func celebrate() -> void:
 	cheer(3.0)
 
 
-#The three lights of the gantry: "count" of them red while the countdown runs, all green on "go"
+#Gantry lights: "count" red during the countdown, all green on go
 func set_start_lights(count: int, go: bool) -> void:
 	if go:
-		#The gantry throws confetti the moment the lights turn green
+		#Confetti when the lights turn green
 		for side: float in [-1.0, 1.0]:
 			ImpactFx.confetti(self, _gate_at + Vector3(side * GATE_HALF_WIDTH, GATE_HEIGHT, 0.0), 60, 60.0, 8.0)
 	for index in _lights.size():
@@ -99,7 +96,7 @@ func _process(delta: float) -> void:
 		pivot.basis = (entry["lean"] as Basis) * Basis(Vector3.RIGHT, sin(wave) * 0.3) * Basis(Vector3.BACK, cos(wave * 0.8) * 0.3)
 
 
-#Candy pillars down both sides of the course; every other one throws a beam over it
+#Pillars along both sides, every other one with a beam
 func _build_pillars() -> void:
 	for side: float in [-1.0, 1.0]:
 		var tops: Array[Vector3] = []
@@ -122,7 +119,7 @@ func _build_pillars() -> void:
 			add_child(rope)
 
 
-#Grandstands along both sides, facing the course
+#Grandstands on both sides facing the course
 func _build_stands() -> void:
 	_crowd = CrowdField.new()
 	add_child(_crowd)
@@ -133,7 +130,7 @@ func _build_stands() -> void:
 			var color := PartyKit.PALETTE[(index * 2 + (0 if side < 0.0 else 1)) % PartyKit.PALETTE.size()]
 			var stand := PartyKit.stand(_crowd, place, STAND_WIDTH, STAND_TIERS, color, _rng)
 			add_child(stand)
-	#Two more behind the goal, facing the racers that come
+	#Two more behind the goal
 	var goal: Vector3 = Level01Layout.POSITIONS[Level01Layout.GOAL]
 	for side: float in [-1.0, 1.0]:
 		var place := Transform3D(Basis.IDENTITY, Vector3(side * 13.0, goal.y - STAND_DROP, goal.z - 13.0))
@@ -142,7 +139,7 @@ func _build_stands() -> void:
 	_crowd.commit()
 
 
-#A gantry over the start: two candy columns, a banner with the name and three lights that follow the countdown
+#Start gantry with columns, name banner and three lights
 func _build_gate() -> void:
 	var start: Vector3 = Level01Layout.POSITIONS[Level01Layout.START]
 	var gate := Node3D.new()
@@ -166,7 +163,7 @@ func _build_gate() -> void:
 	plate.material_override = PartyKit.paint(PartyKit.INK, 0.0, 0.5)
 	plate.position = Vector3(0.0, GATE_HEIGHT + 0.2, 0.0)
 	gate.add_child(plate)
-	#The name in letters with volume on both faces of the plate
+	#Solid letters on both faces
 	for side: float in [-1.0, 1.0]:
 		var word := Word3D.make("SALIDA", 0.95, GATE_HALF_WIDTH * 1.35 - 0.8, PartyKit.PINK, 0.16, PartyKit.WHITE)
 		word.position = Vector3(0.0, GATE_HEIGHT + 0.2, side * 0.32)
@@ -193,7 +190,7 @@ func _build_gate() -> void:
 	set_start_lights(3, false)
 
 
-#Cannons on each side of the goal arch
+#Cannons beside the goal arch
 func _build_goal() -> void:
 	var goal: Vector3 = Level01Layout.POSITIONS[Level01Layout.GOAL]
 	for side: float in [-1.0, 1.0]:
@@ -204,7 +201,7 @@ func _build_goal() -> void:
 		_cannons.append(cannon)
 
 
-#Balloons tied to the rim of some islands, on the outer side
+#Balloons on the outer rim of some islands
 func _build_balloons() -> void:
 	var balloons := BalloonField.new()
 	add_child(balloons)
@@ -219,7 +216,7 @@ func _build_balloons() -> void:
 	balloons.commit()
 
 
-#A big wheel and a rainbow far from the course
+#Big wheel and rainbow far away
 func _build_backdrop() -> void:
 	for entry in WHEELS:
 		var wheel := FerrisWheel.new()

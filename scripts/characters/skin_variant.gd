@@ -1,17 +1,16 @@
 class_name SkinVariant
 extends RefCounted
 
-#When two players pick the same character, the second one wears another colour of it, the third another and so on: the same drawing with
-#its hue turned. Variant 0 is the character as it is
+#Repeated characters wear the same drawing with the hue turned; variant 0 is the original
 
 const SHADER: Shader = preload("res://assets/shaders/skin_variant.gdshader")
-#How far the hue turns for each variant, as a share of the colour wheel
+#Hue turn per variant, as a share of the colour wheel
 const HUE_SHIFTS: Array[float] = [0.0, 0.42, 0.68, 0.18]
 
 static var _cache: Dictionary = {}
 
 
-#Repaints every mesh under "model" with variant "index"; 0 leaves it as it is
+#Repaints every mesh under "model"; 0 leaves it as it is
 static func apply(model: Node, index: int) -> void:
 	if model == null or index <= 0:
 		return

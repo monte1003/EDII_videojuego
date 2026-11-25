@@ -1,7 +1,7 @@
 class_name WarmupHud
 extends RoundHud
 
-#The warm-up screen: the clock, the keys for a few seconds and one line at the bottom to say you are ready
+#Warm-up screen: clock, keys for a few seconds and a ready line
 
 var _vote_row: HBoxContainer
 var _vote_text: Label
@@ -31,7 +31,7 @@ func _ready() -> void:
 		"jump=%s ×2|barrer" % InputHints.key_label(&"jump"), "interact=%s|usar" % InputHints.key_label(&"interact")], 6.0)
 
 
-#How many already said they are ready, and whether this player did
+#Ready count and whether this player voted
 func set_votes(count: int, total: int, mine: bool) -> void:
 	_count_label.text = "%d/%d" % [count, total]
 	_vote_text.text = "LISTO" if mine else "ESTOY LISTO"

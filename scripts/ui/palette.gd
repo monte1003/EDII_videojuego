@@ -1,7 +1,7 @@
 class_name Palette
 extends RefCounted
 
-#Los colores de la interfaz en un solo sitio: si cambia la identidad, cambia aqui
+#Interface colours in one place
 const SKY_TOP := Color("bcc8fa")
 const SKY_MID := Color("c2b8f8")
 const SKY_WARM := Color("dfaada")
@@ -16,10 +16,10 @@ const CORAL := Color("e14b6a")
 const TEAL := Color("2f9fb8")
 const AMBER := Color("e08a22")
 
-#El relleno coral de los botones de accion, como el JUGAR de la referencia del menu
+#Coral fill of the action buttons
 const PILL := Color("fd567f")
 
-#Card borders, warning flashes and the dimmed backdrop of the in-round screens
+#Card borders, warning flashes and dimmed in-round backdrops
 const LILAC := Color("cdbcf7")
 const GOLD := Color("ffd23f")
 const NIGHT := Color(0.06, 0.05, 0.14)

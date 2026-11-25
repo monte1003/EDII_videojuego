@@ -1,7 +1,6 @@
 extends RefCounted
 
-#The cases of pad_check.gd. They live apart because the game's autoloads (InputDevice, Rumble, GameSession) only exist once the
-#test is running: a script passed with --script is compiled before them
+#Cases of pad_check, apart because autoloads only exist at run time
 
 #The keys of every action before the pad, as physical key codes: they must not change
 const KEYS := {
@@ -107,7 +106,7 @@ func run(test_tree: SceneTree) -> int:
 	return _failures
 
 
-#Every action keeps exactly the keys it had and gains its pad button or stick; the debug keys stay keyboard only
+#Every action keeps its keys and gains its pad input; debug keys stay keyboard only
 func _check_map() -> void:
 	for action: StringName in KEYS:
 		var codes: Array = []
@@ -134,7 +133,7 @@ func _check_map() -> void:
 		_check(not axes.is_empty(), "%s mueve la selección también con el stick, como trae Godot" % action)
 
 
-#The active device: keyboard without a pad, the pad once it is plugged or touched, back to the keyboard with a key or a real mouse move
+#Active device follows the last thing touched
 func _check_device() -> void:
 	_check(not _uses_pad() and int(_device.get("pad")) == -1, "sin mando, el dispositivo activo es el teclado")
 	_changes = 0
@@ -172,7 +171,7 @@ class Counter:
 			back_presses += 1
 
 
-#A stick held to one side is one press for the menus, while the movement still reads its tilt every frame
+#A held stick is one menu press while movement reads its tilt
 func _check_stick() -> void:
 	var counter := Counter.new()
 	root.add_child(counter)
@@ -225,7 +224,7 @@ func _check_stick() -> void:
 	await tree.process_frame
 
 
-#The hints: the same key caps on the keyboard, the DualSense buttons with the pad, the debug keys always as keys
+#Hints: keys on keyboard, DualSense buttons on pad, debug keys always keys
 func _check_hints() -> void:
 	_device.call("_use", 0, -1)
 	var old := UiKit.key_chip(InputHints.key_label(&"jump"), 16)
@@ -265,7 +264,7 @@ func _check_hints() -> void:
 		node.free()
 
 
-#The table plays on the pad in use, a weaker effect does not cut a stronger one, stop clears it, and nothing plays on the keyboard
+#Rumble table: pad in use only, weaker never cuts stronger, stop clears
 func _check_rumble() -> void:
 	_rumble.call("stop")
 	_rumble.call("play", &"hit")
@@ -284,7 +283,7 @@ func _check_rumble() -> void:
 	await _tap_pad()
 
 
-#With the pad, a menu that selects nothing gets its first button; the character select moves its own selection
+#With the pad a menu with no selection gets its first button
 func _check_focus() -> void:
 	var options := (load("res://scenes/menus/options_menu.tscn") as PackedScene).instantiate()
 	root.add_child(options)
@@ -310,7 +309,7 @@ func _check_focus() -> void:
 	await tree.process_frame
 
 
-#The main menu: the stick reaches every button, SALIR included (it is to the right of OPCIONES)
+#The stick reaches every main menu button
 func _check_main_menu() -> void:
 	var menu := (load("res://scenes/menus/main_menu.tscn") as PackedScene).instantiate()
 	root.add_child(menu)
@@ -322,7 +321,7 @@ func _check_main_menu() -> void:
 	await _send(_stick(JOY_AXIS_LEFT_X, 0.0))
 	var owner := root.gui_get_focus_owner()
 	_check(owner == menu.get_node("%ExitButton"), "en el menú principal el stick a la derecha llega a SALIR (%s)" % (owner.name if owner != null else "nada"))
-	#A person takes longer than the swing of a stick let go; with --fixed-fps a timer of the game would not wait real time
+	#A person is slower than a released stick swing
 	OS.delay_msec(120)
 	await _send(_stick(JOY_AXIS_LEFT_X, -0.9))
 	await _send(_stick(JOY_AXIS_LEFT_X, 0.0))
@@ -332,7 +331,7 @@ func _check_main_menu() -> void:
 	await tree.process_frame
 
 
-#"Listo" selected in the lobby: one press of Enter or of the cross marks it once (it used to mark on the press and unmark on the release)
+#One press marks "Listo" once
 func _check_lobby_ready() -> void:
 	var session := root.get_node("GameSession")
 	root.get_node("GameState").call("select_character", 1, load("res://resources/characters/fire.tres"))
@@ -386,8 +385,7 @@ func _check_lobby_ready() -> void:
 	await tree.process_frame
 
 
-#The keyboard on screen: the cross on the name field opens it, the cross writes the selected key, square deletes, triangle adds a space,
-#Options accepts and circle goes back; a real keyboard also types in it and the selection never leaves its keys
+#On-screen keyboard: open, write, delete, space, accept and back with the pad
 func _check_name_keyboard() -> void:
 	var game_state := root.get_node("GameState")
 	game_state.call("set_player_name", 1, "ANA")
@@ -441,7 +439,7 @@ func _check_name_keyboard() -> void:
 	await tree.process_frame
 
 
-#A pad pulled out in the middle of a round: the pause opens with the notice, the round waits, and both go away when it comes back
+#Pad unplugged mid round: pause and notice until it returns
 func _check_round_unplug() -> void:
 	var round_scene := (load("res://scenes/levels/warmup.tscn") as PackedScene).instantiate() as RoundScene
 	root.add_child(round_scene)

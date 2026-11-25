@@ -1,20 +1,18 @@
 class_name MusicBox
 extends Node
 
-#The music of every screen: each screen has its track, played in a loop; going to a screen with another track fades one out while the
-#other comes in, and a screen with the same track keeps it going. A track whose file is not in the game yet is just silence
+#Looping track per screen, with a crossfade when the track changes
 
 const FOLDER := "res://assets/audio/music/%s.ogg"
-#Tracks that are not "<name>.ogg": the music of the menus and the one of the feed race are mp3, the one of the street has its own name
+#Tracks whose file is not "<name>.ogg"
 const FILES := {
 	&"menu": "res://assets/audio/music/music game menu.mp3",
 	&"level_01": "res://assets/audio/music/music game partidas.mp3",
 	&"street_game": "res://assets/audio/music/music game la calle.ogg",
 }
-#A little under the sounds of the interface, so the music never covers them
+#Below the interface sounds
 const VOLUME := -12.0
 const FADE := 0.8
-#Track of each screen; the podium plays its own victory theme
 const TRACKS := {
 	&"main_menu": &"menu", &"character_select": &"menu", &"lobby": &"menu", &"practice": &"menu", &"options": &"menu",
 	&"controls": &"menu", &"graphics": &"menu", &"accessibility": &"menu", &"test_games": &"menu",

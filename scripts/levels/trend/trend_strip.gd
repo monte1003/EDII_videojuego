@@ -1,16 +1,14 @@
 class_name TrendStrip
 extends Control
 
-#The trend as a row of slots, one per kind and in order. Each slot is a chip in the main colour of its kind with the picture of
-#the very toy that floats in its bubble. The one to fetch now beats, the ones already fetched are stuck on like stickers with a
-#check, and the ones still to come wait smaller and dimmer. No box behind it
+#Trend row: one chip per kind with its toy; the current one beats, done ones look like stickers
 
 const GAP := 0.24
 
 var slot := 52.0
 var chain: Array[int] = []
 var done := 0
-#Whether the slot to fetch now beats (the copy on the giant screen stays still)
+#Whether the current slot beats (still on the giant screen)
 var beats := true
 
 var _clock := 0.0
@@ -27,7 +25,7 @@ func set_chain(kinds: Array[int]) -> void:
 	queue_redraw()
 
 
-#How many slots are already fetched; a new one lands with a little stamp
+#Slots done; a new one lands with a stamp
 func set_done(count: int) -> void:
 	if count > done:
 		_stamped = count - 1
@@ -61,7 +59,7 @@ func _draw() -> void:
 			scale_now = 0.82
 		draw_set_transform(center, turn, Vector2.ONE * scale_now)
 		var waiting := index > done
-		#A white edge like a sticker, the chip in the colour of the kind and a light disc so the toy reads on it
+		#Sticker edge, kind colour and a light disc behind the toy
 		draw_colored_polygon(_rounded(half * 1.05, half * 0.4), Color(Palette.NIGHT, 0.75) if index == done else Palette.PAPER)
 		draw_colored_polygon(_rounded(half * 0.93, half * 0.34), color.lerp(Palette.NIGHT, 0.4) if waiting else color)
 		draw_circle(Vector2.ZERO, half * 0.72, Palette.PAPER.lerp(color, 0.35) if waiting else Palette.PAPER)
@@ -73,7 +71,7 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
-#The picture of the toy of a kind; while there are no pictures (no drawing device) the plain icon stands in
+#Toy picture, or the plain icon without a drawing device
 func _draw_toy(kind: int, reach: float, tone: Color) -> void:
 	if kind < TrendIcons.textures.size() and TrendIcons.textures[kind] != null:
 		draw_texture_rect(TrendIcons.textures[kind], Rect2(-Vector2.ONE * reach, Vector2.ONE * reach * 2.0), false, tone)
@@ -81,7 +79,7 @@ func _draw_toy(kind: int, reach: float, tone: Color) -> void:
 		TrendCatalog.draw_icon(self, kind, Vector2.ZERO, reach * 0.62, TrendCatalog.COLORS[kind].darkened(0.25))
 
 
-#A square with round corners around the origin
+#Rounded square around the origin
 func _rounded(half: float, corner: float) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	for quarter in 4:

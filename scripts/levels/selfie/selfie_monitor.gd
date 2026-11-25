@@ -1,9 +1,7 @@
 class_name SelfieMonitor
 extends Control
 
-#The small live picture of the drone in a corner of the screen: what its camera sees of the set while a photo is coming, with the
-#corners of a viewfinder, a red dot that beats and the name of the set at its foot. At the shot it blinks white for a moment; then
-#the photo itself takes its place
+#Drone live picture in a corner with viewfinder corners, a beating dot and the set name
 
 const SHOWN := Vector2(240.0, 135.0)
 const CORNER := 18.0
@@ -57,7 +55,7 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	#The corners of a viewfinder, with a dark edge so they read over any picture
+	#Viewfinder corners with a dark edge
 	for pass_index in 2:
 		var color := Color(Palette.NIGHT, 0.7) if pass_index == 0 else Palette.PAPER
 		var width := LINE + 3.0 if pass_index == 0 else LINE
@@ -71,7 +69,7 @@ func _draw() -> void:
 		draw_circle(Vector2(CORNER + 8.0, CORNER + 8.0), 6.0, Color(Palette.NIGHT, 0.6))
 		draw_circle(Vector2(CORNER + 8.0, CORNER + 8.0), 4.5, Color(Palette.CORAL, beat))
 	if _title != "":
-		#The name of the set on a dark band at the foot of the picture, like the caption of a broadcast
+		#Set name on a dark band like a broadcast caption
 		var width := UiKit.BUTTON_FONT.get_string_size(_title, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE).x
 		var band := Rect2(Vector2(10.0, SHOWN.y - 30.0), Vector2(width + 20.0, 22.0))
 		draw_rect(band, Color(Palette.NIGHT, 0.72), true)
@@ -79,7 +77,7 @@ func _draw() -> void:
 		draw_string(UiKit.BUTTON_FONT, band.position + Vector2(12.0, 16.0), _title, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE, Palette.PAPER)
 
 
-#Comes in while a photo is coming and goes when it is taken
+#In while a photo comes, out at the shot
 func set_live(on: bool) -> void:
 	if on == _live:
 		return
@@ -95,7 +93,7 @@ func set_live(on: bool) -> void:
 		_fade.tween_callback(hide)
 
 
-#The blink of the shutter: a tenth of a second of white over the picture
+#A tenth of a second of white
 func flash() -> void:
 	_white.color.a = 0.95
 	create_tween().tween_property(_white, "color:a", 0.0, FLASH)

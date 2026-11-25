@@ -32,7 +32,7 @@ func _ready() -> void:
 	InputDevice.changed.connect(_on_device_changed)
 
 
-#The line under JUGAR names the key that starts: ENTER, or the cross of the pad
+#The line under JUGAR names the start key: ENTER or the pad cross
 func _show_key() -> void:
 	_hint.text = _hint_text.replace("ENTER", InputHints.spoken(&"menu_confirm"))
 
@@ -41,8 +41,7 @@ func _on_device_changed(_kind: int) -> void:
 	_show_key()
 
 
-#La pantalla se desplaza un poco contra el mouse, como una camara que mira alrededor.
-#El fondo se mueve menos que el frente, y eso es lo que da la sensacion de profundidad
+#Parallax against the mouse: the background moves less than the front
 func _process(delta: float) -> void:
 	var view := get_viewport_rect().size
 	var mouse := get_viewport().get_mouse_position()

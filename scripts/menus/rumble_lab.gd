@@ -1,7 +1,6 @@
 extends MenuPage
 
-#Testing the vibration with a real pad, outside the game: which pad Godot sees, a button per effect of the table and what the motors are
-#asked for right now. It plays even if the button is clicked with the mouse
+#Vibration test with a real pad: one button per effect; plays even with a mouse click
 
 const NAMES := {
 	&"hit": "Golpe", &"daze": "Aturdido", &"landing": "Aterrizaje", &"bump": "Choque suave", &"dive": "Barrido",

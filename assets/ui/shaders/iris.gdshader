@@ -1,7 +1,6 @@
 shader_type canvas_item;
 
-//A cartoon iris: a circle of picture in the middle of a night colour, with a thin pink ring on its edge, that closes to hide a jump
-//of the camera and opens again
+//Cartoon iris that closes to hide a camera jump and opens again
 uniform float radius = 1.3;
 uniform float aspect = 1.78;
 uniform vec4 night : source_color = vec4(0.06, 0.05, 0.14, 1.0);

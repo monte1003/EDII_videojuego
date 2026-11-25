@@ -1,21 +1,20 @@
 class_name ImpactFx
 extends RefCounted
 
-#Cheap one-shot effects for the hits of every round: a puff of dust, a few stars, the sound and the freeze of an impact
+#Cheap one-shot hit effects: dust, stars, sound and freeze
 
 const STAR_SIZE := 64
 const STAR_POINTS := 5
 const DUST_COLOR := Color("f1e6ff")
 
-#Whether a hard blow may freeze the game for a breath: not in a room, where the world of this computer would fall behind the others a
-#little with every blow and the cars and hazards would no longer be where the others see them. Each round sets it when it opens
+#Hit freeze only offline: in a room it would desync this world from the others
 static var freeze_allowed := true
 static var _heart: ImageTexture
 static var _star: ImageTexture
 static var _fade: Curve
 
 
-#The game stops for a moment when something hits hard; it comes back by itself
+#Brief freeze on hard hits
 static func hit_stop(tree: SceneTree, seconds: float) -> void:
 	if Engine.time_scale < 1.0 or not freeze_allowed:
 		return
@@ -24,7 +23,7 @@ static func hit_stop(tree: SceneTree, seconds: float) -> void:
 	Engine.time_scale = 1.0
 
 
-#What a blow looks and sounds like on "player"; only the player of this screen freezes the game for a breath
+#Blow effects; only this screen's player freezes the game
 static func blow(host: Node3D, player: Player, hit: Player.Hit, rng: RandomNumberGenerator, local: bool) -> void:
 	stars(host, player.global_position + Vector3(0.0, 0.8, 0.0), 5 + roundi(hit.strength * 5.0))
 	dust(host, player.global_position + Vector3(0.0, 0.1, 0.0), DUST_COLOR, 8 + roundi(hit.strength * 10.0))
@@ -34,7 +33,7 @@ static func blow(host: Node3D, player: Player, hit: Player.Hit, rng: RandomNumbe
 		hit_stop(host.get_tree(), 0.05 + 0.04 * hit.strength)
 
 
-#Landing after a jump or a flight; a hard one (after a blow) also shakes the camera of that player
+#Landing; a hard one also shakes that player's camera
 static func landing(host: Node3D, player: Player, hard: bool, rng: RandomNumberGenerator) -> void:
 	dust(host, player.global_position + Vector3(0.0, 0.05, 0.0), DUST_COLOR, 12 if hard else 5)
 	SynthSound.play(host, SynthSound.thump(0.2) if hard else SynthSound.land(), -6.0 if hard else -10.0,
@@ -43,8 +42,7 @@ static func landing(host: Node3D, player: Player, hard: bool, rng: RandomNumberG
 		player.shake_camera(0.25)
 
 
-#A ring of light that opens and fades: flat on the floor when "facing" is up, or standing in the air and looking along "facing".
-#"from" and "to" are its radius at the start and at the end
+#Ring that opens and fades, flat when "facing" is up; "from" and "to" are radii
 static func ring(parent: Node3D, at: Vector3, facing: Vector3, color: Color, from: float, to: float, seconds: float) -> void:
 	var band := TorusMesh.new()
 	band.inner_radius = 0.86
@@ -70,7 +68,7 @@ static func ring(parent: Node3D, at: Vector3, facing: Vector3, color: Color, fro
 	tween.chain().tween_callback(wave.queue_free)
 
 
-#A round puff on the ground that grows and fades
+#Ground puff that grows and fades
 static func dust(parent: Node3D, at: Vector3, color: Color, amount := 14) -> void:
 	var puff := CPUParticles3D.new()
 	puff.one_shot = true
@@ -102,7 +100,7 @@ static func dust(parent: Node3D, at: Vector3, color: Color, amount := 14) -> voi
 	_release(parent, puff, at, puff.lifetime)
 
 
-#Gold stars that fly out and fall, always facing the camera
+#Gold stars that fly out and fall, facing the camera
 static func stars(parent: Node3D, at: Vector3, amount := 7) -> void:
 	var burst := CPUParticles3D.new()
 	burst.one_shot = true
@@ -134,8 +132,7 @@ static func stars(parent: Node3D, at: Vector3, amount := 7) -> void:
 	_release(parent, burst, at, burst.lifetime)
 
 
-#The stars that turn over the head of a dazed player: three small gold stars on a ring and one little swirl, all facing the camera.
-#The player turns the ring and shows or hides it
+#Daze halo: three stars and a swirl on a ring
 static func daze_halo() -> Node3D:
 	var halo := Node3D.new()
 	var star := star_texture()
@@ -169,7 +166,7 @@ static func daze_halo() -> Node3D:
 	return halo
 
 
-#Paper confetti shot up from a cannon: it spins while it falls
+#Spinning paper confetti from a cannon
 static func confetti(parent: Node3D, at: Vector3, amount := 90, spread := 50.0, speed := 9.0) -> void:
 	var burst := CPUParticles3D.new()
 	burst.one_shot = true
@@ -210,7 +207,7 @@ static func confetti(parent: Node3D, at: Vector3, amount := 90, spread := 50.0, 
 	_release(parent, burst, at, burst.lifetime)
 
 
-#A plump heart with soft edges, white so a particle can tint it, drawn once
+#Soft white heart drawn once for tinting
 static func heart_texture() -> ImageTexture:
 	if _heart != null:
 		return _heart
@@ -221,7 +218,7 @@ static func heart_texture() -> ImageTexture:
 			var covered := 0
 			for sy in samples:
 				for sx in samples:
-					#The implicit curve of a heart, in a square that goes from -1.3 to 1.3
+					#Implicit heart curve in a -1.3 to 1.3 square
 					var px := ((x + (sx + 0.5) / samples) / STAR_SIZE - 0.5) * 2.6
 					var py := (0.5 - (y + (sy + 0.5) / samples) / STAR_SIZE) * 2.6 + 0.1
 					if pow(px * px + py * py - 1.0, 3.0) - px * px * py * py * py <= 0.0:
@@ -231,7 +228,7 @@ static func heart_texture() -> ImageTexture:
 	return _heart
 
 
-#A five-pointed star with soft edges, drawn once
+#Soft five-pointed star drawn once
 static func star_texture() -> ImageTexture:
 	if _star != null:
 		return _star
@@ -254,7 +251,7 @@ static func star_texture() -> ImageTexture:
 					if Geometry2D.is_point_in_polygon(point, polygon):
 						covered += 1
 			var coverage := float(covered) / (samples * samples)
-			#Warm gold with a lighter middle, so it reads on the pale street
+			#Warm gold with a lighter middle
 			var distance := Vector2(x + 0.5, y + 0.5).distance_to(center) / outer
 			var tone := Palette.GOLD.lerp(Color.WHITE, clampf(1.0 - distance * 1.4, 0.0, 0.55))
 			image.set_pixel(x, y, Color(tone, coverage))

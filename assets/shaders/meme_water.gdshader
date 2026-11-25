@@ -1,8 +1,7 @@
 shader_type spatial;
 render_mode diffuse_burley;
 
-//Cartoon water for the sea of memes: two blues and thin lines of light that wander over it from the clock, like the light on the floor
-//of a pool. The pattern is laid in the world, so it does not stretch with the size of the pond
+//Cartoon water with wandering lines of light, laid in world space
 uniform vec4 deep : source_color = vec4(0.22, 0.5, 0.98, 1.0);
 uniform vec4 shallow : source_color = vec4(0.42, 0.78, 1.0, 1.0);
 uniform vec4 shine : source_color = vec4(0.9, 0.98, 1.0, 1.0);

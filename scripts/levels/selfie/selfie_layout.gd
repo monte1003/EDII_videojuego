@@ -1,37 +1,28 @@
 class_name SelfieLayout
 extends ArenaLayout
 
-#"El Plató": a long floating studio (88 x 48 m, a stadium of candy floor) with eleven sets, each with a backdrop of its own and a
-#challenge of its own. In the middle a turntable under a giant ring light; along the north side the raised runway with its belt, the
-#troll zone where the bots live (low pads to hop between while they shove) and the unboxing (gift boxes that pop); across the middle the
-#gym (two treadmills that run opposite ways and a dumbbell that turns) and the selfie sticks (two that sweep the set); the podium of three
-#heights at the west end and the dance floor at the east end; to the south the pool of balls, the red carpet before a photo wall and the
-#live set on a round stage. This file is only data: the shapes, the places and links of the graph, the tricks and how high the floor is
-#anywhere. SelfieStage builds it
+#"El Plató": a floating 88 x 48 m studio with eleven sets around a turntable, a runway and a podium
 
 enum Trick { NONE, SPIN, WAX, BELT, PODIUM, CARPET, PIT, BEAT, TROLL, UNBOX, GYM, STICKS }
 
 const HUB := &"T"
-#How high over a place the drone flies
 const DRONE_HEIGHT := 6.5
-#The island: a stadium this long and wide, with round ends of half its width
+#Stadium island length and width
 const DECK_SIZE := Vector2(88.0, 48.0)
 const HALF := Vector2(44.0, 24.0)
-#The turntable in the middle of the floor, flush with it: its radius and how fast it turns (radians per second)
+#Turntable radius and spin in radians per second
 const TURNTABLE_RADIUS := 5.0
 const TURNTABLE_SPIN := 0.6
-#The runway: a raised deck along the north side and the two ramps down from its ends (20 degrees). Under it there is room to walk and
-#jump: a body of 1 m and a jump of 1.07 m fit under its 2.1 m
+#Raised runway with two 20 degree ramps; a body and a jump fit under its 2.1 m
 const UPPER := 2.4
 const RUNWAY := Rect2(-8.0, -19.7, 16.0, 7.4)
 const RAMP_RUN := 6.6
 const DECK_THICKNESS := 0.3
-#The candy pillars under the runway, off the axes so nobody walks right on x = 0 against them
+#Runway pillars off the axes
 const RUNWAY_PILLARS: Array[Vector2] = [Vector2(-5.87, -19.1), Vector2(0.13, -19.1), Vector2(6.13, -19.1), Vector2(-5.87, -12.9),
 	Vector2(0.13, -12.9), Vector2(6.13, -12.9)]
 const PILLAR_RADIUS := 0.3
-#The podium: the first place, the second with its step in front and the third, and how high each one is. Each height is one jump
-#from the next, and the first is also one trampoline from the floor
+#Podium places and heights, each one jump from the next; the first also by trampoline
 const PODIUM := Rect2(-37.5, -3.5, 7.0, 7.0)
 const SECOND := Rect2(-35.5, -8.0, 4.5, 4.5)
 const SECOND_STEP := Rect2(-31.0, -8.0, 1.7, 4.5)
@@ -39,8 +30,7 @@ const THIRD := Rect2(-35.5, 3.5, 4.5, 4.5)
 const PODIUM_TOP := 1.8
 const SECOND_TOP := 1.2
 const LOW_TOP := 0.6
-#The dance floor, the red carpet, the pool of balls (its foam curb, low enough not to hide feet in a photo, and its floor) and the round
-#stage of the live set with its ramp
+#Dance floor, red carpet, ball pool and live stage with its ramp
 const DANCE_CENTER := Vector2(34.0, 0.0)
 const DANCE_RADIUS := 5.5
 const CARPET := Rect2(-3.7, 12.05, 7.4, 6.9)
@@ -52,15 +42,13 @@ const LIVE_CENTER := Vector2(17.0, 14.0)
 const LIVE_RADIUS := 5.0
 const LIVE_TOP := 0.6
 const LIVE_RAMP: Array = [Vector2(11.58, 9.98), Vector2(12.99, 11.02), 2.6]
-#The troll zone, where the bots live: a floor walled by a low curb that a player hops over and a bot never crosses, with low pads
-#to stand on ([centre, radius, top]): a bot shoves whoever is on the floor or on a low pad, but cannot reach the high one
+#Troll zone with a curb players hop and bots never cross; bots reach low pads only
 const TROLL := Rect2(-30.5, -18.5, 13.0, 9.0)
 const TROLL_CURB := 0.5
 const CURB_THICKNESS := 0.4
 const TROLL_PADS: Array = [[Vector2(-24.5, -13.6), 1.2, 1.2], [Vector2(-27.6, -15.9), 1.1, 0.8], [Vector2(-21.4, -15.9), 1.1, 0.8],
 	[Vector2(-27.8, -11.3), 1.0, 0.8], [Vector2(-21.2, -11.3), 1.0, 0.8]]
-#The unboxing: a grid of gift boxes flush with the floor; each one rattles, then pops and throws up whoever stands on it. "period"
-#seconds between two pops of a box, how long it rattles first and how long its spring is out
+#Unboxing grid: each box rattles, then pops and throws; period, rattle and spring times
 const UNBOX_CENTER := Vector2(24.0, -14.0)
 const UNBOX_CELL := 3.6
 const UNBOX_GRID := 3
@@ -69,18 +57,15 @@ const UNBOX_WARN := 0.75
 const UNBOX_POP := 0.3
 const UNBOX_LIFT := 8.5
 const UNBOX_THROW := 4.0
-#The gym: two treadmills that run opposite ways with a still aisle between them, slower than the belt of the runway (walking
-#against one keeps a body in the photo), and a dumbbell that turns slowly over them, low enough to jump
+#Gym: two opposite treadmills with a still aisle and a low dumbbell to jump
 const GYM_CENTER := Vector2(-17.0, 0.0)
 const TREADMILL := Vector2(8.0, 3.0)
 const TREADMILL_SPEED := 1.7
-#The still strip of mat between the two treadmills, where a body can stand and only has to jump the dumbbell
+#Still mat strip between the treadmills
 const GYM_AISLE := 1.2
-#The selfie sticks: two giant sticks with a phone on top that sweep the set across
+#Two giant selfie sticks sweeping the set
 const STICKS_CENTER := Vector2(17.0, 0.0)
-#Each set: its id, the middle of its frame, half its flat floor (x and z), the height of that floor, its trick, the turn of the
-#camera of its photos in degrees (the photo looks toward the backdrop of the set) and how far in front of the middle of the frame
-#the photo still draws things
+#Each set: id, frame middle, half floor, height, trick, camera turn and clip
 const SETS: Array[Array] = [
 	[&"T", Vector2(0.0, 0.0), Vector2(3.45, 3.45), 0.0, Trick.SPIN, 45.0, 9.0],
 	[&"P", Vector2(-34.0, 0.0), Vector2(3.45, 3.45), PODIUM_TOP, Trick.PODIUM, 45.0, 9.0],
@@ -94,30 +79,27 @@ const SETS: Array[Array] = [
 	[&"G", Vector2(-17.0, 0.0), Vector2(4.4, 3.4), 0.0, Trick.GYM, 45.0, 9.0],
 	[&"S", Vector2(17.0, 0.0), Vector2(4.4, 3.6), 0.0, Trick.STICKS, -45.0, 9.0],
 ]
-#Room a frame keeps to the edge of its set
+#Frame margin to the set edge
 const FRAME_MARGIN := 0.35
-#The photo wall at the end of the carpet, which nobody walks through
+#Photo wall at the end of the carpet
 const PHOTO_WALL := Rect2(-4.7, 19.3, 9.4, 0.3)
 const PHOTO_WALL_TOP := 3.6
-#The trampoline in front of the podium, and the cannon that throws up to the runway along a fixed arc
+#Trampoline to the podium and cannon up to the runway
 const TRAMPOLINE := Vector3(-27.7, 0.0, 0.0)
 const CANNON := Vector3(3.6, 0.0, -11.5)
 const CANNON_TARGET := Vector3(2.0, UPPER, -16.3)
 const CANNON_TIME := 1.9
 const PEDESTALS: Array[Vector3] = [Vector3(-9.5, 0.0, -8.5), Vector3(9.5, 0.0, -8.5), Vector3(0.0, 0.0, 7.6), Vector3(-26.5, 0.0, 7.5),
 	Vector3(26.5, 0.0, 7.5)]
-#The live set thumps every this many seconds and lifts whoever stands on its stage
+#Live stage beat period
 const BEAT_PERIOD := 2.0
 
-#The place of each photo
 var spots: Array[StringName] = []
-#Where the power-ups stand
 var pedestals: Array[Vector3] = []
-#The middle of the turntable
 var turntable := Vector3.ZERO
 
 var _graph: WeightedGraph
-#Set id -> flat floor to each side of its middle; set id -> [trick, turn of its camera, clip]
+#Per set: half floor, and [trick, camera turn, clip]
 var _room: Dictionary = {}
 var _sets: Dictionary = {}
 
@@ -135,8 +117,7 @@ func _init() -> void:
 	_graph = build_graph()
 
 
-#The floors over a point: the highest one that is not above "ceiling". Under the runway there is floor too, so "ceiling" tells
-#which of them is meant
+#Highest floor not above "ceiling"; under the runway there is floor too
 func height_at(x: float, z: float, ceiling := INF) -> float:
 	var point := Vector2(x, z)
 	var best := GROUND
@@ -151,7 +132,7 @@ func height_at(x: float, z: float, ceiling := INF) -> float:
 	return best
 
 
-#Whether a point is inside something solid of the studio: what could stand between a set and the camera of the drone
+#Whether a point is inside something solid that could block the drone
 func solid_at(point: Vector3) -> bool:
 	var flat := Vector2(point.x, point.z)
 	if point.y < GROUND:
@@ -182,17 +163,16 @@ func solid_at(point: Vector3) -> bool:
 	return _wall_height(flat) > -INF and point.y < POOL_WALL
 
 
-#The floor of the island: flat everywhere
+#The island floor is flat
 func ground_at(_point: Vector2) -> float:
 	return GROUND
 
 
-#The highest floor of the map
 func top_height() -> float:
 	return UPPER
 
 
-#The places the drone flies over to go from one photo to the next, by the cheapest route of the graph
+#Drone route between photos along the cheapest graph route
 func flight_path(from: StringName, to: StringName) -> Array[Vector3]:
 	var path: Array[Vector3] = []
 	var route := _graph.shortest_path(from, to)
@@ -202,30 +182,30 @@ func flight_path(from: StringName, to: StringName) -> Array[Vector3]:
 	return path
 
 
-#The flat floor of a set to each side of its middle, in meters (x and z)
+#Half floor of a set in meters
 func room_of(spot: StringName) -> Vector2:
 	return _room[spot]
 
 
-#How far from the middle of its set the middle of a square frame of "size" meters can go and still fit whole on its floor
+#How far a frame of "size" can move from the set middle and still fit
 func frame_room(spot: StringName, size: float) -> float:
 	var room: Vector2 = _room[spot]
 	return maxf(minf(room.x, room.y) - FRAME_MARGIN - size / 2.0, 0.0)
 
 
-#The places the bots may walk: only the troll zone, which they never leave
+#Bots only walk the troll zone
 func bot_places() -> Array[StringName]:
 	var walkable: Array[StringName] = [&"Z"]
 	return walkable
 
 
-#Whether a point of the ground is inside the troll zone, "margin" meters in from its curb
+#Inside the troll zone, "margin" in from its curb
 func in_troll(point: Vector3, margin := 0.0) -> bool:
 	var inner := TROLL.grow(-CURB_THICKNESS - margin)
 	return inner.has_point(Vector2(point.x, point.z))
 
 
-#The gift box under a point of the unboxing (row * grid + column), or -1
+#Gift box under a point (row * grid + column), or -1
 func unbox_cell(point: Vector3) -> int:
 	var half := UNBOX_CELL * UNBOX_GRID / 2.0
 	var local := Vector2(point.x - UNBOX_CENTER.x + half, point.z - UNBOX_CENTER.y + half)
@@ -234,13 +214,12 @@ func unbox_cell(point: Vector3) -> int:
 	return floori(local.y / UNBOX_CELL) * UNBOX_GRID + floori(local.x / UNBOX_CELL)
 
 
-#The middle of a gift box on the floor
 func unbox_center(cell: int) -> Vector3:
 	var half := UNBOX_CELL * UNBOX_GRID / 2.0
 	return Vector3(UNBOX_CENTER.x - half + UNBOX_CELL * (cell % UNBOX_GRID + 0.5), GROUND, UNBOX_CENTER.y - half + UNBOX_CELL * (floori(float(cell) / UNBOX_GRID) + 0.5))
 
 
-#Where a box is in its cycle at "time": 0 at rest, rattling before the pop, and the share of its pop while its spring is out
+#Box cycle at "time": 0 at rest, rattling, then the share of its pop
 static func unbox_phase(cell: int, time: float) -> float:
 	return fposmod(time + float(cell * 7 % 9) * UNBOX_PERIOD / 9.0, UNBOX_PERIOD)
 
@@ -258,17 +237,15 @@ func trick_of(spot: StringName) -> Trick:
 	return _sets[spot][0]
 
 
-#The turn in degrees of the camera that takes the photos of a set
 func camera_turn(spot: StringName) -> float:
 	return _sets[spot][1]
 
 
-#How far in front of the middle of the frame the photo of a set still draws things
 func camera_clip(spot: StringName) -> float:
 	return _sets[spot][2]
 
 
-#The trick of the floor a body stands on (its feet at "point"), or NONE
+#Floor trick under the feet, or NONE
 func trick_at(point: Vector3) -> Trick:
 	var flat := Vector2(point.x, point.z)
 	var on_ground := absf(point.y - GROUND) < 0.4
@@ -287,12 +264,12 @@ func trick_at(point: Vector3) -> Trick:
 	return Trick.NONE
 
 
-#How fast the turntable drags whoever stands at "point": it turns the same way as its picture
+#Turntable drag, turning like its picture
 func spin_drift(point: Vector3) -> Vector3:
 	return Vector3(TURNTABLE_SPIN * (point.z - turntable.z), 0.0, -TURNTABLE_SPIN * (point.x - turntable.x))
 
 
-#The low and high end of the west (-1) or east (1) ramp of the runway on the ground, and its width
+#Low end, high end and width of the west (-1) or east (1) runway ramp
 func _ramp(side: float) -> Array:
 	var top_x := RUNWAY.position.x if side < 0.0 else RUNWAY.end.x
 	var middle_z := RUNWAY.get_center().y
@@ -303,10 +280,7 @@ func ramp_of(side: float) -> Array:
 	return _ramp(side)
 
 
-#The studio in plain numbers, with no nodes, for whoever checks it from outside: every piece of floor with its top ("rect" with its
-#centre, size and turn in degrees, "disc" with its centre and radius, or "poly" with its corners on the ground; a slope says where
-#it rises), the special ways (trampolines with their throw, ramps with their slope, width and length, the belt) and the sets with
-#the height of their floor and the square where their frame may go
+#The studio in plain numbers with no nodes, for outside checks
 func survey() -> Dictionary:
 	var floors: Array[Dictionary] = []
 	var deck: Array[Vector2] = []
@@ -374,7 +348,7 @@ func _build_places() -> void:
 		_sets[entry[0]] = [entry[4], entry[5], entry[6]]
 	var west := _ramp(-1.0)
 	var east := _ramp(1.0)
-	#Crossings of the floor between the sets, the foot of each ramp of the runway, the trampoline and the cannon
+	#Floor crossings, runway ramp feet, trampoline and cannon
 	for entry: Array in [[&"j1", -9.0, -8.5, 1.2], [&"j2", 9.0, -8.5, 1.2], [&"j3", -25.0, -5.6, 1.2], [&"j4", 25.0, -5.6, 1.2],
 			[&"j5", -9.0, 7.5, 1.2], [&"j6", 9.0, 7.5, 1.2], [&"j7", -27.0, 6.6, 1.2], [&"j8", 27.0, 6.6, 1.2], [&"j9", 0.0, -8.6, 0.9],
 			[&"jW", -29.0, -2.6, 0.8], [&"dL", 10.6, 9.3, 0.8], [&"jw", -16.0, -10.4, 0.9], [&"je", 16.0, -10.4, 0.9],
@@ -392,7 +366,7 @@ func _build_places() -> void:
 			[&"j3", &"jW"], [&"jW", &"tpP"], [&"j7", &"tpP"], [&"j4", &"W"], [&"j8", &"W"], [&"rE", &"U"], [&"j4", &"U"], [&"j2", &"U"],
 			[&"j5", &"C"], [&"j6", &"C"], [&"j6", &"dL"], [&"dL", &"D"], [&"j3", &"j7"], [&"j4", &"j8"], [&"j3", &"j1"], [&"j4", &"j2"]]:
 		link(pair[0], pair[1])
-	#Up the podium step by step, over the curb of the pool and over the curb of the troll zone
+	#Up the podium and over the pool and troll curbs
 	for pair: Array in [[&"j3", &"pS"], [&"pS", &"p2"], [&"p2", &"P"], [&"j7", &"p3"], [&"j5", &"F"], [&"j7", &"F"], [&"j3", &"Z"], [&"rW", &"Z"]]:
 		link(pair[0], pair[1], HOP, 0.3)
 	link(&"tpP", &"P", LAUNCH, 0.0, 1.6)
@@ -401,10 +375,7 @@ func _build_places() -> void:
 		link(pair[0], pair[1], DROP)
 
 
-#The belt along the runway, which turns around now and then, the trampoline to the podium and the cannon up to the runway; the two
-#treadmills of the gym, that run opposite ways; the prop boxes that sweep the runway, the selfie sticks that sweep their set, the boom
-#of microphones that turns over the dance floor and the dumbbell that turns over the treadmills. Most of them are on from the first
-#photo: the studio is busy from the start
+#Belt, trampoline, cannon, treadmills and the sweeping props
 func _build_tricks() -> void:
 	belts.append({"a": Vector3(-7.0, UPPER, -16.0), "b": Vector3(7.0, UPPER, -16.0), "width": 3.0, "from": 0, "turns": true})
 	var gym := Vector3(GYM_CENTER.x, GROUND, GYM_CENTER.y)
@@ -431,20 +402,18 @@ func _disc_height(center: Vector2, radius: float, top: float, point: Vector2) ->
 	return top if point.distance_to(center) <= radius else -INF
 
 
-#The top of the curb of the troll zone
 func _curb_height(point: Vector2) -> float:
 	if TROLL.has_point(point) and not TROLL.grow(-CURB_THICKNESS).has_point(point):
 		return TROLL_CURB
 	return -INF
 
 
-#The top of the wall of the pool, where somebody can stand
 func _wall_height(point: Vector2) -> float:
 	var away := point.distance_to(POOL_CENTER)
 	return POOL_WALL if away >= POOL_INNER and away <= POOL_OUTER else -INF
 
 
-#Height of a ramp over a point: from the floor at its low end to "top" at its high end
+#Ramp height from the floor to "top"
 func _slope_height(ramp: Array, point: Vector2, top := UPPER) -> float:
 	var low: Vector2 = ramp[0]
 	var high: Vector2 = ramp[1]

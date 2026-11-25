@@ -1,8 +1,7 @@
 class_name PadNotice
 extends CanvasLayer
 
-#The notice of a pad that went away: a gold title and one line over everything, in the outlined letters of the round screens, with a
-#thin gold line under the title. Inside a round it stays until the pad is back or the pause closes; in the menus it leaves by itself
+#Notice of a lost pad; in a round it stays until the pad is back or the pause closes
 
 enum Context { MENU, ROUND, ROOM }
 

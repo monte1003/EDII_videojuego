@@ -1,15 +1,12 @@
 extends SceneTree
 
-#Checks the solid map of the trend war (La Plaza) with real physics: the collisions match the layout and leave no hole, nobody gets
-#past the fence or under the ground even with a jump and a dive, every link of the graph can really be walked, every place can be
-#reached, climbing back after a fall takes a short while, and every trampoline of the tower lands on the floor it aims at.
-#Run: godot --headless --fixed-fps 60 --path . --script res://scripts/tests/terrain_check.gd
+#Checks La Plaza with real physics: collisions, fence, links, reach and trampolines
 
 const GRID := 1.5
 const FENCE_STEP := 3.0
 #Seconds a walker gets for a link on top of what the graph says it costs
 const WALK_SLACK := 2.5
-#A fall is paid with time: seconds to get back up to a high place from the ground under it
+#Seconds to climb back after a fall
 const BACK_UP := Vector2(1.2, 9.0)
 
 var _failures := 0
@@ -54,7 +51,7 @@ func _check_map(title: String, layout: ArenaLayout) -> void:
 	await _frames(3)
 
 
-#Every place can be reached from where the players start, and the way back up after a fall is short
+#Every place is reachable and the way back after a fall is short
 func _check_graph(title: String, layout: ArenaLayout) -> void:
 	var graph := layout.build_graph()
 	var costs := graph.costs_from(layout.spawn_place)
@@ -77,7 +74,7 @@ func _check_graph(title: String, layout: ArenaLayout) -> void:
 		levels[snappedf(height, 0.1)] = true
 		if height < 1.0:
 			continue
-		#Whoever falls from a place lands where its step down leads, or else on the closest place that is lower
+		#A fall lands where its step down leads, or the closest lower place
 		var below: StringName = &""
 		var nearest := INF
 		for entry in layout.links:
@@ -98,7 +95,7 @@ func _check_graph(title: String, layout: ArenaLayout) -> void:
 	_check(back.size() > 0 and layout.top_height() >= 4.5, "%s: el nivel alto llega a %.1f m" % [title, layout.top_height()])
 
 
-#Capsules dropped all over the map land exactly where the layout says the floor is: no hole and no piece out of place
+#Capsules dropped all over land where the layout says
 func _check_rain(title: String, layout: ArenaLayout) -> void:
 	var drops: Array[CharacterBody3D] = []
 	var reach := layout.reach()
@@ -133,7 +130,7 @@ func _check_rain(title: String, layout: ArenaLayout) -> void:
 	_check(lowest > -0.1, "%s: ninguna baja del suelo (la más baja a %.2f m)" % [title, lowest])
 
 
-#The edge of a piece is where a capsule may rest half on it: those spots are left out of the rain
+#Capsules resting half on an edge are skipped
 func _clear_of_edges(layout: ArenaLayout, x: float, z: float) -> bool:
 	var here := layout.height_at(x, z)
 	for offset: Vector2 in [Vector2(0.45, 0.0), Vector2(-0.45, 0.0), Vector2(0.0, 0.45), Vector2(0.0, -0.45), Vector2(0.32, 0.32), Vector2(-0.32, 0.32), Vector2(0.32, -0.32), Vector2(-0.32, -0.32)]:
@@ -142,8 +139,7 @@ func _clear_of_edges(layout: ArenaLayout, x: float, z: float) -> bool:
 	return true
 
 
-#Players run at the edge from the inside all around every island and across every bridge, jump and dive: none gets out and none
-#ends under the floor
+#Players running and diving at the edges never get out or under the floor
 func _check_fence(title: String, layout: ArenaLayout) -> void:
 	var runners: Array[Player] = []
 	var starts: Array[Array] = []
@@ -224,7 +220,7 @@ func _check_fence(title: String, layout: ArenaLayout) -> void:
 	await _frames(3)
 
 
-#Every link that is walked is walked for real, both ways: a body that goes straight from one place to the other arrives
+#Every walked link is walked for real both ways
 func _check_links(title: String, layout: ArenaLayout) -> void:
 	var walkers: Array[Dictionary] = []
 	for entry in layout.links:
@@ -267,7 +263,7 @@ func _walker(layout: ArenaLayout, a: StringName, b: StringName, seconds: float) 
 		"limit": seconds + WALK_SLACK, "done": false}
 
 
-#Every point where a bubble is born belongs to its zone and floats over the floor it names, inside the fence
+#Each bubble point is in its zone, over its floor and inside the fence
 func _check_points(layout: TrendLayout) -> void:
 	var fine := true
 	var zones: Dictionary = {}
@@ -291,7 +287,7 @@ func _check_points(layout: TrendLayout) -> void:
 	_check(each, "La Plaza: cada una de las cinco zonas tiene de 9 puntos en adelante %s" % zones)
 
 
-#Every trampoline of the tower throws a real body along its arc onto the floor it aims at, clear of the edge of that floor
+#Each tower trampoline throws a real body onto its target floor
 func _check_pads(layout: TrendLayout) -> void:
 	_scene = Node3D.new()
 	root.add_child(_scene)

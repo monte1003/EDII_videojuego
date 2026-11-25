@@ -1,8 +1,7 @@
 class_name SelfieCard
 extends Control
 
-#The photo that was just taken, as an instant photo with a white edge and the followers it gave as its only text. It shows where the
-#live picture was for a moment, then shrinks into a small copy in the corner that stays until the next photo
+#Instant photo with its followers that shrinks into the corner until the next one
 
 const EDGE := 8.0
 const PICTURE := Vector2(224.0, 126.0)
@@ -11,7 +10,7 @@ const CARD := Vector2(PICTURE.x + EDGE * 2.0, PICTURE.y + EDGE + CAPTION)
 const IN_TIME := 0.15
 const HOLD := 1.2
 const SHRINK_TIME := 0.35
-#The small copy: its width on screen, and how far it stays from the corner
+#Small copy width and corner margin
 const SMALL := 120.0
 const CORNER_ROOM := 26.0
 
@@ -50,7 +49,7 @@ func _ready() -> void:
 	_card.add_child(_number)
 
 
-#"at" is the top left corner where the card shows first; "followers" is what the photo gave (0 when the player did not come out)
+#"at" is the first top left corner; "followers" is what the photo gave
 func play(photo: Texture2D, at: Vector2, followers: int, inside: bool, posed: bool) -> void:
 	if _tween != null and _tween.is_valid():
 		_tween.kill()
@@ -73,7 +72,6 @@ func play(photo: Texture2D, at: Vector2, followers: int, inside: bool, posed: bo
 	SynthSound.play(self, SynthSound.tone(660.0, 0.2, 380.0, 0.35), -11.0)
 
 
-#The small copy goes away (the end of the round shows them all)
 func clear() -> void:
 	if _tween != null and _tween.is_valid():
 		_tween.kill()
@@ -82,6 +80,6 @@ func clear() -> void:
 	_tween.tween_callback(hide)
 
 
-#Where the card is on the screen now, in pixels of the canvas
+#Card rect on the canvas now
 func shown_rect() -> Rect2:
 	return Rect2(position, CARD * scale)

@@ -1,63 +1,57 @@
 class_name Level01
 extends RoundScene
 
-#Level 1 "Carrera del feed": one to four racers cross a graph of islands full of obstacles to the goal; the scene spawns and shows,
-#the rules live in Level01Rules, the feed in Level01Events, the obstacles in Level01Hazards and Level01Traps, and the tiles of the stories
-#in Level01Tiles
+#Level 1 "Carrera del feed": racers cross an island graph to the goal
 
 enum Phase { COUNTDOWN, RUNNING, ENDED }
 
 const SCREEN_ID := &"level_01"
 const FALL_Y := -12.0
-#The picture starts to close this far over FALL_Y while the racer of this screen falls, so it is dark when it comes back
+#Iris lead over FALL_Y while this screen's racer falls
 const IRIS_LEAD := 7.0
-#Meters between the starting places of the racers
+#Spacing of start places
 const START_SPREAD := 2.2
-#Seconds a racer stays protected (blinking) after it gets up from a blow, to step out of the way of what hit it
+#Blinking protection after getting up from a blow
 const RECOVER_GRACE := 1.3
-#Feet more than this under the floor of the course are off it (on a deck, falling): nothing of the course hits them
+#Feet this far under the course floor are off it
 const COURSE_DEPTH := 1.5
-#Each racer starts in front of one of the bridges that leave the start: this far from the middle toward the bridges to the sides and this
-#far back, so the one ahead is taken from behind the gate
+#Start offsets in front of the three starting bridges
 const START_INSET := 4.0
 const START_BACK := 1.2
-#How hard a blow feels and how long it leaves the racer lying: a bar, an axe, a like and a giant ball hit hard, a comment and a scroll
-#wheel softer
+#Blow strength and time down per obstacle
 const SPINNER_STRENGTH := 0.9
 const SPINNER_STUN := 0.6
 const SOFT_STRENGTH := 0.65
 const SOFT_STUN := 0.5
-#A rolling ball hits a bit softer than a bar: its share of the push of a bar, and how hard it feels
+#Rolling ball push share and strength
 const BALL_PUSH_SHARE := 0.75
 const BALL_STRENGTH := 0.75
 const BALL_STUN := 0.5
-#How far under its feet a body still sticks to the ground, so it follows a slide down instead of skipping over it
+#Ground snap so bodies follow a slide
 const SLIDE_SNAP := 0.6
-#How much of the flow of a slide a racer keeps when it leaves it
+#Share of slide flow kept after leaving it
 const SLIDE_CARRY := 0.8
-#The bubble of a deck: how long the ride back takes (it is the price of the fall), the share of it spent rising beside the bridge and how
-#high over the platform it floats across before it drops and pops
+#Deck bubble: ride time, rise share and float height
 const LIFT_TIME := 6.0
 const LIFT_RISE_SHARE := 0.4
 const LIFT_HOVER := 2.4
-#A comment pushes this much harder than its plain push
+#Comment push multiplier
 const COMMENT_PUSH_SHARE := 1.4
 
-#Tuning numbers of the round; leave empty to use the defaults
+#Tuning numbers; empty uses the defaults
 @export var settings: Level01Settings
 
 var phase := Phase.COUNTDOWN
-#The course as the racers go through it: Dijkstra keeps the feed from cutting every way, ranks the racers and draws the routes (F3)
+#Course graph: keeps routes open, ranks racers and draws routes (F3)
 var graph: WeightedGraph
 var rules: Level01Rules
 var events: Level01Events
-#The second feed, when the settings ask for one
+#Second feed when the settings ask for one
 var extra_events: Level01Events
-#In a room every computer but the server takes the bridges of the feed from it
+#In a room non-servers take the feed bridges from the server
 var _feed_from_server := false
 var tiles := Level01Tiles.new()
 
-#Every racer by id
 var _players: Dictionary = {}
 var _locators: Dictionary = {}
 var _names: Dictionary = {}
@@ -67,25 +61,25 @@ var _phase_timer := 0.0
 var _countdown_shown := 0
 var _hud_timer := 0.0
 var _standings_timer := 0.0
-#Where each racer that arrived walks to, so the gate of the goal stays free for the next one
+#Where each finished racer walks, keeping the goal gate free
 var _cheering: Dictionary = {}
 var _hints_shown: Dictionary = {}
-#The graph with every bridge open: the distance to the goal of the standings does not jump when the feed takes one down
+#Goal distance with every bridge open, so standings never jump
 var _cost_to_goal: Dictionary = {}
 var _debug: Level01Debug
-#Whether each belt that turns around flows the way it was built, by its index in Level01Layout.TURNS, and whether it is about to turn
+#Turning belts: built direction and about-to-turn flag
 var _belt_forward: Dictionary = {}
 var _belt_warned: Dictionary = {}
-#The flow of the slide each racer just left, by id: it keeps sliding a little over the island
+#Slide flow each racer just left
 var _slide_carry: Dictionary = {}
-#The racers that ride a bubble back up from a deck, by id: where they started, the pad, where they land, the platform and the bubble
+#Racers riding a deck bubble back up
 var _lifts: Dictionary = {}
-#The pads of the decks, measured once
+#Deck pads, measured once
 var _deck_lifts: Array[Dictionary] = []
 var _decks: Array[Dictionary] = []
-#The bubble each racer that dropped onto the decks will ride, whatever pad it steps on
+#Bubble each fallen racer will ride
 var _fell_onto: Dictionary = {}
-#The part of its cycle each comment was in the last time, to play its cues once
+#Last comment stage, to play cues once
 var _comment_stage: Dictionary = {}
 
 @onready var _world: Level01World = $World
@@ -97,7 +91,7 @@ func _ready() -> void:
 	super()
 	if settings == null:
 		settings = Level01Settings.new()
-	#In a room the race is over when everybody has arrived or the time limit runs out, as in every other round
+	#In a room the race ends when everybody arrives or time runs out
 	if GameSession.is_networked() and not GameSession.practice:
 		settings = settings.duplicate()
 		settings.finish_window = 0.0
@@ -131,13 +125,13 @@ func _ready() -> void:
 		extra_events.warned.connect(_on_feed_warned)
 		extra_events.closed.connect(_on_feed_closed)
 		extra_events.reopened.connect(_on_feed_reopened)
-	#In a room the server picks the bridges and tells the others: each computer sees the other racers a little late and would pick its own
+	#In a room the server picks the feed bridges for everybody
 	_feed_from_server = _networked_round() and not GameSession.net.is_host()
 	if _networked_round() and GameSession.net.is_host():
 		_tell_feed(events, 0)
 		if extra_events != null:
 			_tell_feed(extra_events, 1)
-	#The tiles of the stories that somebody steps on drop for everybody
+	#Story tiles stepped by anyone drop for everybody
 	if _networked_round():
 		GameSession.net.round_event.connect(_on_round_event)
 		tiles.tile_stepped.connect(_on_tile_stepped)
@@ -162,12 +156,11 @@ func local_locator() -> PlayerLocator:
 	return _locators[_local_id]
 
 
-#The racer of this screen, for the route of the graph view
 func local_player() -> Player:
 	return _players[_local_id]
 
 
-#Closes or opens a bridge for the routes of the graph (the demo of F4); the bridge itself stays
+#Closes or opens a bridge for the graph routes (F4 demo)
 func set_bridge_closed(a: StringName, b: StringName, closed: bool) -> void:
 	graph.set_edge_enabled(a, b, not closed)
 
@@ -195,7 +188,7 @@ func _help_allowed() -> bool:
 	return phase != Phase.ENDED
 
 
-#The cost of the way to the goal from every island, with every bridge open
+#Goal cost from every island with every bridge open
 func _measure_the_course() -> void:
 	var open := Level01Layout.build_graph()
 	for id: StringName in Level01Layout.POSITIONS:
@@ -218,8 +211,7 @@ func _spawn_racers() -> void:
 		_names[player.player_id] = "TÚ" if player.player_id == _local_id else shown
 
 
-#Where each racer starts and where it looks: in front of one of the three bridges that leave the start, in a random order every race
-#so nobody always takes the middle one; with more racers than bridges the next ones stand beside the first
+#Each racer starts in front of a random starting bridge; extras stand beside
 func _start_slots(count: int) -> Array[Array]:
 	var centre := _spawn_position(Level01Layout.START)
 	var mouths: Array[Vector3] = []
@@ -336,7 +328,7 @@ func _update_running(delta: float) -> void:
 		_update_standings()
 
 
-#Whoever arrived walks into the goal island and stops there
+#Finished racers walk into the goal island
 func _walk_finished() -> void:
 	for id: int in _cheering:
 		var player := _players[id] as Player
@@ -349,8 +341,7 @@ func _walk_finished() -> void:
 		player.move_input = Vector2(local.x, local.z)
 
 
-#A conveyor bridge drags whoever is on it and a slide carries it down much faster; the wind of a fan drags it across, on the floor and
-#in the air
+#Belts drag, slides carry faster and fans push across
 func _apply_belts() -> void:
 	for id: int in _players:
 		var player := _players[id] as Player
@@ -369,7 +360,7 @@ func _apply_belts() -> void:
 		_carry_slide(id, player, flow)
 
 
-#Whoever comes off the end of a slide does not stop dead: the speed it had fades out over the island
+#Slide speed fades over the island after leaving it
 func _carry_slide(id: int, player: Player, flow: Vector3) -> void:
 	if flow.length() > settings.belt_speed + 0.5:
 		_slide_carry[id] = flow
@@ -379,7 +370,7 @@ func _carry_slide(id: int, player: Player, flow: Vector3) -> void:
 		_slide_carry.erase(id)
 
 
-#The bars turn and whoever they touch is thrown; a jump goes over them
+#Spinner bars throw; a jump clears them
 func _apply_hazards() -> void:
 	_world.update_hazards(rules.elapsed, tiles)
 	for id: int in _players:
@@ -399,7 +390,7 @@ func _apply_hazards() -> void:
 			_hud.flash(Palette.CORAL, 0.35, 0.4)
 
 
-#The belts turn around by the clock: the graph costs change and the arrows blink first
+#Belts turn by the clock: costs change, arrows blink first
 func _apply_turns() -> void:
 	for index in Level01Layout.TURNS.size():
 		var turn: Dictionary = Level01Layout.TURNS[index]
@@ -420,7 +411,7 @@ func _apply_turns() -> void:
 		_hint_once(&"turn", "La cinta del scroll cambia de sentido")
 
 
-#A ball that rolls across an island throws whoever it touches; a jump goes over it
+#Rolling balls throw; a jump clears them
 func _apply_balls() -> void:
 	for id: int in _players:
 		var locator := _locators[id] as PlayerLocator
@@ -441,7 +432,7 @@ func _apply_balls() -> void:
 				_hud.flash(Palette.CORAL, 0.35, 0.4)
 
 
-#Each comment bubble sweeps across its bridge after its warning and pushes whoever it reaches; a jump goes over it
+#Comments sweep their bridge after a warning; a jump clears them
 func _apply_comments() -> void:
 	for index in Level01Layout.COMMENTS.size():
 		var comment: Dictionary = Level01Layout.COMMENTS[index]
@@ -464,7 +455,7 @@ func _apply_comments() -> void:
 				_hint_once(&"comment", "Un comentario empuja: salta o cruza por el otro lado")
 
 
-#The axes, the likes, the scroll wheels and the giant balls throw whoever they touch; nothing touches whoever rides a bubble
+#Axes, likes, wheels and giant balls throw; bubble riders are safe
 func _apply_traps() -> void:
 	var now := rules.elapsed
 	for id: int in _players:
@@ -502,7 +493,7 @@ func _apply_traps() -> void:
 			_hud.flash(Palette.CORAL, 0.35, 0.4)
 
 
-#The tiles of the stories feel the feet of whoever stands on them
+#Story tiles feel the feet on them
 func _tick_tiles(delta: float) -> void:
 	var feet: Array[Vector3] = []
 	for id: int in _players:
@@ -512,7 +503,7 @@ func _tick_tiles(delta: float) -> void:
 	tiles.tick(delta, feet)
 
 
-#The sound of a comment: ticks while it flashes and a swoosh when it pushes
+#Comment cue: ticks while flashing, swoosh when pushing
 func _comment_cue(stage: int) -> void:
 	if stage == Level01Hazards.COMMENT_WARNING:
 		SynthSound.play(self, SynthSound.tone(660.0, 0.3, -240.0, 0.35), -12.0)
@@ -520,8 +511,7 @@ func _comment_cue(stage: int) -> void:
 		SynthSound.play(self, SynthSound.tone(220.0, 0.22, 320.0, 0.4), -10.0)
 
 
-#A racer that drops onto the decks keeps the bubble of the place it lands on until it rides it: walking under the course to the pad of a
-#bridge further on still takes it back to the start of the bridge it fell from. Back on the course it forgets it
+#A fallen racer keeps the bubble of where it landed until it rides
 func _note_falls() -> void:
 	for id: int in _players:
 		var player := _players[id] as Player
@@ -535,7 +525,7 @@ func _note_falls() -> void:
 			_fell_onto[id] = lift
 
 
-#Whoever steps on the pad of a deck rides a bubble back to the platform at the start of the bridge it fell from
+#Deck pad: ride back to the bridge start
 func _apply_deck_pads() -> void:
 	for id: int in _players:
 		var player := _players[id] as Player
@@ -547,8 +537,7 @@ func _apply_deck_pads() -> void:
 				break
 
 
-#The pad of a deck wraps whoever steps on it in a bubble that carries it back up to the platform at the start of the bridge it fell from
-#("back"); nothing hits a racer while it rides
+#Bubble ride back to the bridge start; nothing hits a rider
 func _lift_back(id: int, player: Player, pad: Dictionary, back: Dictionary) -> void:
 	_world.squash_lift_pad(pad)
 	player.clear_motion()
@@ -561,7 +550,7 @@ func _lift_back(id: int, player: Player, pad: Dictionary, back: Dictionary) -> v
 		_hint_once(&"deck", "Burbuja de regreso: te sube al inicio del puente del que caíste")
 
 
-#The bubbles carry their riders straight up beside the bridge, then over to the platform, where they drop them and pop
+#Bubbles rise beside the bridge, glide over and drop their riders
 func _apply_lifts(delta: float) -> void:
 	for id: int in _lifts.keys():
 		var lift: Dictionary = _lifts[id]
@@ -574,7 +563,7 @@ func _apply_lifts(delta: float) -> void:
 			_end_lift(id)
 
 
-#Where the bubble is at that share of the ride: it rises on the pad, then glides along a curve that floats across and drops onto the platform
+#Bubble point at that share of the ride
 func _lift_point(lift: Dictionary, share: float) -> Vector3:
 	var from: Vector3 = lift["from"]
 	var pad: Vector3 = lift["pad"]
@@ -604,7 +593,7 @@ func _end_lift(id: int) -> void:
 	(_locators[id] as PlayerLocator).force_vertex(lift["vertex"])
 
 
-#The blocks that sweep some bridges throw whoever they touch off to the side; a jump goes over them
+#Sweeping blocks throw sideways; a jump clears them
 func _apply_blocks() -> void:
 	for id: int in _players:
 		var locator := _locators[id] as PlayerLocator
@@ -624,7 +613,7 @@ func _apply_blocks() -> void:
 			_hud.flash(Palette.CORAL, 0.35, 0.4)
 
 
-#How far each racer is from the goal, for the standings
+#Distance to the goal for the standings
 func _update_progress() -> void:
 	for id: int in _players:
 		rules.state_of(id).progress = _progress_of(id)
@@ -644,7 +633,7 @@ func _update_standings() -> void:
 	_hud.set_place(order.find(_local_id) + 1, order.size())
 
 
-#The doors of the goal close a while after the first racer arrives
+#Goal doors close a while after the first arrival
 func _update_window() -> void:
 	if rules.window_left > 0.0:
 		_hud.show_window("LA META CIERRA EN %d" % ceili(rules.window_left))
@@ -676,12 +665,12 @@ func _on_place_changed(player_id: int) -> void:
 		_place_hint(vertex)
 
 
-#Whether "vertex" is closer to the goal than the checkpoint that racer has saved, so going back never takes a checkpoint away
+#Checkpoints never move backward
 func _is_further(vertex: StringName, player_id: int) -> bool:
 	return _cost_to_goal.get(vertex, INF) < _cost_to_goal.get(rules.state_of(player_id).checkpoint, INF)
 
 
-#Each obstacle explains itself the first time the player reaches it, in a few words
+#Each obstacle explains itself the first time
 func _place_hint(vertex: StringName) -> void:
 	if Level01Layout.TILE_PLATES.has(vertex):
 		_hint_once(&"tiles", "Las historias se caen al pisarlas: no te detengas")
@@ -731,7 +720,7 @@ func _on_player_fell(player_id: int, attempts_left: int) -> void:
 		_hud.flash(Palette.CORAL, 0.4, 0.5)
 
 
-#A racer out of attempts leaves the course
+#Out of attempts: leaves the course
 func _retire(player_id: int) -> void:
 	_hud.toast("%s se quedó sin intentos" % _names.get(player_id, "Un jugador"))
 	var player := _players[player_id] as Player
@@ -741,7 +730,7 @@ func _retire(player_id: int) -> void:
 	player.queue_free()
 
 
-#The opening film of the race: high over the goal, then a sweep along the course back toward the start
+#Opening film: over the goal, then a sweep back to the start
 func _film_shots() -> Array[RoundFilm.Shot]:
 	var goal: Vector3 = Level01Layout.POSITIONS[Level01Layout.GOAL]
 	var start: Vector3 = Level01Layout.POSITIONS[Level01Layout.START]
@@ -753,7 +742,7 @@ func _film_shots() -> Array[RoundFilm.Shot]:
 	return shots
 
 
-#Racers pose at the start line, along the way and at the goal, until the race is over
+#Poses allowed at the start, along the way and at the goal
 func _pose_allowed(_player_id: int) -> bool:
 	return not paused and phase != Phase.ENDED
 
@@ -771,21 +760,19 @@ func _on_racer_finished(player_id: int, place: int) -> void:
 		var player := _players[player_id] as Player
 		player.set_input_enabled(false)
 		_hud.warn("META" if total == 1 else _ordinal(place))
-		#In a room the race goes on until everybody arrives or time runs out: meanwhile this computer watches the others
+		#In a room this computer watches the others until the race ends
 		start_spectating.call_deferred()
 	else:
 		_hud.toast("%s llegó %s" % [_names.get(player_id, "Alguien"), _ordinal(place)])
 	_update_standings()
 
 
-#A blow lands only on a racer that is on its feet and out of its protection: while it flies, lies on the floor and for RECOVER_GRACE
-#seconds after it gets up (blinking) nothing hits it again, so a row of swinging comments can never chain blows on it
+#Hits only land outside the protection, so swinging comments cannot chain hits
 func _can_strike(id: int) -> bool:
 	return (_players[id] as Player).can_be_hit() and _on_course(id) and rules.register_hit(id)
 
 
-#Whether the feet are on the floor of the place where the racer is, not under it: a racer that fell to a deck or is falling is never hit
-#by what moves on the course above it
+#Feet on the course floor, not on a deck below
 func _on_course(id: int) -> bool:
 	var locator := _locators[id] as PlayerLocator
 	var feet := (_players[id] as Player).global_position
@@ -803,7 +790,7 @@ func _on_player_left(player_id: int) -> void:
 	rules.withdraw(player_id)
 
 
-#Every blow of the level is the same hit as in the street: it throws the racer, flips it, leaves it lying and gets it up
+#Every level blow is the street hit: throw, flip, lie and get up
 func _hit_racer(player: Player, push: Vector3, strength: float, stun: float) -> void:
 	var hit := Player.Hit.new()
 	hit.push = push
@@ -817,7 +804,7 @@ func _on_racer_hit(hit: Player.Hit, player: Player) -> void:
 	ImpactFx.blow(self, player, hit, _rng, player.player_id == _local_id)
 
 
-#Every landing of the racer of this screen and the hard ones of the rest
+#Landings of this screen's racer and hard ones of the rest
 func _on_racer_landed(_at: Vector3, hard: bool, player: Player) -> void:
 	if hard or player.player_id == _local_id:
 		ImpactFx.landing(self, player, hard, _rng)
@@ -828,7 +815,7 @@ func _on_window_opened(_seconds: float) -> void:
 		_hud.warn("La meta cierra")
 
 
-#The feed announces the bridge that is about to fall: it flashes
+#The bridge about to fall flashes
 func _on_feed_warned(a: StringName, b: StringName, seconds: float) -> void:
 	_world.flash_bridge(a, b, true)
 	_hint_once(&"saturated", "Ruta saturada: se cierra en %d s" % int(seconds))
@@ -847,7 +834,7 @@ func _on_feed_reopened(a: StringName, b: StringName) -> void:
 	_world.set_bridge_open(a, b, true)
 
 
-#The server tells every change of one of its feeds to the others
+#Server tells feed changes to the others
 func _tell_feed(feed: Level01Events, which: int) -> void:
 	feed.warned.connect(func(a: StringName, b: StringName, seconds: float) -> void: _send_feed(which, "warn", a, b, seconds))
 	feed.closed.connect(func(a: StringName, b: StringName) -> void: _send_feed(which, "close", a, b, 0.0))
@@ -858,13 +845,12 @@ func _send_feed(which: int, change: String, a: StringName, b: StringName, second
 	GameSession.net.send_round_event({"k": "feed", "w": which, "e": change, "a": String(a), "b": String(b), "s": snappedf(seconds, 0.01)})
 
 
-#A racer of this computer stepped on a tile of the stories: everybody else drops it too (a player tells the server, the server tells all)
+#A local racer stepped on a story tile: tell the server, which tells all
 func _on_tile_stepped(plate: StringName, index: int) -> void:
 	GameSession.net.send_round_event({"k": "tile", "p": String(plate), "i": index})
 
 
-#A tile that a racer of another computer stepped on: it shakes and drops here too and comes back with its own clock. The server passes
-#on what a player tells it
+#Remote tile step: drops here with its own clock; the server relays
 func _take_tile(from: int, message: Dictionary) -> void:
 	var plate := StringName(str(message.get("p", "")))
 	var index := int(message.get("i", -1))
@@ -875,7 +861,7 @@ func _take_tile(from: int, message: Dictionary) -> void:
 		GameSession.net.send_round_event({"k": "tile", "p": String(plate), "i": index})
 
 
-#A change of a feed that the server made, taken here as it is; a tile of the stories somebody stepped on
+#Server feed changes and tile steps
 func _on_round_event(from: int, message: Dictionary) -> void:
 	if int(message.get("r", -1)) != GameSession.round_index:
 		return
@@ -893,7 +879,7 @@ func _on_round_event(from: int, message: Dictionary) -> void:
 	feed.apply(str(message.get("e", "")), a, b, float(seconds) if seconds is float or seconds is int else 0.0)
 
 
-#Meters from the middle of a bridge to the nearest racer still running
+#Distance from a bridge middle to the nearest running racer
 func _edge_threat(a: StringName, b: StringName) -> float:
 	var middle: Vector3 = (Level01Layout.POSITIONS[a] + Level01Layout.POSITIONS[b]) / 2.0
 	var nearest := INF
@@ -903,8 +889,7 @@ func _edge_threat(a: StringName, b: StringName) -> float:
 	return nearest
 
 
-#A bridge may fall only if nobody is on it when it is chosen (whoever steps on it afterwards saw its sign) and every racer that is still
-#running keeps a way to the goal, counting the bridges the feed is about to drop as down too
+#A bridge falls only when empty and every racer keeps a way to the goal
 func _can_close(a: StringName, b: StringName) -> bool:
 	if not graph.is_edge_enabled(a, b) or _feed_holds(a, b):
 		return false
@@ -934,7 +919,7 @@ func _can_close(a: StringName, b: StringName) -> bool:
 	return fine
 
 
-#Whether one of the feeds is already flashing or holding down the bridge between a and b
+#Whether a feed is flashing or holding this bridge down
 func _feed_holds(a: StringName, b: StringName) -> bool:
 	for feed in [events, extra_events]:
 		if feed != null and not feed.edge.is_empty() and ((feed.edge[0] == a and feed.edge[1] == b) or (feed.edge[0] == b and feed.edge[1] == a)):
@@ -977,7 +962,7 @@ func _finish(title: String, message: String) -> void:
 		player.set_input_enabled(false)
 		player.clear_motion()
 		player.external_velocity = Vector3.ZERO
-	#A late Esc press must not open the pause menu over the final panel
+	#A late Esc must not open the pause over the final panel
 	_pause_menu.set_process_unhandled_input(false)
 	_hud.hide_mission()
 	var arrived := 0
@@ -990,7 +975,7 @@ func _finish(title: String, message: String) -> void:
 		["Intentos", "%d de %d" % [state.attempts_left, settings.attempts]],
 		["Llegaron", "%d de %d" % [arrived, rules.racers_in_race()]],
 	]
-	#One line and one fact on the screen for a moment, then the results
+	#One line and one fact, then the results
 	var banner := title.to_upper()
 	if victory:
 		banner = "META" if rules.racers_in_race() == 1 else _ordinal(state.place)
@@ -999,7 +984,7 @@ func _finish(title: String, message: String) -> void:
 	get_tree().create_timer(1.8).timeout.connect(_report.bind(result, victory))
 
 
-#Share of the course a racer covered, from 0 at the start to 1 at the goal
+#Course share covered, 0 to 1
 func _covered(state: Level01Rules.PlayerState) -> float:
 	var whole: float = _cost_to_goal.get(Level01Layout.START, 0.0)
 	if state.reached_goal():
@@ -1020,7 +1005,7 @@ func _points_of_everybody() -> Dictionary:
 	return points
 
 
-#The score of a racer with how it adds up: arriving, the time and the attempts kept
+#Score with its breakdown: arrival, time and attempts kept
 func _score_of(state: Level01Rules.PlayerState) -> RoundScore:
 	var sheet := GameSession.score_sheet
 	var points := _points_of(state)

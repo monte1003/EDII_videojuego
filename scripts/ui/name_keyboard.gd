@@ -1,10 +1,7 @@
 class_name NameKeyboard
 extends CanvasLayer
 
-#The keyboard on screen to write a name with the pad, as consoles do: the name on top with its caret, the keys in rows with the caps of
-#the control hints, and the pad buttons that do the rest (square deletes, triangle adds a space, Options accepts, circle goes back). The
-#d-pad or the stick moves over the keys, the selected one turns coral like the main buttons and the cross writes it. A real keyboard
-#also types in it. The selection never leaves its keys
+#On-screen keyboard for the name with the pad: square deletes, triangle spaces, Options accepts
 
 signal accepted(text: String)
 signal cancelled
@@ -12,7 +9,7 @@ signal cancelled
 const ROWS: Array[String] = ["1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM.-_"]
 const KEY_SIZE := Vector2(56, 50)
 const GAP := 7
-#The bottom row in columns of the rows above: space, delete and accept
+#Bottom row in columns of the rows above
 const WIDE_KEYS := [["ESPACIO", 4], ["BORRAR", 3], ["LISTO", 3]]
 
 var _text := ""
@@ -45,7 +42,7 @@ func is_open() -> bool:
 	return visible
 
 
-#Opens with the name there is; "limit" is the most letters it takes
+#Opens with the current name; "limit" is the most letters
 func open(text: String, limit: int) -> void:
 	_limit = limit
 	_text = text.strip_edges().to_upper().left(limit)
@@ -69,7 +66,7 @@ func _process(delta: float) -> void:
 	_caret.modulate.a = 1.0 if fmod(_clock, 1.0) < 0.55 else 0.0
 
 
-#The keys of a real keyboard and the pad buttons with a job of their own go before the selected key gets them
+#Real keyboard keys and pad buttons with their own job go first
 func _input(event: InputEvent) -> void:
 	if not visible or not event.is_pressed():
 		return
@@ -102,7 +99,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-#While it is open nothing behind it hears the keys
+#Nothing behind hears the keys while open
 func _unhandled_input(_event: InputEvent) -> void:
 	if visible:
 		get_viewport().set_input_as_handled()
@@ -150,7 +147,7 @@ func _refresh() -> void:
 	_count.add_theme_color_override("font_color", Palette.CORAL if _text.length() >= _limit else Palette.INK_SOFT)
 
 
-#The name cannot grow any more: the card shakes a little
+#The name is full: the card shakes
 func _shake() -> void:
 	var base := _card.position
 	var shake := create_tween()
@@ -260,7 +257,7 @@ func _build() -> void:
 			_pad_only.append(pair)
 
 
-#A key with the cap of the control hints; selected it fills coral like the main buttons and grows a little
+#Key with a hint cap; selected it fills coral and grows
 func _key(text: String, width: float, main: bool) -> Button:
 	var key := Button.new()
 	key.text = text
@@ -299,8 +296,7 @@ func _grow(key: Button, scale_to: float) -> void:
 	create_tween().tween_property(key, "scale", Vector2.ONE * scale_to, 0.1).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 
-#Every key knows its four neighbours, wrapping at the edges, so the d-pad never leaves the keyboard; the bottom row lines up under the
-#columns it covers
+#Each key knows its four neighbours, wrapping, so the d-pad never leaves the keyboard
 func _link_keys() -> void:
 	var count: int = ROWS[0].length()
 	var under: Array[Button] = []

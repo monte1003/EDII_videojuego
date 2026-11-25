@@ -1,10 +1,10 @@
 class_name StreetHud
 extends RoundHud
 
-#The street screen: the clock, the mission at the start, a small ring while the jump rests and the glow near the end line
+#Street screen: clock, mission, jump rest ring and end line glow
 
 
-#A ring that fills while the jump rests and hides itself when it is ready
+#Ring that fills while the jump rests
 class JumpRing extends Control:
 	const RADIUS := 17.0
 	const WIDTH := 4.0
@@ -36,7 +36,7 @@ func _ready() -> void:
 	_bottom.move_child(_ring, 0)
 
 
-#The jump rests for "total" seconds after landing; the ring only shows while it does
+#Shown only while the jump rests
 func set_jump_cooldown(left: float, total: float) -> void:
 	_ring.fill = 1.0 - left / maxf(total, 0.01)
 	_ring.modulate.a = 1.0 if left > 0.0 else 0.0

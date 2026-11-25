@@ -1,18 +1,15 @@
 extends SceneTree
 
-#Checks the perfect selfie with no scene: the studio (its sets, its two levels, its graph, and every way of it within what a player
-#can do with a fifth to spare), the order of the photos, the frame, who comes out at the shot (in the air too), the followers, the
-#pose, the power-ups, the shoves, the tricks of the floor and how the photo frames four players
-#run: godot --headless --path . --script res://scripts/tests/selfie_check.gd
+#Checks the perfect selfie with no scene: studio, photos, frame, followers, poses and shoves
 
 const SHEET: ScoreSheet = preload("res://resources/score_sheet.tres")
 const SETTINGS: SelfieSettings = preload("res://resources/levels/perfect_selfie.tres")
-#A player only manages this share of what it could, and no slope may be steeper than 20 degrees
+#Players manage this share of what they could; slopes up to 20 degrees
 const SHARE := 0.8
 const MAX_SLOPE := 0.364
 #How wide a body is, to keep a way clear of pillars
 const BODY := 0.4
-#The highest ledge a trampoline throws a body onto, measured with a body by the playability gate (player_limits)
+#Highest ledge a trampoline throws a body onto
 const TRAMPOLINE_LEDGE := 2.64
 
 var _failures := 0
@@ -141,8 +138,7 @@ func _check_studio() -> void:
 	_expect(trick_spots and on_belt, "el truco de cada set está bajo su marco: giratorio, pista resbalosa, alfombra, piscina, escenario que late y cinta")
 
 
-#Every way of the graph from place to place, walked over the plan of the floors: a body never meets a step, a slope steeper than
-#20 degrees or a pillar, and from anywhere there is a way back to where the players start
+#Every graph way is walkable with no steps, steep slopes or pillars, and has a way back
 func _check_ways() -> void:
 	var graph := _layout.build_graph()
 	var from_hub := graph.costs_from(SelfieLayout.HUB)
@@ -191,7 +187,7 @@ func _check_ways() -> void:
 		hops, _jump_height * SHARE, high_hops])
 
 
-#Whether a step down from "a" toward "b" meets something solid at the height of a body while it is still up there
+#Whether a step down meets something solid at body height
 func _drop_blocked(a: Vector3, b: Vector3) -> bool:
 	var steps := maxi(ceili(Vector2(b.x - a.x, b.z - a.z).length() / 0.1), 1)
 	for step in range(1, steps + 1):
@@ -228,8 +224,7 @@ func _walk_problem(a: Vector3, b: Vector3) -> Dictionary:
 	return {"text": "" if slope <= MAX_SLOPE else "pendiente de %.0f grados" % rad_to_deg(atan(slope)), "slope": slope}
 
 
-#What the studio asks of a player against what it can do with a fifth to spare: the podium by trampoline, the upper level only by
-#its ramps, and the next set always within the time of a photo
+#Podium by trampoline, upper level by ramps and the next set in time, with a fifth to spare
 func _check_reach() -> void:
 	_expect(SelfieLayout.PODIUM_TOP <= TRAMPOLINE_LEDGE * SHARE and SelfieLayout.PODIUM_TOP > _jump_height * SETTINGS.jump_scale,
 		"el podio (%.1f m) se alcanza con el trampolín (llega a un saliente de %.2f m; %.0f %% de eso) y no saltando, ni con el potenciador (%.2f m)" % [
@@ -244,7 +239,7 @@ func _check_reach() -> void:
 		trampolines += 1
 		var at: Vector3 = pad["at"]
 		var edge := _distance_to_box(Vector2(at.x, at.z), SelfieLayout.PODIUM)
-		#The time the jump of the pad stays over the top of the podium, run at a fifth less than full speed
+		#Pad jump time over the podium top at a fifth less speed
 		var lift := ArenaHazards.PAD_LIFT
 		var spread := sqrt(lift * lift - 2.0 * _gravity * SelfieLayout.PODIUM_TOP)
 		var leave := (lift + spread) / _gravity
@@ -343,8 +338,7 @@ func _check_frame() -> void:
 	_expect(moved > 0.3, "en las últimas fotos el marco se mueve antes de fijarse (%.1f m)" % moved)
 
 
-#Who comes out at the shot: over the square of the frame and, in height, from a little under the floor of the set up to a jump and
-#a meter over it. A jump at the very shot counts, at the edge and in the middle
+#Who is in the shot: over the frame and from under the floor up to a jump and a meter
 func _check_detection() -> void:
 	var ceiling := _jump_height + SETTINGS.air_room
 	print("  dentro en altura: de %.2f m bajo el piso del set a %.2f m sobre él (salto %.2f + %.1f)" % [SETTINGS.below_floor, ceiling, _jump_height, SETTINGS.air_room])
@@ -400,7 +394,7 @@ func _check_detection() -> void:
 	_expect(bonus > 0 and bonus <= roundi(SHEET.selfie_pose * 0.1 * SHEET.selfie_crowd[0]), "una foto en el aire suma un poco: %d seguidores, no más del 10 %% de la pose" % bonus)
 
 
-#Rules whose current photo is on "spot", one tick away from its shot (nobody came out in the photos before)
+#Rules one tick from the shot at "spot"
 func _rules_at(spot: StringName) -> SelfieRules:
 	for seed_value in 200:
 		var rules := _rules([1], seed_value)
@@ -531,8 +525,7 @@ func _check_brawl() -> void:
 		"el empujón le da al más cercano de los que tiene delante y no a quien está al lado")
 
 
-#The tricks of the floor, step by step with no bodies: the drag of the turntable, the slide of the wax, the slow carpet and the
-#bounce of the mattress; on plain floor none of them does anything
+#Floor tricks without bodies: turntable, wax, slow carpet and mattress
 func _check_floor() -> void:
 	var floor_rules := SelfieFloor.new(_layout)
 	var dt := 1.0 / 60.0
@@ -577,8 +570,7 @@ func _check_floor() -> void:
 	_expect(lifts == 2, "el escenario de directo late cada %.1f s y levanta a quien está encima (%d veces en %.1f s)" % [SelfieLayout.BEAT_PERIOD, lifts, 260.0 * dt])
 
 
-#The view of the photo: isometric (tilted 32 degrees and turned 45 from the frame) into the back corner of each set, with its frame
-#whole when nobody is in it, and four players close together at least 30 % of its height each
+#Isometric photo view: frame whole and four players at least 30 % tall
 func _check_photo() -> void:
 	var aspect := float(SelfieCamera.PHOTO_PIXELS.x) / SelfieCamera.PHOTO_PIXELS.y
 	_expect(SelfieCamera.PHOTO_PIXELS.x >= 960 and SelfieCamera.PHOTO_PIXELS.y >= 540 and SelfieCamera.PREVIEW_PIXELS == Vector2i(480, 270) and is_equal_approx(SelfieCamera.PREVIEW_RATE, 20.0),
@@ -600,7 +592,7 @@ func _check_photo() -> void:
 			var point := centre + Vector3(corner.x * side / 2.0, 0.0, corner.y * side / 2.0)
 			var local := view.transform.affine_inverse() * point
 			whole = whole and absf(local.y) <= view.size / 2.0 and absf(local.x) <= view.size * aspect / 2.0
-			#The nearest corner a frame reaches, with a head on top of the highest jump that still counts, stands behind the clip
+			#The farthest corner with a jumping head stays behind the clip
 			var far := centre + Vector3(corner.x * (room.x - SelfieLayout.FRAME_MARGIN), _jump_height + SETTINGS.air_room + IsoFrame.BODY_HEIGHT, corner.y * (room.y - SelfieLayout.FRAME_MARGIN))
 			var depth := (far - centre).dot(basis.z)
 			if depth >= _layout.camera_clip(spot):
@@ -618,7 +610,7 @@ func _check_photo() -> void:
 		var blocked := 0
 		for step_x in 7:
 			for step_z in 7:
-				#A body stands on whatever floor is there (a pad of the troll zone too), and shows when its feet or its head do
+				#A body shows when its feet or head do
 				var x := centre.x + lerpf(-room.x, room.x, step_x / 6.0)
 				var z := centre.z + lerpf(-room.y, room.y, step_z / 6.0)
 				var base := Vector3(x, _layout.height_at(x, z, centre.y + 2.0), z)
@@ -646,7 +638,7 @@ func _check_photo() -> void:
 		_expect(share >= 0.3, "set %s: cuatro jugadores juntos miden %.0f %% del alto de la foto cada uno" % [spot, share * 100.0])
 
 
-#Whether something solid stands between a point and the drone, closer to the set than the clip of its photo
+#Whether something solid blocks the drone closer than its clip
 func _sight_blocked(point: Vector3, toward: Vector3, centre: Vector3, clip: float) -> bool:
 	var along := 0.15
 	while (point + toward * along - centre).dot(toward) < clip:
@@ -656,7 +648,7 @@ func _sight_blocked(point: Vector3, toward: Vector3, centre: Vector3, clip: floa
 	return false
 
 
-#The camera itself: the photo comes out once per shot as a picture of its own at full size, ready to shrink
+#One full-size photo per shot
 func _check_camera() -> void:
 	var camera := SelfieCamera.new()
 	root.add_child(camera)

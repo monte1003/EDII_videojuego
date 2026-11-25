@@ -1,8 +1,7 @@
 class_name Level01Events
 extends RefCounted
 
-#The feed refreshing: now and then a fragile bridge flashes and goes down for a while; it never leaves a racer without a route.
-#Most of the time it picks the bridge closest to a racer, so whoever runs ahead is the one that has to change the route
+#The feed: a fragile bridge flashes and falls for a while, never cutting a racer's route
 
 signal warned(a: StringName, b: StringName, seconds: float)
 signal closed(a: StringName, b: StringName)
@@ -10,11 +9,11 @@ signal reopened(a: StringName, b: StringName)
 
 enum Phase { WAITING, WARNING, CLOSED }
 
-#Share of the times the feed goes for the bridge nearest to a racer; the rest of the times it picks any
+#Share of times it picks the bridge nearest a racer
 const FOCUS_CHANCE := 0.7
 
 var phase := Phase.WAITING
-#The bridge that is flashing or down; empty while none is
+#Flashing or fallen bridge; empty when none
 var edge: Array[StringName] = []
 
 var _settings: Level01Settings
@@ -30,10 +29,9 @@ func _init(config: Level01Settings, rng: RandomNumberGenerator, fragile: Array[A
 	_timer = config.feed_first
 
 
-#"can_close" tells whether a bridge may go down now: it receives both ends and returns a bool; the optional "threat" receives
-#both ends and returns how far the bridge is from the nearest racer (the smaller, the likelier to go down)
+#"can_close" says if a bridge may fall now; "threat" gives its distance to the nearest racer
 func tick(delta: float, can_close: Callable, threat := Callable()) -> void:
-	#With no fragile bridge on the course the feed never does anything
+	#No fragile bridges, no feed
 	if _candidates.is_empty():
 		return
 	_timer -= delta
@@ -61,7 +59,6 @@ func tick(delta: float, can_close: Callable, threat := Callable()) -> void:
 			reopened.emit(done[0], done[1])
 
 
-#Postpones the next change of the feed
 func delay_by(seconds: float) -> void:
 	_timer += seconds
 
@@ -71,7 +68,7 @@ func is_down(a: StringName, b: StringName) -> bool:
 		and ((edge[0] == a and edge[1] == b) or (edge[0] == b and edge[1] == a))
 
 
-#In a room the server picks the bridges: the others take each change it tells them, with no picking of their own
+#In a room the server picks; the others apply its changes
 func apply(change: String, a: StringName, b: StringName, seconds: float) -> void:
 	match change:
 		"warn":
@@ -91,14 +88,13 @@ func apply(change: String, a: StringName, b: StringName, seconds: float) -> void
 			reopened.emit(a, b)
 
 
-#Seconds until the next change of the feed
 func time_left() -> float:
 	return maxf(_timer, 0.0)
 
 
 func _pick(can_close: Callable, threat: Callable) -> Array:
 	var options: Array[Array] = _candidates.duplicate()
-	#Shuffled with the level's generator so a seed repeats the round
+	#Shuffled with the level generator so a seed repeats the round
 	for index in range(options.size() - 1, 0, -1):
 		var other := _rng.randi_range(0, index)
 		var swap := options[index]

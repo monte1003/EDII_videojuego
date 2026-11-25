@@ -1,10 +1,9 @@
 class_name GuardRole
 extends BotRole
 
-#The guard (Hoax): stands at the door of the goal the player is heading for and only leaves it to chase
-#a player that reaches a door. It does not need to see anybody, so Silenciar does not hide you from it.
+#Guard (Hoax): holds the goal door the player heads for; Silenciar does not hide you
 
-#Seconds it keeps a door before it may change to another one
+#Seconds at a door before it may change
 const POST_HOLD := 3.0
 
 var _post: StringName = &""
@@ -39,7 +38,7 @@ func pick_target(bot: ChaserBot, ctx: ChaseContext, target: ChaseTarget) -> Stri
 	return _post
 
 
-#The door the player's shortest route to the goal goes through
+#Door on the player's shortest route to the goal
 func _door_of_route(ctx: ChaseContext, from: StringName, doors: Array[StringName]) -> StringName:
 	var route := ctx.graph.shortest_path(from, ctx.goal)
 	if route.found and route.path.size() >= 2 and doors.has(route.path[route.path.size() - 2]):

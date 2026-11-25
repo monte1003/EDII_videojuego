@@ -1,8 +1,7 @@
 class_name HelpPages
 extends RefCounted
 
-#The texts of each round's help; the numbers come from the round, so they always match its real rules. The feed race, the trend
-#war and the perfect selfie keep their pages next to their own code
+#Help texts of each round, numbers from its real rules
 
 
 static func level_one(settings: Level01Settings) -> Array[Dictionary]:

@@ -1,18 +1,16 @@
 class_name ArenaBrawl
 extends RefCounted
 
-#The shoves between players, with no nodes and by player id: how long a shove rests, the grace after being struck and the shield
-#that takes one blow. Who is in front of whom is worked out from positions that the round passes in
+#Shoves between players by id with no nodes: rest, grace after a hit and a one-blow shield
 
 enum Outcome { IGNORED, BLOCKED, STRUCK }
 
-#A shove dazes: it throws the victim back about 3.9 m on flat ground (some 60 % of the blow of a car in the street) and leaves it
-#without hands for this long. Whoever shoves steps back about 0.4 m
+#A shove throws the victim about 3.9 m and dazes it; the shover steps back about 0.4 m
 const SHOVE_PUSH := 11.7
 const SHOVE_STUN := 0.6
 const SHOVE_RECOIL := 3.8
 
-#Seconds a shove rests, seconds nobody can strike the same player again, how far a shove reaches and how wide it is (cosine of half its angle)
+#Shove rest, hit grace, reach and width (cosine of half its angle)
 var shove_rest := 0.8
 var grace := 1.5
 var reach := 1.9
@@ -39,7 +37,7 @@ func can_shove(player_id: int) -> bool:
 	return _rest_left.has(player_id) and float(_rest_left[player_id]) <= 0.0
 
 
-#Starts the rest of a shove; false while the last one still rests
+#Starts a shove rest; false while the last one still rests
 func use_shove(player_id: int) -> bool:
 	if not can_shove(player_id):
 		return false
@@ -64,7 +62,7 @@ func has_shield(player_id: int) -> bool:
 	return float(_shield_left.get(player_id, 0.0)) > 0.0
 
 
-#A blow lands on a player: nothing during the grace, the shield takes it if there is one, and otherwise it counts and the grace starts
+#A blow: ignored in the grace, taken by the shield, or it counts and starts the grace
 func strike(player_id: int) -> Outcome:
 	if not _grace_left.has(player_id) or in_grace(player_id):
 		return Outcome.IGNORED
@@ -76,7 +74,7 @@ func strike(player_id: int) -> Outcome:
 	return Outcome.STRUCK
 
 
-#Who a shove hits: the closest one within reach and in front of "facing"; -1 when there is nobody. "others" is {player id: position}
+#Closest player in reach in front of "facing", or -1; "others" is {id: position}
 func pick_victim(origin: Vector3, facing: Vector3, others: Dictionary) -> int:
 	var best := -1
 	var best_distance := INF

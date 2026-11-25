@@ -1,11 +1,9 @@
 class_name Level01Tiles
 extends RefCounted
 
-#The plates of stories in Historias, with no nodes: every tile is up until a racer stands on it; then it shakes, drops and comes back a while
-#later, like a story that lasts a day. The level gives it the feet of the racers on the floor and draws what it says. In a room a tile
-#that a racer of another computer stepped on is told here (shake) and runs the same way, with its own clock
+#Historias story tiles with no nodes: stepped tiles shake, drop and come back
 
-#A racer of this computer stepped on a tile: in a room the others are told
+#A local racer stepped on a tile: in a room the others are told
 signal tile_stepped(plate: StringName, index: int)
 signal tile_shaking(plate: StringName, index: int)
 signal tile_dropped(plate: StringName, index: int)
@@ -13,7 +11,7 @@ signal tile_back(plate: StringName, index: int)
 
 enum State { UP, SHAKING, GONE }
 
-#Plate id -> Array of {"center": Vector3, "state": State, "left": seconds of its state}
+#Plate id -> [{"center", "state", "left"}]
 var tiles: Dictionary = {}
 
 
@@ -25,7 +23,7 @@ func _init() -> void:
 		tiles[plate] = list
 
 
-#Moves time on: "feet" are the feet of the racers that stand on the floor
+#Advances time with the feet of the racers on the floor
 func tick(delta: float, feet: Array[Vector3]) -> void:
 	for plate: StringName in tiles:
 		var list: Array = tiles[plate]
@@ -51,7 +49,7 @@ func tick(delta: float, feet: Array[Vector3]) -> void:
 						tile_back.emit(plate, index)
 
 
-#A tile starts to shake, if it is up and exists: stepped on here or told by another computer of the room
+#Starts shaking if up and valid: stepped here or told by another computer
 func shake(plate: StringName, index: int) -> void:
 	if not tiles.has(plate) or index < 0 or index >= (tiles[plate] as Array).size():
 		return
@@ -63,14 +61,14 @@ func shake(plate: StringName, index: int) -> void:
 	tile_shaking.emit(plate, index)
 
 
-#Whether feet at "at" stand on the tile: over its square and on its top
+#Feet over the tile square and on its top
 func holds(tile: Dictionary, at: Vector3) -> bool:
 	var centre: Vector3 = tile["center"]
 	var half := Level01Layout.tile_side() / 2.0 + Level01Traps.BODY_RADIUS * 0.5
 	return absf(at.x - centre.x) <= half and absf(at.z - centre.z) <= half and absf(at.y - centre.y) < 0.35
 
 
-#The tile under a point is put back at once (the bubble that brings a racer back lands on solid ground)
+#The tile under a point comes back at once, so bubble landings are solid
 func restore_at(at: Vector3) -> void:
 	for plate: StringName in tiles:
 		var list: Array = tiles[plate]
@@ -88,7 +86,7 @@ func state_of(plate: StringName, index: int) -> int:
 	return int((tiles[plate] as Array)[index]["state"])
 
 
-#How far along its shaking a tile is, 0 when it starts and 1 when it drops
+#Shake progress, 0 to 1
 func shake_share(plate: StringName, index: int) -> float:
 	var tile: Dictionary = (tiles[plate] as Array)[index]
 	if int(tile["state"]) != State.SHAKING:

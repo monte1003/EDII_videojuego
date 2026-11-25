@@ -1,30 +1,25 @@
 class_name FairRanking
 extends RefCounted
 
-#The ranking of the fair screen, its own and apart from the records of the game (ScoreBook): one entry per name (capitals and spaces
-#around it do not count), with its best total, character, best round, date and time and the game it came from. A name that plays again
-#only replaces its entry when it beats it. It lives in a file of the screen that survives closing it, written to a temporary file that
-#then replaces the real one (a cut in the middle never leaves it half written), with a copy beside it that is read when the file is
-#missing or broken. The order is an AVL tree like the one of the final count: total, then best round, then the oldest entry first
+#Fair ranking: one entry per name with its best total, saved safely to a file that survives closing
 
 const PATH := "user://feria_ranking.json"
 const TOP := 10
 const MAX_TOTAL := 5000
 
 var path := PATH
-#Every entry, in the order they came in: {"name", "character", "total", "best", "at", "game"}
+#Every entry in arrival order
 var entries: Array[Dictionary] = []
-#For each game recorded since the screen opened: the entry each name had before it ({} for none), so seeing the same game again (the
-#points of the last round, then the final totals) judges it against the same mark
+#Previous entry of each name per game, so seeing a game again judges it the same way
 var _before: Dictionary = {}
 
 
-#The key of a name: the same person written in capitals or with spaces around is one name
+#Case and surrounding spaces do not matter
 static func key_of(shown: String) -> String:
 	return shown.strip_edges().to_upper()
 
 
-#Reads the file, or its copy when the file is missing or broken; two entries of one name (an older file) keep the better one
+#Reads the file or its copy; duplicate names keep the better entry
 func load_file() -> void:
 	entries.clear()
 	var raw := _read(path)
@@ -41,7 +36,7 @@ func load_file() -> void:
 			entries[index] = entry
 
 
-#Writes the whole ranking to a temporary file, moves it over the real one and keeps a copy of it
+#Writes a temporary file, moves it over the real one and keeps a copy
 func save() -> bool:
 	var temporary := path + ".tmp"
 	var file := FileAccess.open(temporary, FileAccess.WRITE)
@@ -56,9 +51,7 @@ func save() -> bool:
 	return true
 
 
-#The players of one game ({"name", "character", "total", "best"}). Each name keeps its entry unless this game beats it; two players of the
-#game with one name count once, the better. Returns one result per player: {"entry" (the one in the ranking now), "status" ("new",
-#"better" or "kept"), "total" (of this game), "before" (the mark it had to beat, -1 for none)}
+#Records one game; each name keeps its entry unless beaten; returns status per player
 func record(game: String, players: Array[Dictionary]) -> Array[Dictionary]:
 	if not _before.has(game):
 		_before[game] = {}
@@ -83,7 +76,7 @@ func record(game: String, players: Array[Dictionary]) -> Array[Dictionary]:
 			_put(key, made)
 			result["status"] = "new" if before.is_empty() else "better"
 		else:
-			#Not better: the mark stays (and comes back, if this same game had put a total that the final count lowered)
+			#Not better: the old mark stays
 			if not judged.has(key):
 				_put(key, before)
 			result["status"] = "kept"
@@ -94,7 +87,7 @@ func record(game: String, players: Array[Dictionary]) -> Array[Dictionary]:
 	return results
 
 
-#Every entry from the best to the worst: the AVL tree keyed by total, best round and the place in the list (the older wins a full tie)
+#Best to worst via the AVL tree by total, best round and list place
 func ordered() -> Array[Dictionary]:
 	var tree := AVLTree.new()
 	for index in entries.size():
@@ -105,12 +98,11 @@ func ordered() -> Array[Dictionary]:
 	return order
 
 
-#Place of an entry in the ranking, from 1
 func place_of(entry: Dictionary) -> int:
 	return ordered().find(entry) + 1
 
 
-#Points an entry was short of the top ten (0 when it is in)
+#Points short of the top ten, 0 when inside
 func short_of_top(entry: Dictionary) -> int:
 	var order := ordered()
 	if order.find(entry) < TOP or order.size() <= TOP:
@@ -118,7 +110,7 @@ func short_of_top(entry: Dictionary) -> int:
 	return maxi(int(order[TOP - 1]["total"]) - int(entry["total"]) + 1, 1)
 
 
-#Takes a name out of the ranking (the staff, for a name that should not be there); false when it was not in it
+#Staff removes a name; false when missing
 func remove(shown: String) -> bool:
 	var index := _index_of(key_of(shown))
 	if index < 0:
@@ -144,7 +136,7 @@ func _index_of(shown: String) -> int:
 	return -1
 
 
-#Puts the entry of a name in place of the one it had (at the end, as the newest), or takes it out when "entry" is empty
+#Replaces a name's entry, or removes it when "entry" is empty
 func _put(key: String, entry: Dictionary) -> void:
 	var index := _index_of(key)
 	if index >= 0:
@@ -153,7 +145,7 @@ func _put(key: String, entry: Dictionary) -> void:
 		entries.append(entry)
 
 
-#The entries of a file, or nothing when it is missing or broken
+#Entries of a file, or nothing if missing or broken
 func _read(file_path: String) -> Array:
 	var file := FileAccess.open(file_path, FileAccess.READ)
 	if file == null:
@@ -164,7 +156,7 @@ func _read(file_path: String) -> Array:
 	return (parsed as Dictionary)["entries"]
 
 
-#An entry as it may be kept: a name, a known character and numbers in range; anything else in the file is left out
+#Keeps only valid entries: name, known character and numbers in range
 static func _clean(raw: Variant) -> Dictionary:
 	if not raw is Dictionary:
 		return {}

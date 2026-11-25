@@ -1,9 +1,9 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
-//The colours of a hero's texture in another tone: only the coloured pixels turn, so the white mask, the black boots and the greys stay
+//Hero texture in another tone: only coloured pixels change
 uniform sampler2D albedo_tex : source_color, filter_linear;
-//Turns of the colour wheel (0 to 1), and how much colour and light the coloured parts keep
+//Hue turn (0 to 1) and how much colour and light remain
 uniform float hue_shift = 0.0;
 uniform float saturation = 1.0;
 uniform float value = 1.0;
