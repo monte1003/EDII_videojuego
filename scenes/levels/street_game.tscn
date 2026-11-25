@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/levels/street_world.gd" id="4_world"]
 [ext_resource type="Script" path="res://scripts/levels/street_hud.gd" id="5_hud"]
 [ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="6_help"]
+[ext_resource type="Script" uid="uid://da4k3r5hjcffh" path="res://scripts/levels/level_preview.gd" id="20_preview"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.46, 0.74, 0.98, 1)
@@ -60,3 +61,7 @@ script = ExtResource("5_hud")
 
 [node name="Help" type="CanvasLayer" parent="."]
 script = ExtResource("6_help")
+
+[node name="EditorPreview" type="Node3D" parent="."]
+script = ExtResource("20_preview")
+map = 2

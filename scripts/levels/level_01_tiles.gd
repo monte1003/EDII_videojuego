@@ -2,8 +2,11 @@ class_name Level01Tiles
 extends RefCounted
 
 #The plates of stories in Historias, with no nodes: every tile is up until a racer stands on it; then it shakes, drops and comes back a while
-#later, like a story that lasts a day. The level gives it the feet of the racers on the floor and draws what it says
+#later, like a story that lasts a day. The level gives it the feet of the racers on the floor and draws what it says. In a room a tile
+#that a racer of another computer stepped on is told here (shake) and runs the same way, with its own clock
 
+#A racer of this computer stepped on a tile: in a room the others are told
+signal tile_stepped(plate: StringName, index: int)
 signal tile_shaking(plate: StringName, index: int)
 signal tile_dropped(plate: StringName, index: int)
 signal tile_back(plate: StringName, index: int)
@@ -32,9 +35,8 @@ func tick(delta: float, feet: Array[Vector3]) -> void:
 				State.UP:
 					for at in feet:
 						if holds(tile, at):
-							tile["state"] = State.SHAKING
-							tile["left"] = Level01Layout.TILE_SHAKE
-							tile_shaking.emit(plate, index)
+							shake(plate, index)
+							tile_stepped.emit(plate, index)
 							break
 				State.SHAKING:
 					tile["left"] = float(tile["left"]) - delta
@@ -47,6 +49,18 @@ func tick(delta: float, feet: Array[Vector3]) -> void:
 					if float(tile["left"]) <= 0.0:
 						tile["state"] = State.UP
 						tile_back.emit(plate, index)
+
+
+#A tile starts to shake, if it is up and exists: stepped on here or told by another computer of the room
+func shake(plate: StringName, index: int) -> void:
+	if not tiles.has(plate) or index < 0 or index >= (tiles[plate] as Array).size():
+		return
+	var tile: Dictionary = (tiles[plate] as Array)[index]
+	if int(tile["state"]) != State.UP:
+		return
+	tile["state"] = State.SHAKING
+	tile["left"] = Level01Layout.TILE_SHAKE
+	tile_shaking.emit(plate, index)
 
 
 #Whether feet at "at" stand on the tile: over its square and on its top

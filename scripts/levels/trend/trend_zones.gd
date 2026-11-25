@@ -16,7 +16,8 @@ const SHUT_COLOR := Color("ff4d6d")
 const OPEN_COLOR := Color("4cf2b0")
 const WARN_COLOR := Color("ffd23f")
 const LIKE_COLOR := Color("ff5fa2")
-const LIKE_RADIUS := 0.75
+#How tall a falling like is: the thumb of a like, as on the icon of the networks
+const LIKE_HEIGHT := 1.9
 const LIKE_POOL := 10
 const ISLET_THICKNESS := 0.6
 #The sea of memes: our own memes, small, on the platforms (round like a story on the round ones, with round corners on the others), the
@@ -554,22 +555,14 @@ func _build_maze() -> void:
 
 #A few likes are enough: each one falls, lands and goes before the pool runs out
 func _build_likes() -> void:
-	var paint := PartyKit.paint(LIKE_COLOR, 0.4, 0.4)
 	var mark := PartyKit.paint(LIKE_COLOR, 1.4, 0.4)
-	var ball := SphereMesh.new()
-	ball.radius = LIKE_RADIUS
-	ball.height = LIKE_RADIUS * 2.0
-	ball.radial_segments = 16
-	ball.rings = 8
 	var ring := TorusMesh.new()
 	ring.inner_radius = TrendObstacles.LIKE_REACH - 0.18
 	ring.outer_radius = TrendObstacles.LIKE_REACH
 	ring.rings = 24
 	ring.ring_segments = 6
 	for index in LIKE_POOL:
-		var body := MeshInstance3D.new()
-		body.mesh = ball
-		body.material_override = paint
+		var body := PropKit.make_tall(&"like_hand", LIKE_HEIGHT, Color.WHITE, false)
 		body.hide()
 		add_child(body)
 		var target := MeshInstance3D.new()
@@ -585,7 +578,7 @@ func _build_likes() -> void:
 func _place_likes(time: float) -> void:
 	var falling := obstacles.likes(time)
 	for index in _likes.size():
-		var body: MeshInstance3D = _likes[index]["body"]
+		var body: Node3D = _likes[index]["body"]
 		var mark: MeshInstance3D = _likes[index]["mark"]
 		if index >= falling.size():
 			body.hide()
@@ -598,13 +591,15 @@ func _place_likes(time: float) -> void:
 		mark.position = at + Vector3(0.0, 0.05, 0.0)
 		mark.scale = Vector3.ONE * lerpf(0.4, 1.0, clampf(1.0 - left / TrendObstacles.LIKE_WARN, 0.0, 1.0))
 		body.visible = left < TrendObstacles.LIKE_FALL
+		#It turns while it falls, each one its own way, and lands facing the middle of the tower
+		body.rotation.y = atan2(layout.tower_center().x - at.x, layout.tower_center().z - at.z) + maxf(left, 0.0) * (4.0 if index % 2 == 0 else -4.0)
 		if left > 0.0:
 			var share := left / TrendObstacles.LIKE_FALL
-			body.position = at + Vector3(0.0, LIKE_RADIUS + TrendObstacles.LIKE_DROP * share * share, 0.0)
+			body.position = at + Vector3(0.0, TrendObstacles.LIKE_DROP * share * share, 0.0)
 			body.scale = Vector3.ONE
 		else:
 			var gone := clampf(-left / TrendObstacles.LIKE_GONE, 0.0, 1.0)
-			body.position = at + Vector3(0.0, LIKE_RADIUS * (1.0 - 0.5 * gone), 0.0)
+			body.position = at
 			body.scale = Vector3(1.0 + 0.4 * gone, 1.0 - 0.6 * gone, 1.0 + 0.4 * gone) * (1.0 - gone * 0.8)
 
 

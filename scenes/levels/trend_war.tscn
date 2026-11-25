@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="6_help"]
 [ext_resource type="Script" path="res://scripts/levels/level_input.gd" id="7_input"]
 [ext_resource type="Resource" path="res://resources/levels/trend_war.tres" id="8_settings"]
+[ext_resource type="Script" uid="uid://da4k3r5hjcffh" path="res://scripts/levels/level_preview.gd" id="20_preview"]
 
 [node name="TrendWar" type="Node3D"]
 script = ExtResource("1_script")
@@ -29,3 +30,7 @@ script = ExtResource("5_hud")
 
 [node name="Help" type="CanvasLayer" parent="."]
 script = ExtResource("6_help")
+
+[node name="EditorPreview" type="Node3D" parent="."]
+script = ExtResource("20_preview")
+map = 3

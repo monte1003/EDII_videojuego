@@ -12,6 +12,7 @@
 [ext_resource type="Texture2D" path="res://assets/social_icons/me_gusta.png" id="10_like"]
 [ext_resource type="Texture2D" path="res://assets/social_icons/historia.png" id="11_story"]
 [ext_resource type="Texture2D" path="res://assets/social_icons/directo.png" id="12_live"]
+[ext_resource type="Script" uid="uid://da4k3r5hjcffh" path="res://scripts/levels/level_preview.gd" id="20_preview"]
 
 [node name="SocialDrop" type="Node3D"]
 script = ExtResource("1_script")
@@ -30,3 +31,7 @@ script = ExtResource("5_hud")
 
 [node name="Help" type="CanvasLayer" parent="."]
 script = ExtResource("6_help")
+
+[node name="EditorPreview" type="Node3D" parent="."]
+script = ExtResource("20_preview")
+map = 1

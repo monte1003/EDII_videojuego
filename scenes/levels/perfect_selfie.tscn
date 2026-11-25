@@ -10,6 +10,7 @@
 [ext_resource type="Resource" path="res://resources/levels/perfect_selfie.tres" id="8_settings"]
 [ext_resource type="Resource" path="res://resources/bots/troll.tres" id="9_troll"]
 [ext_resource type="Script" path="res://scripts/bots/bot_appearance.gd" id="10_appearance"]
+[ext_resource type="Script" uid="uid://da4k3r5hjcffh" path="res://scripts/levels/level_preview.gd" id="20_preview"]
 
 [node name="PerfectSelfie" type="Node3D"]
 script = ExtResource("1_script")
@@ -32,3 +33,7 @@ script = ExtResource("5_hud")
 
 [node name="Help" type="CanvasLayer" parent="."]
 script = ExtResource("6_help")
+
+[node name="EditorPreview" type="Node3D" parent="."]
+script = ExtResource("20_preview")
+map = 4

@@ -50,6 +50,11 @@ const GLASS_BIT := 2
 const POND_HALF := Vector2(10.0, 8.0)
 const ISLE_TOP := 1.6
 const POND_WALL := 3.5
+#The sea of memes: how far the side columns are from the middle, the radius of a story, the side of a post and the size of a bar
+const COLUMN := 5.0
+const STORY := 1.6
+const POST := 3.0
+const BAR := Vector2(2.0, 5.0)
 #The maze: cells, height of its walls and screens (too high to jump) and how thick they are
 const CELL := 4.5
 const MAZE_SIZE := 4
@@ -58,6 +63,9 @@ const SCREEN_THICKNESS := 0.5
 #The tower: radius and height of each of its three floors over the ground
 const TOWER_RADII: Array[float] = [9.5, 6.2, 3.2]
 const TOWER_TOPS: Array[float] = [2.0, 4.0, 6.0]
+#How far from the middle the trampolines of the ground and of the two floors stand: inside the rail of their floor and clear of the wall
+#of the next one
+const PAD_RADII: Array[float] = [12.2, 7.9, 4.7]
 
 #One entry per zone: {"center": Vector3, "entry": StringName, "span": float}
 var zones: Array[Dictionary] = []
@@ -401,26 +409,28 @@ func _build_islands() -> void:
 	link(gate, dock)
 	for v: float in [-6.0, -3.0, 0.0, 3.0, 6.0]:
 		docks.append(_at3(zone, -11.2, v, ISLE_TOP))
-	var lane := 4.8
-	for u: float in [-6.5, -1.5, 3.5, 8.0]:
-		_islet(zone, {"kind": &"sink", "at": _at3(zone, u, -lane, ISLE_TOP), "round": true, "size": Vector2(1.7, 1.7)})
-	_islet(zone, {"kind": &"slide", "at": _at3(zone, -7.0, 0.0, ISLE_TOP), "to": _at3(zone, -4.0, 0.0, ISLE_TOP), "round": false,
-		"size": Vector2(3.4, 3.4), "period": 5.0, "phase": 0.0})
-	_islet(zone, {"kind": &"turn", "at": _at3(zone, 1.0, 0.0, ISLE_TOP), "round": false, "size": Vector2(2.0, 5.4), "spin": 0.65})
-	_islet(zone, {"kind": &"slide", "at": _at3(zone, 5.8, 0.0, ISLE_TOP), "to": _at3(zone, 8.2, 0.0, ISLE_TOP), "round": false,
-		"size": Vector2(3.4, 3.4), "period": 4.4, "phase": 1.3})
-	_islet(zone, {"kind": &"turn", "at": _at3(zone, -5.5, lane, ISLE_TOP), "round": false, "size": Vector2(2.0, 5.4), "spin": -0.6})
-	_islet(zone, {"kind": &"sink", "at": _at3(zone, 0.5, lane, ISLE_TOP), "round": true, "size": Vector2(1.7, 1.7)})
-	_islet(zone, {"kind": &"turn", "at": _at3(zone, 6.0, lane, ISLE_TOP), "round": false, "size": Vector2(2.0, 5.4), "spin": 0.7})
+	#Laid out like a grid of a feed, the same on both sides: a row of three stories in front of the dock, then on each side a bar that
+	#turns and another story, and down the middle a platform that slides, a bar that turns and, at the back, one that swipes from side to
+	#side. Every hop between them is short and nothing runs into anything
+	for v: float in [-COLUMN, 0.0, COLUMN]:
+		_islet(zone, {"kind": &"sink", "at": _at3(zone, -6.5, v, ISLE_TOP), "round": true, "size": Vector2(STORY, STORY)})
+	for v: float in [-COLUMN, COLUMN]:
+		_islet(zone, {"kind": &"turn", "at": _at3(zone, -1.0, v, ISLE_TOP), "round": false, "size": BAR, "spin": 0.6 * signf(v)})
+		_islet(zone, {"kind": &"sink", "at": _at3(zone, 4.5, v, ISLE_TOP), "round": true, "size": Vector2(STORY, STORY)})
+	_islet(zone, {"kind": &"slide", "at": _at3(zone, -2.8, 0.0, ISLE_TOP), "to": _at3(zone, -0.9, 0.0, ISLE_TOP), "round": false,
+		"size": Vector2(POST, POST), "period": 5.0, "phase": 0.0})
+	_islet(zone, {"kind": &"turn", "at": _at3(zone, 3.8, 0.0, ISLE_TOP), "round": false, "size": BAR, "spin": 0.65})
+	_islet(zone, {"kind": &"slide", "at": _at3(zone, 8.3, -4.5, ISLE_TOP), "to": _at3(zone, 8.3, 4.5, ISLE_TOP), "round": false,
+		"size": Vector2(POST, POST), "period": 6.0, "phase": 1.3})
 	#A bubble over every platform: over the middle of the way of the ones that slide, so the platform passes under it
 	for islet in islets:
 		var at: Vector3 = islet["at"]
 		if islet["kind"] == &"slide":
 			at = (at + (islet["to"] as Vector3)) / 2.0
 		_slot(zone, at + Vector3(0.0, BUBBLE_LIFT, 0.0), ISLE_TOP)
-	#And between the platforms that sink, reached from the edge of either
-	for u: float in [-4.0, 1.0, 5.75]:
-		_slot(zone, _at3(zone, u, -lane, ISLE_TOP + 1.4), ISLE_TOP)
+	#And between the stories of the first row, reached from the edge of either
+	for v: float in [-2.4, 2.4]:
+		_slot(zone, _at3(zone, -6.5, v, ISLE_TOP + 1.4), ISLE_TOP)
 
 
 func _islet(zone: int, islet: Dictionary) -> void:
@@ -516,17 +526,17 @@ func _build_tower() -> void:
 	link(gate, ground_ring[225.0])
 	for index in order.size() - 1:
 		link(ground_ring[order[index]], ground_ring[order[index + 1]])
-	var first := _place_at(zone, "p0", _polar(zone, 12.2, 180.0, GROUND), 0.9)
+	var first := _place_at(zone, "p0", _polar(zone, PAD_RADII[0], 180.0, GROUND), 0.9)
 	link(gate, first)
 	_pad(first, _polar(zone, 7.4, 180.0, TOWER_TOPS[0]), rings[0][180.0], 1.1)
-	#Three more past the ground ring, behind the tower and on both sides, for whoever comes or falls there
-	var back := _place_at(zone, "p0b", _polar(zone, 13.2, 0.0, GROUND), 0.9)
+	#Three more on the ground ring, behind the tower and on both sides, for whoever comes or falls there
+	var back := _place_at(zone, "p0b", _polar(zone, PAD_RADII[0], 0.0, GROUND), 0.9)
 	link(ground_ring[0.0], back)
-	_pad(back, _polar(zone, 7.4, 0.0, TOWER_TOPS[0]), rings[0][0.0], 1.25)
+	_pad(back, _polar(zone, 7.4, 0.0, TOWER_TOPS[0]), rings[0][0.0], 1.1)
 	for degrees: float in [90.0, 270.0]:
-		var side := _place_at(zone, "p0_%d" % degrees, _polar(zone, 13.2, degrees, GROUND), 0.9)
+		var side := _place_at(zone, "p0_%d" % degrees, _polar(zone, PAD_RADII[0], degrees, GROUND), 0.9)
 		link(ground_ring[degrees], side)
-		_pad(side, _polar(zone, 7.4, degrees, TOWER_TOPS[0]), rings[0][degrees], 1.25)
+		_pad(side, _polar(zone, 7.4, degrees, TOWER_TOPS[0]), rings[0][degrees], 1.1)
 	for level in 2:
 		for step in 8:
 			var degrees := 45.0 * step
@@ -538,40 +548,35 @@ func _build_tower() -> void:
 				link(rings[level][degrees], rings[0][degrees], DROP)
 	for degrees: float in [0.0, 90.0, 180.0, 270.0]:
 		link(top, rings[1][degrees], DROP)
-	#Four trampolines on each upper floor, one per corner, on its outer edge and a short walk from where one under it lands: whoever
-	#climbs goes round the tower whichever side it started from
-	for degrees: float in [40.0, 140.0, 220.0, 320.0]:
-		var near := _nearest_step(degrees)
-		var pad := _place_at(zone, "p1_%d" % degrees, _polar(zone, 8.75, degrees, TOWER_TOPS[0]), 0.9)
-		link(rings[0][near], pad)
-		_pad(pad, _polar(zone, 4.4, degrees, TOWER_TOPS[1]), rings[1][near], 1.1)
-	for degrees: float in [20.0, 100.0, 260.0, 340.0]:
-		var pad := _place_at(zone, "p2_%d" % degrees, _polar(zone, 5.6, degrees, TOWER_TOPS[1]), 0.9)
-		link(rings[1][_nearest_step(degrees)], pad)
+	#Four trampolines on each upper floor, clear of its rail and of the wall of the next floor, an eighth of a turn from where the ones
+	#under it land: the ground throws onto the sides, the first floor from its corners and the second from its sides again, so whoever
+	#climbs goes round the tower whichever side it started from and never lands on a trampoline
+	for degrees: float in [45.0, 135.0, 225.0, 315.0]:
+		var pad := _place_at(zone, "p1_%d" % degrees, _polar(zone, PAD_RADII[1], degrees, TOWER_TOPS[0]), 0.9)
+		link(rings[0][degrees], pad)
+		_pad(pad, _polar(zone, 4.4, degrees, TOWER_TOPS[1]), rings[1][degrees], 1.1)
+	for degrees: float in [0.0, 90.0, 180.0, 270.0]:
+		var pad := _place_at(zone, "p2_%d" % degrees, _polar(zone, PAD_RADII[2], degrees, TOWER_TOPS[1]), 0.9)
+		link(rings[1][degrees], pad)
 		_pad(pad, _polar(zone, 1.2, degrees, TOWER_TOPS[2]), top, 1.1)
-	#The likes fall on each floor in turn, around it
+	#The likes fall on each floor in turn, around it and away from the trampolines: on the second floor, where the ones of the first land
 	like_spots = [[], [], []]
 	for step in 8:
 		like_spots[0].append(_polar(zone, 7.9, 22.5 + 45.0 * step, TOWER_TOPS[0]))
-	for step in 6:
-		like_spots[1].append(_polar(zone, 4.7, 60.0 * step, TOWER_TOPS[1]))
+	for step in 4:
+		like_spots[1].append(_polar(zone, 4.7, 45.0 + 90.0 * step, TOWER_TOPS[1]))
 	for step in 3:
 		like_spots[2].append(_polar(zone, 1.6, 30.0 + 120.0 * step, TOWER_TOPS[2]))
 	for degrees: float in [40.0, 110.0, 250.0, 320.0]:
 		_slot(zone, _polar(zone, 11.4, degrees, BUBBLE_LIFT), GROUND)
-	for degrees: float in [20.0, 60.0, 115.0, 245.0, 300.0, 340.0]:
+	for degrees: float in [20.0, 70.0, 115.0, 245.0, 290.0, 340.0]:
 		_slot(zone, _polar(zone, 7.9, degrees, TOWER_TOPS[0] + BUBBLE_LIFT), TOWER_TOPS[0])
-	for degrees: float in [60.0, 180.0, 300.0]:
+	for degrees: float in [45.0, 135.0, 225.0, 315.0]:
 		_slot(zone, _polar(zone, 4.8, degrees, TOWER_TOPS[1] + BUBBLE_LIFT), TOWER_TOPS[1])
 	_slot(zone, _polar(zone, 0.0, 0.0, TOWER_TOPS[2] + BUBBLE_LIFT), TOWER_TOPS[2])
 
 
 #A trampoline that throws along an arc onto the floor above, in "seconds" of flight
-#The step of 45 degrees of a ring of the tower closest to "degrees"
-func _nearest_step(degrees: float) -> float:
-	return fposmod(45.0 * roundf(degrees / 45.0), 360.0)
-
-
 func _pad(place: StringName, to: Vector3, landing: StringName, seconds: float) -> void:
 	pads.append({"at": position_of(place), "to": to, "time": seconds, "from": 0})
 	link(place, landing, LAUNCH, 0.0, seconds + 0.3)

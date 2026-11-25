@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/levels/level_help.gd" id="13_help"]
 [ext_resource type="Resource" path="res://resources/levels/level_01.tres" id="15_settings"]
 [ext_resource type="Script" path="res://scripts/levels/level_input.gd" id="14_input"]
+[ext_resource type="Script" uid="uid://da4k3r5hjcffh" path="res://scripts/levels/level_preview.gd" id="20_preview"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.14, 0.4, 1, 1)
@@ -77,3 +78,6 @@ script = ExtResource("7_hud")
 script = ExtResource("13_help")
 
 [node name="PauseMenu" parent="." instance=ExtResource("3_pause")]
+
+[node name="EditorPreview" type="Node3D" parent="."]
+script = ExtResource("20_preview")

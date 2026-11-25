@@ -767,6 +767,26 @@ func _check_tiles() -> void:
 	_expect(Level01Layout.TILE_PLATES.size() == 2 and centres.size() == Level01Layout.TILE_GRID * Level01Layout.TILE_GRID, "dos plataformas de historias de 3 x 3 baldosas")
 	_expect(shaking and dropped and back, "la baldosa pisada tiembla, cae después de su temblor y vuelve después de un rato; las demás no se mueven: %s" % [states])
 	_expect(restored and tiles.state_of(plate, 4) == Level01Tiles.State.UP, "la burbuja devuelve la baldosa donde aterriza, y nadie la sacude desde el aire")
+	#In a room: a tile that a racer of another computer stepped on shakes, drops and comes back here too, without being told back to the
+	#others; told again while it shakes, it is not started over; a tile that does not exist is ignored
+	var shared := Level01Tiles.new()
+	var told: Array[String] = []
+	var seen: Array[String] = []
+	shared.tile_stepped.connect(func(_plate: StringName, index: int) -> void: told.append("pisada %d" % index))
+	shared.tile_shaking.connect(func(_plate: StringName, index: int) -> void: seen.append("tiembla %d" % index))
+	shared.tile_dropped.connect(func(_plate: StringName, index: int) -> void: seen.append("cae %d" % index))
+	shared.tile_back.connect(func(_plate: StringName, index: int) -> void: seen.append("vuelve %d" % index))
+	shared.shake(plate, 2)
+	shared.tick(0.3, none)
+	shared.shake(plate, 2)
+	shared.shake(plate, 99)
+	shared.shake(&"nada", 0)
+	for step in int((Level01Layout.TILE_SHAKE + Level01Layout.TILE_GONE) / 0.1) + 4:
+		shared.tick(0.1, none)
+	var feet: Array[Vector3] = [centres[2]]
+	shared.tick(0.1, feet)
+	_expect(", ".join(seen) == "tiembla 2, cae 2, vuelve 2, tiembla 2" and told == ["pisada 2"],
+		"en red, la baldosa que pisó otro tiembla, cae y vuelve aquí sin avisarse de vuelta, y solo la que se pisa aquí se avisa: %s / %s" % [seen, told])
 
 
 #The islands that already have something to do

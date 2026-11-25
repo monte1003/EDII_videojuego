@@ -137,8 +137,10 @@ func _ready() -> void:
 		_tell_feed(events, 0)
 		if extra_events != null:
 			_tell_feed(extra_events, 1)
-	elif _feed_from_server:
+	#The tiles of the stories that somebody steps on drop for everybody
+	if _networked_round():
 		GameSession.net.round_event.connect(_on_round_event)
+		tiles.tile_stepped.connect(_on_tile_stepped)
 
 	_debug = Level01Debug.new()
 	add_child(_debug)
@@ -856,9 +858,31 @@ func _send_feed(which: int, change: String, a: StringName, b: StringName, second
 	GameSession.net.send_round_event({"k": "feed", "w": which, "e": change, "a": String(a), "b": String(b), "s": snappedf(seconds, 0.01)})
 
 
-#A change of a feed that the server made, taken here as it is
-func _on_round_event(_from: int, message: Dictionary) -> void:
-	if str(message.get("k", "")) != "feed" or int(message.get("r", -1)) != GameSession.round_index:
+#A racer of this computer stepped on a tile of the stories: everybody else drops it too (a player tells the server, the server tells all)
+func _on_tile_stepped(plate: StringName, index: int) -> void:
+	GameSession.net.send_round_event({"k": "tile", "p": String(plate), "i": index})
+
+
+#A tile that a racer of another computer stepped on: it shakes and drops here too and comes back with its own clock. The server passes
+#on what a player tells it
+func _take_tile(from: int, message: Dictionary) -> void:
+	var plate := StringName(str(message.get("p", "")))
+	var index := int(message.get("i", -1))
+	if not Level01Layout.TILE_PLATES.has(plate):
+		return
+	tiles.shake(plate, index)
+	if GameSession.net.is_host() and from != 0:
+		GameSession.net.send_round_event({"k": "tile", "p": String(plate), "i": index})
+
+
+#A change of a feed that the server made, taken here as it is; a tile of the stories somebody stepped on
+func _on_round_event(from: int, message: Dictionary) -> void:
+	if int(message.get("r", -1)) != GameSession.round_index:
+		return
+	if str(message.get("k", "")) == "tile":
+		_take_tile(from, message)
+		return
+	if str(message.get("k", "")) != "feed" or from != 0:
 		return
 	var a := StringName(str(message.get("a", "")))
 	var b := StringName(str(message.get("b", "")))
