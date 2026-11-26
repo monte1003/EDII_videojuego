@@ -51,11 +51,11 @@ const MEDAL_NAMES: Array[String] = ["Sin medalla", "Bronce", "Plata", "Oro", "Di
 @export var selfie_center := 20
 @export var selfie_pose := 60
 @export var selfie_perfect := 20
-#Photo value by how many are in it (1, 2, 3, 4 or more)
-@export var selfie_crowd: Array[float] = [1.5, 1.0, 0.8, 0.7]
+#Photo value by how many are in it (1, 2, 3, 4+): 6 perfect and 1 inside give Diamond
+@export var selfie_crowd: Array[float] = [1.3, 1.2, 1.15, 1.15]
 @export var selfie_photos := 8
-#Followers worth 1000 points and the curve up to them
-@export var selfie_best := 1440.0
+#Followers worth 1000 points and the curve up to them: one follower is one point
+@export var selfie_best := 1000.0
 @export var selfie_gamma := 1.0
 
 

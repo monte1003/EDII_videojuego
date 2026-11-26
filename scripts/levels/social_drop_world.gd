@@ -64,6 +64,8 @@ const SCREEN_ACCENTS: Array[Color] = [PartyKit.PINK, PartyKit.CYAN, PartyKit.YEL
 const SCREEN_BULB_SPACING := 1.0
 const FRAME_MARGIN := 0.55
 const FRAME_BULB_SPACING := 1.3
+const BUBBLE_SHADER: Shader = preload("res://assets/shaders/bubble.gdshader")
+const BUBBLE_RADIUS := 0.95
 class Tile:
 	var body: StaticBody3D
 	var collider: CollisionShape3D
@@ -152,6 +154,45 @@ func cell_position(icon: int, from := Vector3.ZERO) -> Vector3:
 			best_distance = distance
 			best = tile.body.position + Vector3(0.0, TILE_THICKNESS / 2.0, 0.0)
 	return best
+
+
+#Whether a standing card with its collider on is under a point
+func solid_at(at: Vector3) -> bool:
+	var half := TILE_SIZE / 2.0
+	for tile in _tiles:
+		if absf(at.x - tile.body.position.x) <= half and absf(at.z - tile.body.position.z) <= half:
+			return not tile.dropped and not tile.collider.disabled
+	return false
+
+
+#Rescue bubble that swells in around a body, like the level 1 ride bubble
+func rescue_bubble() -> Node3D:
+	var ball := SphereMesh.new()
+	ball.radius = BUBBLE_RADIUS
+	ball.height = BUBBLE_RADIUS * 2.0
+	ball.radial_segments = 24
+	ball.rings = 12
+	var shell := ShaderMaterial.new()
+	shell.shader = BUBBLE_SHADER
+	shell.set_shader_parameter("tint", Color("bfe9ff"))
+	shell.set_shader_parameter("glow", 1.3)
+	var bubble := MeshInstance3D.new()
+	bubble.mesh = ball
+	bubble.material_override = shell
+	bubble.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bubble.position = Vector3(0.0, 0.85, 0.0)
+	bubble.scale = Vector3.ONE * 0.2
+	bubble.create_tween().tween_property(bubble, "scale", Vector3.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	return bubble
+
+
+#Pop with confetti and a plop
+func pop_bubble(bubble: Node3D) -> void:
+	if not is_instance_valid(bubble):
+		return
+	ImpactFx.confetti(self, bubble.global_position, 24, 55.0, 4.0)
+	SynthSound.play(self, SynthSound.tone(520.0, 0.18, 900.0, 0.5), -9.0)
+	bubble.queue_free()
 
 
 #Icon of the card under a point, -1 for none

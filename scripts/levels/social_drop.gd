@@ -69,7 +69,14 @@ var _drops_survived := 0
 #One spare life: the first fall returns to a safe card at a time cost
 const SPARE_LIVES := 1
 const REVIVE_COST := 10.0
+#The rescue bubble holds its rider this high over its start spot until the next memory
+const RESCUE_LIFT := 3.0
 var _spares_left := SPARE_LIVES
+var _bubble: Node3D
+#The bubble waits for a memory that starts after the fall
+var _await_memory := false
+#Bubbles drawn around remote players seen held over the board
+var _puppet_bubbles: Dictionary = {}
 var _penalty := 0.0
 var _missed_drop := false
 var _reviving := false
@@ -155,6 +162,7 @@ func _physics_process(delta: float) -> void:
 			if _phase_timer <= 0.0:
 				_start_memorize()
 		Phase.MEMORIZE:
+			_release_bubble()
 			_update_memorize()
 		Phase.REACT:
 			_update_react()
@@ -173,6 +181,7 @@ func _check_falls() -> void:
 		#A remote puppet only hides while under the board
 		if player.remote:
 			player.visible = player.global_position.y >= fall_y
+			_show_puppet_bubble(player, player.global_position.y > RESCUE_LIFT - 0.8)
 			continue
 		if _fallen.has(player.player_id) or player.global_position.y >= fall_y:
 			continue
@@ -191,23 +200,49 @@ func _check_falls() -> void:
 		player.hide()
 
 
-#Spare life: iris, back on a target card or the start, iris opens
+#Spare life: iris, then a bubble holds the player over its start spot, safe from the drop
 func _revive(player: Player) -> void:
 	_spares_left -= 1
 	_reviving = true
 	_penalty += REVIVE_COST
 	_missed_drop = true
+	_await_memory = true
 	iris.close(0.22)
 	var back := create_tween()
 	back.tween_interval(0.24)
 	back.tween_callback(func() -> void:
 		var spots := _world.spawn_points()
-		var at: Vector3 = _world.cell_position(_chosen, player.global_position) if _chosen >= 0 else spots[0]
-		player.global_position = at + Vector3(0.0, 0.6, 0.0)
+		player.global_position = spots[maxi(_players.find(player), 0) % spots.size()] + Vector3(0.0, RESCUE_LIFT, 0.0)
 		player.clear_motion()
+		player.carried = true
+		_bubble = _world.rescue_bubble()
+		player.add_child(_bubble)
 		_reviving = false
 		iris.open(0.45, 0.1)
 		_world.screen_text("Última vida", Palette.CORAL))
+
+
+#The bubble pops once a new memory starts over a standing card, so the whole round is ahead
+func _release_bubble(force := false) -> void:
+	if _bubble == null or (not force and (_await_memory or not _world.solid_at(_local.global_position))):
+		return
+	_world.pop_bubble(_bubble)
+	_bubble = null
+	_local.carried = false
+	_local.clear_motion()
+
+
+#Remote players held over the board get their bubble here too
+func _show_puppet_bubble(player: Player, held: bool) -> void:
+	if held == _puppet_bubbles.has(player.player_id):
+		return
+	if held:
+		var bubble := _world.rescue_bubble()
+		player.add_child(bubble)
+		_puppet_bubbles[player.player_id] = bubble
+	else:
+		_world.pop_bubble(_puppet_bubbles[player.player_id])
+		_puppet_bubbles.erase(player.player_id)
 
 
 func _go() -> void:
@@ -221,6 +256,7 @@ func _go() -> void:
 #Deal the stage, show the icons and count down
 func _start_memorize() -> void:
 	phase = Phase.MEMORIZE
+	_await_memory = false
 	_memory_total = _memorize_time(elapsed)
 	_phase_timer = _memory_total
 	_countdown_shown = 0
@@ -348,6 +384,7 @@ func _pose_shown() -> bool:
 func _finish(victory: bool, title: String, message: String) -> void:
 	if phase == Phase.ENDED or (_out and not victory):
 		return
+	_release_bubble(true)
 	#Time ran out after this player fell: nothing is told twice
 	if _out:
 		phase = Phase.ENDED

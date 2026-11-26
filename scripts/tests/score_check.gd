@@ -63,19 +63,19 @@ func _check_references() -> void:
 	var table := {
 		"novato": [
 			SHEET.race_points(false, 150.0, 0, 0.6), SHEET.street_points(24.0, 5), SHEET.drop_points(22.0),
-			_trend(0.3), SHEET.selfie_points(_selfie(4, 1, 0, 0, 1)),
+			_trend(0.3), SHEET.selfie_points(_selfie(4, 1, 0, 0, 4)),
 		],
 		"competente": [
 			SHEET.race_points(true, 118.0, 2, 1.0), SHEET.street_points(60.0, 6), SHEET.drop_points(52.0),
-			_trend(0.6), SHEET.selfie_points(_selfie(7, 4, 3, 2, 1)),
+			_trend(0.6), SHEET.selfie_points(_selfie(7, 4, 3, 2, 4)),
 		],
 		"experto": [
 			SHEET.race_points(true, 98.0, 3, 1.0), SHEET.street_points(60.0, 3), SHEET.drop_points(68.0),
-			_trend(0.82), SHEET.selfie_points(_selfie(8, 6, 6, 5, 1)),
+			_trend(0.82), SHEET.selfie_points(_selfie(8, 6, 5, 4, 4)),
 		],
 		"casi perfecto": [
 			SHEET.race_points(true, 74.0, 3, 1.0), SHEET.street_points(60.0, 1), SHEET.drop_points(80.0),
-			_trend(0.95), SHEET.selfie_points(_selfie(8, 8, 8, 8, 1)),
+			_trend(0.95), SHEET.selfie_points(_selfie(7, 6, 6, 6, 4)),
 		],
 	}
 	var wanted := {"novato": ScoreSheet.Medal.BRONZE, "competente": ScoreSheet.Medal.SILVER, "experto": ScoreSheet.Medal.GOLD,
@@ -102,15 +102,14 @@ func _check_idle() -> void:
 func _check_trend_and_selfie() -> void:
 	_expect(SHEET.trend_score(30, 30.0) == 1000 and SHEET.trend_score(45, 30.0) == 1000, "llegar al par da 1000 y pasarlo no da más")
 	_expect(SHEET.medal_for(_trend(0.4)) == ScoreSheet.Medal.BRONZE, "con el 40 %% del par: Bronce (%d)" % _trend(0.4))
-	_expect(SHEET.selfie_followers(false, false, 1) == 45 and SHEET.selfie_followers(true, true, 1) == 195, "sola en la foto: 45, y 195 con centro y pose")
-	_expect(SHEET.selfie_followers(true, true, 2) == 130 and SHEET.selfie_followers(true, true, 3) == 104 and SHEET.selfie_followers(true, true, 7) == 91,
-		"la exclusividad baja con dos, tres y cuatro o más")
-	var needed := 0.0
-	for followers in range(0, SHEET.selfie_max_followers() + 1):
-		if SHEET.selfie_points(followers) >= SHEET.diamond:
-			needed = float(followers) / SHEET.selfie_max_followers()
-			break
-	_expect(needed >= 0.8 and needed <= 0.9, "el Diamante de la selfie pide cerca del 85 %% del máximo (%d %%)" % roundi(needed * 100.0))
+	_expect(SHEET.selfie_followers(false, false, 1) == 39 and SHEET.selfie_followers(true, true, 1) == 169, "sola en la foto: 39, y 169 con centro y pose")
+	_expect(SHEET.selfie_followers(true, true, 2) == 156 and SHEET.selfie_followers(true, true, 3) == 150 and SHEET.selfie_followers(true, true, 7) == 150,
+		"la exclusividad baja con dos y con tres o más")
+	_expect(SHEET.selfie_points(640) == 640 and SHEET.selfie_points(1300) == 1000, "un seguidor es un punto, hasta 1000")
+	var full_room := 6 * SHEET.selfie_followers(true, true, 4) + SHEET.selfie_followers(false, false, 4)
+	var short := 5 * SHEET.selfie_followers(true, true, 4) + 2 * SHEET.selfie_followers(false, false, 4)
+	_expect(SHEET.medal_for(SHEET.selfie_points(full_room)) == ScoreSheet.Medal.DIAMOND and SHEET.medal_for(SHEET.selfie_points(short)) == ScoreSheet.Medal.GOLD,
+		"sala llena: 6 fotos perfectas y 1 dentro dan Diamante (%d), con 5 perfectas Oro (%d)" % [full_room, short])
 
 
 func _check_book() -> void:
